@@ -1,0 +1,36 @@
+# ---- artifacts never enter the repo ----
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.npy
+*.npz
+*.safetensors
+*.bin
+*.tfrecord*
+*.ext3
+*.sif
+wandb/
+logs/
+outputs/
+runs/
+ckpt/
+!macrec/config/ckpt/
+slurm-*.out
+*.out
+*.err
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+# MACRec generated files (embeddings / indices / downloaded raw data)
+macrec/data/**/*.index*.json
+macrec/data/**/*.emb-*
+macrec/data/**/images/
+macrec/data/raw/
+# secrets
+.env
+.env.*
+secrets.sh
+*.secret
+!legacy/grid/rec-tmall/results/*.out

@@ -1,0 +1,86 @@
+device=cuda  sample=200000  seed=0  min_items=50
+MD SID   shape=(3, 8133508)  per-level widths(max+1)=[2048, 1024, 1024]
+chain SID shape=(3, 8133508)  per-level widths(max+1)=[1024, 1024, 1024]
+  MD shared level detected = row 0 (width 2048); assuming rows = [shared,text,image] with shared at 0
+text npy (5409793, 1152)  image npy (5409787, 1152)  |text_ids|=5409793 |image_ids|=5409787
+candidate items (both modalities + valid MD SID) = 5,409,787
+using sample of 200,000 items (seed 0)
+gathered features: text (200000, 1152)  image (200000, 1152)
+
+loading MD-RQ-VAE checkpoint ...
+  MD state_dict: 58 tensors; codebook(.centroids) keys found: ['shared_codebook.centroids', 'text_codebook.centroids', 'image_codebook.centroids']
+  codebook shapes  C_f=(2048, 512)  C_t=(1024, 512)  C_i=(1024, 512)
+  decoder D_t: Sequential(
+  (0): Linear(in_features=512, out_features=256, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=256, out_features=768, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=768, out_features=1152, bias=True)
+)
+
+=== TEST 1a: MD-RQ-VAE modality attribution under code substitution (decoder) ===
+  CAVEAT: x_i_hat=D_i(e_f+e_i) does not depend on the text code (and vice versa), so the
+  cross-modality drop for a text/image substitution is 0 BY CONSTRUCTION. Read the own-
+  modality drops (does the code matter at all?) and the shared sub (must damage both).
+  baseline cos: text=0.8816  image=0.8096
+  substitution            Δcos text (CI)           Δcos image (CI)  selectivity
+  sub TEXT        0.1070 [0.1066,0.1074]    0.0000 [0.0000,0.0000]          inf
+  sub IMAGE       0.0000 [0.0000,0.0000]    0.1091 [0.1087,0.1095]          inf
+  sub SHARE       0.0868 [0.0866,0.0869]    0.1577 [0.1574,0.1580]         1.82
+
+=== RANDOM-PAIR BASELINE (40,000 random item pairs, same sample) ===
+  text dist=0.3734  image dist=0.5266  text/image=0.709
+  (Test 1b columns text/base & image/base normalize each modality by this; a code that
+   controls a modality drives that modality's dist FAR below its baseline (ratio << 1),
+   while the uncontrolled modality stays near baseline (ratio ~ 1).)
+
+=== TEST 1b: representation-level analogue -- MD-RQ-VAE ===
+  For each level: pairs sharing the other two codes, differing at this one. If the level is
+  text-specific, differing there should move TEXT SigLIP distance >> IMAGE distance.
+  level           #pairs     text dist    image dist  text/image  text/base image/base
+  shared           40005        0.2547        0.3866       0.659      0.682      0.734
+  text             40020        0.2050        0.2617       0.783      0.549      0.497
+  image            40000        0.1671        0.3165       0.528      0.447      0.601
+
+=== TEST 1b: representation-level analogue -- chain RQ-VAE ===
+  For each level: pairs sharing the other two codes, differing at this one. If the level is
+  text-specific, differing there should move TEXT SigLIP distance >> IMAGE distance.
+  level           #pairs     text dist    image dist  text/image  text/base image/base
+  level0           40000        0.3173        0.4696       0.676      0.850      0.892
+  level1           40002        0.2018        0.3184       0.634      0.540      0.605
+  level2           40005        0.1729        0.2808       0.615      0.463      0.533
+
+=== TEST 2: additivity (does the sum beat its parts?) ===
+  TEXT  branch:
+     cos(D(e_f+e_mod),x) = 0.8816 [0.8814,0.8818]
+     cos(D(e_f),     x)  = 0.8275 [0.8272,0.8277]   (shared only)
+     cos(D(e_mod),   x)  = 0.7375 [0.7370,0.7381]   (modality only)
+     fraction sum beats BOTH parts = 0.9918
+  IMAGE branch:
+     cos(D(e_f+e_mod),x) = 0.8096 [0.8093,0.8098]
+     cos(D(e_f),     x)  = 0.7477 [0.7473,0.7480]   (shared only)
+     cos(D(e_mod),   x)  = 0.5509 [0.5499,0.5518]   (modality only)
+     fraction sum beats BOTH parts = 0.9885
+  shared balance: cos(D_t(e_f),x_t) - cos(D_i(e_f),x_i) = +0.0798 [+0.0794,+0.0803]
+     (~0 => the shared code is genuinely modality-balanced; large => it leans one way)
+
+=== TEST 3: codebook semantic purity -- MD-RQ-VAE ===
+  codebook   #codes>=min  mean text spread  mean image spread
+  shared            1301            0.2330             0.3500
+  text               980            0.2667             0.4630
+  image              736            0.3219             0.4062
+  saved scatter -> /scratch/yw8866/rec-tmall/modality_decomp/purity_scatter_MD-RQ-VAE.png
+
+=== TEST 3: codebook semantic purity -- chain ===
+  codebook   #codes>=min  mean text spread  mean image spread
+  level0             965            0.2280             0.3483
+  level1             867            0.3324             0.4766
+  level2             538            0.3613             0.5059
+  saved scatter -> /scratch/yw8866/rec-tmall/modality_decomp/purity_scatter_chain.png
+
+=== VERDICT ===
+  Read TEST 2 own-vs-parts (is e_t actually used, does e_f+e_t beat both?), the TEST 1b
+  text/image ratios (MD should be strongly asymmetric per level; chain near 1.0), and the
+  TEST 3 scatters (MD C_t low-text/high-image spread, C_i the mirror, C_f balanced; chain
+  levels all on the diagonal). If MD is not asymmetric or chain is equally asymmetric, the
+  decomposition is NOT a measurable property and that explains the downstream failures.

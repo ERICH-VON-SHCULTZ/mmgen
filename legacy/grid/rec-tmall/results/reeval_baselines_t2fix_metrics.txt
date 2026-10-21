@@ -1,0 +1,10 @@
+# Extracted from /scratch/yw8866/GRID/expoutfile/reeval_baselines_t2fix.out (sbatchfiles/reeval_baselines_t2fix.sbatch)
+# chain/PBA baselines re-evaluated after the t2 beam-collapse fix (tiger_generation_model.py:1823-1830)
+experiment=tiger_mb_train_flat ckpt_path=/scratch/yw8866/rec-tmall/_reeval_ck1.ckpt semantic_id_path=/scratch/yw8866/logs/inference/runs/2026-05-06/2048_1024/pickle/semantic_ids.pt
+experiment=tiger_mb_pba_flat ckpt_path=/scratch/yw8866/rec-tmall/_reeval_ck2.ckpt semantic_id_path=/scratch/yw8866/logs/inference/runs/mbgen_sid/2048_2048/semantic_ids.pt
+experiment=tiger_mb_pba_flat ckpt_path=/scratch/yw8866/rec-tmall/_reeval_ck3.ckpt semantic_id_path=/scratch/yw8866/logs/inference/runs/2026-05-06/2048_1024/pickle/semantic_ids.pt
+experiment=tiger_mb_train_flat ckpt_path=/scratch/yw8866/rec-tmall/_reeval_ck4.ckpt semantic_id_path=/scratch/yw8866/logs/inference/runs/2026-04-29/tiger_1024/pickle/semantic_ids.pt
+'test/t2_ndcg_10': tensor(0.1841) 'test/t2_recall_5': tensor(0.2006) 'test/t2_recall_10': tensor(0.2033) 'test/t3_recall_10': tensor(0.1955)
+'test/t2_ndcg_10': tensor(0.1847) 'test/t2_recall_5': tensor(0.2026) 'test/t2_recall_10': tensor(0.2063) 'test/t3_recall_10': tensor(0.1976)
+'test/t2_ndcg_10': tensor(0.1857) 'test/t2_recall_5': tensor(0.2030) 'test/t2_recall_10': tensor(0.2062) 'test/t3_recall_10': tensor(0.1971)
+'test/t2_ndcg_10': tensor(0.1837) 'test/t2_recall_5': tensor(0.2007) 'test/t2_recall_10': tensor(0.2032) 'test/t3_recall_10': tensor(0.1942)
