@@ -20,8 +20,13 @@ from utils import parse_global_args, parse_train_args, parse_dataset_args
 
 
 class PlainT5(T5ForConditionalGeneration):
-    def forward(self, *args, task_flag=None, **kwargs):
-        return super().forward(*args, **kwargs)
+    # Explicit argument names matter: HF Trainer's RemoveColumnsCollator keeps only batch keys that
+    # appear in forward()'s signature (a *args/**kwargs signature drops input_ids and labels).
+    def forward(self, input_ids=None, attention_mask=None, labels=None, decoder_input_ids=None,
+                decoder_attention_mask=None, task_flag=None, **kwargs):
+        return super().forward(input_ids=input_ids, attention_mask=attention_mask, labels=labels,
+                               decoder_input_ids=decoder_input_ids,
+                               decoder_attention_mask=decoder_attention_mask, **kwargs)
 
 
 _STATS = {}
