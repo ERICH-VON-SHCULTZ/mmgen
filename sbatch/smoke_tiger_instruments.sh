@@ -43,10 +43,14 @@ T1=$(t)
 echo "== [2] RQ-VAE (TIGER tokenizer: text only, 4 levels x 256, no cross-RQ) =="
 RQ=$RUN/rqvae
 if [ ! -f "$RQ/best_text_collision_model.pth" ]; then
-  # DualEmbDataset needs an image array; the text array is passed for both. With cross-RQ off the
-  # text and image branches are independent, and only the text branch (--content text) is used.
+  # DualEmbDataset needs an image array; the text array is passed for both; only the text branch
+  # (--content text) is used. NOTE --use_cross_rq True --begin_cross_layer 4: with 4 levels the cross
+  # branch (i >= 4, rqvae.py:172) never fires, so this is a plain per-level RQ. It is required because
+  # generate_indices_distance.py only handles the per-level distance lists of the cross path
+  # (rqvae.py:246-266); the non-cross path returns a stacked CUDA tensor (rq.py:56) and crashes l.147.
   (cd $M/cross_index && python -u main.py \
       --num_emb_list 256 256 256 256 --sk_epsilons 0.0 0.0 0.0 0.0 \
+      --use_cross_rq True --begin_cross_layer 4 \
       --device cuda:0 --text_data_path $EMB --image_data_path $EMB \
       --ckpt_dir $RQ --eval_step 10 --batch_size 2048 --epochs $RQ_EPOCHS)
 fi
@@ -54,16 +58,20 @@ T2=$(t)
 
 echo "== [3] SID assignment with MACRec collision re-assignment =="
 if [ ! -f "$DATA/$D/$D$IDX" ]; then
-  (cd $M/cross_index && python -u generate_indices_distance.py --dataset $D \
+  # numpy>=2 reprs re-assigned codes as 'np.int64(5)', so the str()-based de-dup (l.208-229) misses
+  # clashes and writes duplicate SIDs. legacy='1.25' restores numpy-1 reprs; MACRec code is unchanged.
+  (cd $M/cross_index && python -u -c "import sys, runpy, numpy as np; np.set_printoptions(legacy='1.25'); sys.argv=['generate_indices_distance.py']+sys.argv[1:]; runpy.run_path('generate_indices_distance.py', run_name='__main__')" --dataset $D \
       --text_data_path $EMB --image_data_path $EMB --device cuda:0 \
       --ckpt_path $RQ/best_text_collision_model.pth \
       --output_dir $DATA/$D --output_file $D$IDX --content text) > $RUN/gen_indices.log 2>&1
   grep -E 'Collision Rate|collision items|Max number|check' $RUN/gen_indices.log | cut -c1-200
 fi
+python -c "import json,collections; d=json.load(open('$DATA/$D/$D$IDX')); c=collections.Counter(''.join(v) for v in d.values()); print('SID file: items', len(d), 'unique', len(c))"
+
 T3=$(t)
 
 echo "== [4] T5 seqrec training ($T5_EPOCHS epochs) =="
-OUT=$RUN/t5_seqrec
+OUT=$RUN/t5_seqrec_${T5_EPOCHS}ep
 cd $M
 # data.py:47-50 always opens image_index_file too, so it points at the same text index.
 torchrun --nproc_per_node=1 --master_port=$((20000 + RANDOM % 20000)) finetune_contrastive.py \

@@ -48,6 +48,14 @@ was already installed could be up- or downgraded.
   `cross_index/generate_indices_distance.py:71`). Jobs export `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1`;
   MACRec code is not patched.
 
+- **numpy 2.0.2 vs MACRec's collision fix.** `cross_index/generate_indices_distance.py` de-duplicates
+  SIDs by comparing `str(list_of_codes)`. Re-assigned codes are `np.int64`, which numpy ≥ 2 prints as
+  `np.int64(5)`, so clashes go undetected. The log reports "Collision Rate 0.0" and then `check: False`,
+  and the written index has duplicates (smoke test: 6,232 unique / 6,250). Workaround used in
+  `sbatch/smoke_tiger_instruments.sh`: run the script through
+  `python -c "...np.set_printoptions(legacy='1.25'); runpy.run_path(...)"`. Alternatively, pin numpy < 2
+  in a separate env.
+
 ## 3. Changes made to the copy (and only the copy)
 1. `/ext3/env.sh` rewritten. The GRID version exported `PYTHONPATH=/ext3/miniforge3/bin:$PATH`,
    which puts bin directories on `PYTHONPATH`. The new file:
@@ -110,3 +118,25 @@ the seqrec path does not use them.
 - With no key and no `~/.netrc`, jobs set `WANDB_MODE=offline`: W&B still records locally under
   `/scratch/yw8866/mmgen_runs/wandb`, and `wandb sync` uploads it later. Jobs never put the key
   on a command line and never use `set -x`.
+
+## 7. Smoke test (STEP 4): `sbatch/smoke_tiger_instruments.sbatch`
+Pipeline: LLaMA-7B text embeddings → text-only RQ-VAE (4×256) → MACRec SID assignment with collision
+re-assignment → T5 `seqrec` → trie-constrained beam search (20 beams) on the Instruments test split
+(17,112 users). Everything is MACRec's own code, unmodified. Outputs are in
+`/scratch/yw8866/mmgen_runs/smoke_tiger_Instruments/`.
+
+| job | what | wall | SIDs unique | hit@1 | hit@5 | hit@10 | ndcg@5 | ndcg@10 |
+|---|---|---|---|---|---|---|---|---|
+| 20478673 | first attempt | 11m35s | – | failed at SID assignment (non-cross checkpoint, see PORTING.md §1) | | | | |
+| 20532665 | 5 epochs (205 steps) | 13m33s | 6,232/6,250 (numpy-2 bug) | 0.0001 | 0.0011 | 0.0029 | 0.0006 | 0.0012 |
+| **20539125** | **50 epochs**, de-dup fixed | **26m22s** | **6,250/6,250** | **0.0127** | **0.0396** | **0.0615** | **0.0268** | **0.0338** |
+
+Step timings (job 20539125): RQ-VAE reused, SID 25 s, T5 training 1105 s, test 444 s.
+LLaMA-7B embedding (first run) took about 10 min. Benign log noise:
+- `OSError: Device or resource busy: .nfs…` comes from DataLoader temp-dir cleanup on NFS
+  `TMPDIR`. Use a node-local `TMPDIR` to silence it.
+- "missing keys … lm_head.weight" refers to T5's tied embeddings (`tie_word_embeddings` defaults
+  to True).
+
+These numbers do not try to match published TIGER results: training was 50 epochs vs MACRec's 200
+with early stopping, on 1 GPU instead of 2.
