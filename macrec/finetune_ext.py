@@ -62,7 +62,18 @@ def main():
     parser = parse_dataset_args(parser)
     parser.add_argument("--model_class", choices=["contrastive", "plain"], default="contrastive")
     parser.add_argument("--stats_file", default=None)
+    parser.add_argument("--dataloader_num_workers", type=int, default=0,
+                        help="DataLoader workers (MACRec leaves the HF default 0). Batches are unchanged; "
+                             "only collation (string tokenisation) moves off the main process.")
     args = parser.parse_args()
+
+    if args.dataloader_num_workers > 0:
+        _TA = transformers.TrainingArguments
+
+        def _training_args(*a, **k):
+            k.setdefault("dataloader_num_workers", args.dataloader_num_workers)
+            return _TA(*a, **k)
+        transformers.TrainingArguments = _training_args   # finetune_contrastive calls transformers.TrainingArguments(...)
 
     if args.model_class == "plain":
         fc.create_contrastive_model = lambda config: PlainT5(config)

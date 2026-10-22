@@ -1,5 +1,5 @@
 #!/bin/bash
-# Baselines: baseline. Submit: sbatch --export=ALL,D=Instruments,B=<tiger_text|tiger_image|mql|macrec|macrecpaper>,SEED=42 sbatch/baselines/baseline.sbatch
+# Baselines: one run (use STAGE=eval for dedicated, uncontended evaluation/inference cost). Submit: sbatch --export=ALL,D=Instruments,B=<tiger_text|tiger_image|mql|macrec|macrecpaper>,SEED=42 sbatch/baselines/baseline.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -23,5 +23,5 @@ export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOA
 export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR" $WANDB_DIR
 echo "job $SLURM_JOB_ID on $(hostname)  D=${D:-} B=${B:-} SEED=${SEED:-}  commit $(cd $REPO && git rev-parse --short HEAD)"
 START=$(date +%s)
-singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin/bash -c "D=$D B=$B SEED=$SEED bash $REPO/sbatch/baselines/run_baseline.sh"
+singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin/bash -c "D=$D B=$B SEED=$SEED STAGE=${STAGE:-all} bash $REPO/sbatch/baselines/run_baseline.sh"
 echo "job wall time: $(( $(date +%s) - START )) s"

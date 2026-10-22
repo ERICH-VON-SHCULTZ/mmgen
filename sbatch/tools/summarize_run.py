@@ -6,7 +6,8 @@ import sys
 
 run = sys.argv[1]
 J = lambda p: json.load(open(p)) if os.path.exists(p) else None
-s = {"run": run, "config": J(f"{run}/config.json"), "train": J(f"{run}/train_stats.json")}
+s = {"run": run, "config": J(f"{run}/config.json"), "config_eval": J(f"{run}/config_eval.json"),
+     "train": J(f"{run}/train_stats.json")}
 trace = f"{run}/gpu_mem_trace.txt"
 if os.path.exists(trace):
     vals = [int(x) for x in open(trace).read().split() if x.strip().isdigit()]
