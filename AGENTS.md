@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-22.
+Last updated: 2026-10-22 (baseline reproduction in progress).
 
 ---
 
@@ -28,6 +28,8 @@ are reference-only, not part of the main line.
 **Current status (2026-10-22):**
 - Repo, docs and environment are done.
 - The TIGER smoke test on Instruments passes.
+- **Baseline reproduction in progress** (TIGER-text, TIGER-image, MQL4GRec, MACRec on
+  Instruments → Arts → Games). Workflow in §4b; report in `docs/BASELINE_REPORT.md`.
 - **MD-RQ-VAE and MFD are NOT yet ported into MACRec.** The plan and the open decisions are in
   `docs/PORTING.md`.
 
@@ -51,7 +53,15 @@ mmgen/
 │   ├── test_ddp_save.py   constrained beam-search eval (trie) → hit@k / ndcg@k
 │   ├── evaluate.py, generation_trie.py, collator.py, ensemble.py, utils.py
 │   ├── config/ckpt/       T5 config + tokenizer (d_model 128, 4+4 layers, 6 heads, d_ff 1024)
-│   └── scripts/           upstream launchers (finetune_full.sh, run_finetune.sh)
+│   ├── scripts/           upstream launchers (finetune_full.sh, run_finetune.sh)
+│   │   ── mmgen additions (new files only; upstream files untouched, see git diff f3c9707 -- macrec) ──
+│   ├── finetune_ext.py    finetune_contrastive.train + --model_class plain|contrastive + train stats
+│   ├── eval_split.py      test_ddp_save on --split valid|test + inference cost (decoder steps, ms/user)
+│   ├── cross_index/main_single.py, generate_indices_single.py   MQL4GRec single-modality tokenizer (verbatim @5ad9c27)
+│   ├── cross_index/generate_indices_tiger.py   TIGER SIDs: 3 RQ levels + appended collision index
+│   ├── cross_index/main_cross_weights.py       main.py with the contrast weights actually applied
+│   ├── data/kmeans_dataset.py                  data/kmeans.py parameterised (K=512 pseudo-labels)
+│   └── data_process/fetch_item_images.py, clip_feature_ext.py   main image download; CLIP tolerant to missing images
 ├── legacy/grid/           READ-ONLY reference: old GRID fork (Tmall MD-RQ-VAE + MFD). Never import.
 │   ├── src/               md_rqvae.py, mfd_generation_model.py, tiger_generation_model.py, eval, data
 │   ├── configs/experiment/   Hydra configs of the key runs
@@ -72,6 +82,11 @@ mmgen/
     ├── template.sbatch            ★ start every new GPU job from this
     ├── build_env_macrec.sbatch    (re)build the env overlay copy (CPU job)
     ├── smoke_tiger_instruments.sbatch / .sh   STEP-4 smoke test (TIGER-style, Instruments)
+    ├── data_fetch_images.sbatch   raw Amazon-18 meta + main images (CPU)
+    ├── features.sbatch            LLaMA-7B text + CLIP ViT-L/14 image features (GPU)
+    ├── baselines/tokenizers.{sbatch,sh}   all baseline tokenizers for one dataset
+    ├── baselines/baseline.sbatch + run_baseline.sh   one (dataset, baseline, seed) train + valid/test eval
+    └── tools/                     sid_stats.py, summarize_run.py, check_features.py
 ```
 
 Where to look for what:
@@ -99,6 +114,10 @@ Where to look for what:
 | HF cache | `/scratch/yw8866/hf_cache` (LLaMA-7B in `hf_cache/macrec_plm`) |
 | secrets (W&B key), **outside git** | `~/.config/mmgen/secrets.sh` (chmod 600) |
 | smoke-test run dir | `/scratch/yw8866/mmgen_runs/smoke_tiger_Instruments/` |
+| baseline data (processed + features + SID index files) | `/scratch/yw8866/mmgen_runs/data/<D>/` |
+| raw Amazon-18 meta + downloaded images | `/scratch/yw8866/mmgen_runs/raw/amazon18/{Metadata,Images}` |
+| baseline runs | `/scratch/yw8866/mmgen_runs/baselines/<D>/<baseline>/seed<S>/` (`run_summary.json`) and `.../<D>/tok/` |
+| MQL4GRec reference clone (ships Instruments LLaMA/CLIP features + index files) | `/scratch/yw8866/tmp/ref/MQL4GRec` (@5ad9c27) |
 | old GRID repo (source of `legacy/`) | `/scratch/yw8866/GRID` (contains an un-rotated W&B key) |
 | old Tmall data, embeddings, dumps | `/scratch/yw8866/rec-tmall/` |
 | old checkpoints / SIDs | `/scratch/yw8866/logs/{train,inference}/...` (see `PROVENANCE.md`) |
@@ -149,6 +168,18 @@ sbatch --export=ALL,T5_EPOCHS=50 sbatch/smoke_tiger_instruments.sbatch          
 The pipeline is: LLaMA-7B text embedding → text-only RQ-VAE (4×256) → MACRec SID assignment and
 collision fix → T5 `seqrec` → trie beam search (20 beams). Steps whose outputs already exist in
 the run dir are skipped. Set `RUN=` for a fresh run dir.
+
+**Baselines (§4b):**
+```bash
+sbatch sbatch/data_fetch_images.sbatch                 # meta + images (CPU)
+sbatch sbatch/features.sbatch                          # LLaMA + CLIP features
+sbatch --export=ALL,D=Instruments sbatch/baselines/tokenizers.sbatch
+sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch   # B in tiger_text|tiger_image|mql|macrec|macrecpaper
+```
+- Fine-tuning settings live in `sbatch/baselines/run_baseline.sh`; each run writes `config.json`
+  with the git commit and job id.
+- Effective batch = per-device × 2 GPUs × grad-accum 2, as in both repos' launchers, emulated on
+  1 GPU with grad-accum 4.
 
 ---
 
