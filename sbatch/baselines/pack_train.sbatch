@@ -1,5 +1,5 @@
 #!/bin/bash
-# Train several baseline runs CONCURRENTLY on one GPU (each run alone uses ~30% of an H100, below the
+# Train several baseline runs CONCURRENTLY on one GPU (each run alone uses ~30% of a GPU, below the
 # cluster's utilisation threshold). Training math is unchanged; only wall-clock is shared, so training
 # time from these jobs is "contended". Evaluation / inference cost runs separately (baseline.sbatch STAGE=eval).
 # Submit: sbatch --export=ALL,RUNS="Instruments:mql:42 Instruments:macrec:42" sbatch/baselines/pack_train.sbatch
@@ -9,7 +9,7 @@
 #SBATCH -c 24
 #SBATCH --mem=160GB
 #SBATCH --time=48:00:00
-#SBATCH --gres=gpu:h100:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --job-name=mmgen_pack_train
 #SBATCH --output=/scratch/yw8866/mmgen_runs/logs/%x_%j.out
 

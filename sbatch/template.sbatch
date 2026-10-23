@@ -6,7 +6,7 @@
 #SBATCH -c 8
 #SBATCH --mem=64GB
 #SBATCH --time=04:00:00
-#SBATCH --gres=gpu:h100:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --job-name=mmgen_job
 #SBATCH --output=/scratch/yw8866/mmgen_runs/logs/%x_%j.out
 

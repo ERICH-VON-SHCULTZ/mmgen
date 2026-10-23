@@ -129,7 +129,14 @@ Where to look for what:
 
 **Cluster:**
 - Slurm + Singularity.
-- GPU account `torch_pr_69_tandon_advanced` (H100); CPU account `torch_pr_69_general`.
+- GPU account `torch_pr_69_tandon_advanced`; CPU account `torch_pr_69_general`.
+- **Default GPU is A100** (`--gres=gpu:a100:1`), which queues faster than H100. Override at submit
+  time with `sbatch --gres=gpu:h100:1 ...`.
+- **GPU-utilization policy:** HPC cancels jobs whose mean GPU utilization stays below about 60%
+  for more than 2 h. One 13M-parameter T5 training uses only about 30% of a GPU (job 20617403 was
+  cancelled at 32%). So **train with `sbatch/baselines/pack_train.sbatch`**, which runs several
+  runs concurrently (5 runs: 97% utilization, job 20637308), and run evaluation as separate short
+  jobs (`baseline.sbatch STAGE=eval`, under 1 h each).
 - Do not run heavy Python on the login node: submit an sbatch.
 
 **Environment (already built).** Python 3.10.20, conda env `py310`, torch 2.6.0+cu124,
