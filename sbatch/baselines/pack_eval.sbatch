@@ -1,7 +1,10 @@
 #!/bin/bash
 # Evaluate several trained runs in ONE GPU job (the cluster is GPU-quota-bound, so 1 job beats 5).
-# Phase 1: full valid+test evaluation of every run CONCURRENTLY (metrics; wall-clock contended).
-# Phase 2: UNCONTENDED inference cost: each beam search run alone on a 2,000-user test subsample.
+# MODE=sequential (default): runs are evaluated one after another, so every beam search runs alone on the
+#   GPU and its cost file is uncontended. (MODE=concurrent was tried in job 20769295: GPU 98.6% busy but each
+#   search ~20x slower than alone; beam search does not share a GPU well. Do not use it.)
+# COST2K=1: extra cost phase on a 2,000-user test subsample (only needed after a concurrent phase).
+# Finished searches (results_*.json present) are skipped, so a timed-out job can simply be resubmitted.
 # Accepts any of the GPU partitions; the GPU type is recorded in every cost file.
 # Submit: sbatch --export=ALL,RUNS="Instruments:mql:42 Instruments:macrec:42" sbatch/baselines/pack_eval.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
@@ -10,7 +13,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH -c 16
 #SBATCH --mem=128GB
-#SBATCH --time=04:00:00
+#SBATCH --time=03:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=mmgen_pack_eval
 #SBATCH --output=/scratch/yw8866/mmgen_runs/logs/%x_%j.out
@@ -32,15 +35,21 @@ nvidia-smi --query-gpu=name,utilization.gpu --format=csv,noheader -l 10 > $LOGD/
 START=$(date +%s)
 SING="singularity exec --nv --bind /scratch/yw8866 --overlay $OVERLAY:ro $SIF /bin/bash -c"
 
-# ---- phase 1: full evaluation, concurrent ----
-PIDS=()
+# ---- phase 1: full evaluation ----
+MODE=${MODE:-sequential}; FAIL=0; PIDS=()
 for R in $RUNS; do
   IFS=: read D B SEED <<< "$R"
-  $SING "D=$D B=$B SEED=$SEED STAGE=eval bash $REPO/sbatch/baselines/run_baseline.sh" > $LOGD/$D-$B-$SEED.log 2>&1 &
-  PIDS+=($!); sleep 10
+  if [ $MODE = concurrent ]; then
+    $SING "D=$D B=$B SEED=$SEED STAGE=eval bash $REPO/sbatch/baselines/run_baseline.sh" > $LOGD/$D-$B-$SEED.log 2>&1 &
+    PIDS+=($!); sleep 10
+  else
+    $SING "D=$D B=$B SEED=$SEED STAGE=eval bash $REPO/sbatch/baselines/run_baseline.sh" > $LOGD/$D-$B-$SEED.log 2>&1 || FAIL=1
+    echo "$R done after $(( $(date +%s) - START )) s"
+  fi
 done
-FAIL=0; for P in "${PIDS[@]}"; do wait $P || FAIL=1; done
-echo "phase 1 done after $(( $(date +%s) - START )) s  fail=$FAIL"
+for P in "${PIDS[@]}"; do wait $P || FAIL=1; done
+echo "phase 1 ($MODE) done after $(( $(date +%s) - START )) s  fail=$FAIL"
+[ "${COST2K:-0}" = 1 ] || { for R in $RUNS; do IFS=: read D B SEED <<< "$R"; python3 $REPO/sbatch/tools/summarize_run.py /scratch/yw8866/mmgen_runs/baselines/$D/$B/seed$SEED || true; done; echo "job wall time: $(( $(date +%s) - START )) s  fail=$FAIL"; exit $FAIL; }
 
 # ---- phase 2: uncontended inference cost on a fixed 2,000-user test subsample, one search at a time ----
 for R in $RUNS; do
