@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-22 (baseline reproduction in progress).
+Last updated: 2026-10-24 (baseline reproduction in progress; Instruments seed 42 done).
 
 ---
 
@@ -25,11 +25,13 @@ Baselines to compare against: **TIGER**, **MQL4GRec**, **MACRec**. The working c
 reference. Behavior modeling, rerankers, history forcing and Tmall pipelines from the old project
 are reference-only, not part of the main line.
 
-**Current status (2026-10-22):**
+**Current status (2026-10-24):**
 - Repo, docs and environment are done.
 - The TIGER smoke test on Instruments passes.
 - **Baseline reproduction in progress** (TIGER-text, TIGER-image, MQL4GRec, MACRec on
   Instruments → Arts → Games). Workflow in §4b; report in `docs/BASELINE_REPORT.md`.
+  Instruments seed 42: MQL4GRec and MACRec (paper setting) match; TIGER-text and MACRec as shipped
+  miss (§7). Only matched baselines are extended to more seeds and datasets.
 - **MD-RQ-VAE and MFD are NOT yet ported into MACRec.** The plan and the open decisions are in
   `docs/PORTING.md`.
 
@@ -181,6 +183,9 @@ the run dir are skipped. Set `RUN=` for a fresh run dir.
 sbatch sbatch/data_fetch_images.sbatch                 # meta + images (CPU)
 sbatch sbatch/features.sbatch                          # LLaMA + CLIP features
 sbatch --export=ALL,D=Instruments sbatch/baselines/tokenizers.sbatch
+sbatch --export=ALL,D="Arts Games",ONLY="mql macrecpaper" sbatch/baselines/tokenizers.sbatch   # several datasets run concurrently
+sbatch --export=ALL,RUNS="Instruments:mql:43 Instruments:macrecpaper:43" sbatch/baselines/pack_train.sbatch   # packed training
+sbatch --export=ALL,RUNS="Instruments:mql:43 Instruments:macrecpaper:43" sbatch/baselines/pack_eval.sbatch    # sequential eval
 sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch   # B in tiger_text|tiger_image|mql|macrec|macrecpaper
 ```
 - Fine-tuning settings live in `sbatch/baselines/run_baseline.sh`; each run writes `config.json`
@@ -238,6 +243,20 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 These are pipeline checks, not tuned baselines: 50 epochs vs MACRec's 200 with early stopping,
 on 1 GPU instead of 2. Every future result goes here and in `docs/` as appropriate.
 
+**Baselines, Instruments, seed 42, TEST** (HR@10 / NDCG@10; C/D = merged list; pack_train 20637308,
+pack_eval 20769295 + 20802837; runs in `mmgen_runs/baselines/Instruments/<B>/seed42/run_summary.json`):
+
+| baseline | test HR@10 | test NDCG@10 | target | gap | status |
+|---|---|---|---|---|---|
+| A TIGER-text | 0.1131 | 0.0859 | 0.1221 / 0.0950 | −7.4% / −9.6% | miss |
+| B TIGER-image | 0.1120 | 0.0867 | none published | n/a | n/a |
+| C MQL4GRec | 0.1301 | 0.0998 | 0.1291 / 0.0997 | +0.8% / +0.1% | match |
+| D MACRec, paper setting (`macrecpaper`) | 0.1321 | 0.1021 | 0.1363 / 0.1046 | −3.1% / −2.4% | match |
+| D MACRec, repo as shipped (`macrec`) | 0.1221 | 0.0949 | 0.1363 / 0.1046 | −10.4% / −9.3% | miss |
+
+Test beam search: 5 decoder steps × 20 beams per user, ≈21.7 ms/user on an H200 (uncontended).
+The valid seqrec cost files come from a contended concurrent job and are not usable for cost.
+
 ---
 
 ## 8. Legacy facts worth knowing (Tmall; details in `docs/`)
@@ -289,7 +308,9 @@ on 1 GPU instead of 2. Every future result goes here and in `docs/` as appropria
 | `f3c9707` | pristine MACRec upstream `7a48e74` |
 | `232a611` | legacy GRID reference, docs, env spec, job scripts |
 | `7bef831` | smoke-test fixes and results; MACRec bugs documented |
-| (next) | AGENTS.md, CLAUDE.md |
+| `f5144fc` | AGENTS.md, CLAUDE.md |
+| `747c6c0`…`6202cc8` | baseline entry points, PlainT5 fix, packed train / sequential eval jobs |
+| (next) | Instruments seed-42 results; tokenizer ONLY filter and multi-dataset jobs |
 
 ---
 

@@ -1,5 +1,6 @@
 #!/bin/bash
 # Tokenizers for all baselines on one dataset (runs inside the container). Usage: D=Instruments bash tokenizers.sh
+# Optional ONLY="mql macrecpaper" restricts to those tokenizers (tags: tiger mql macrec macrecpaper).
 # Outputs: $DATA/$D/$D.index_<tag>.json + $RUN/tok/<tag>/ (ckpts, logs, stats). Skips finished steps.
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
@@ -10,9 +11,11 @@ TXT=$DATA/$D/$D.emb-llama-td.npy; IMGE=$DATA/$D/$D.emb-ViT-L-14.npy
 # numpy>=2 breaks the str()-based de-dup in the reassignment generators -> numpy-1 reprs
 LEGACY="import sys, runpy, numpy as np; np.set_printoptions(legacy='1.25'); s=sys.argv[1]; sys.argv=sys.argv[1:]; runpy.run_path(s, run_name='__main__')"
 cd $CI
+want() { [ -z "${ONLY:-}" ] || [[ " $ONLY " == *" $1 "* ]]; }
 
 # ---- A/B: TIGER (3 RQ levels x 256 + appended collision index), single-modality RQ-VAE (MQL4GRec main.py) ----
 for MOD in text image; do
+  want tiger || continue
   EMB=$TXT; [ $MOD = image ] && EMB=$IMGE
   O=$TOK/tiger_$MOD; TAG=$([ $MOD = text ] && echo lemb || echo vitemb)_tiger
   if [ ! -f $DATA/$D/$D.index_$TAG.json ]; then
@@ -26,6 +29,7 @@ done
 
 # ---- C: MQL4GRec (4 x 256, Sinkhorn eps 0.003 on the last level as in MQL4GRec run.sh) ----
 for MOD in text image; do
+  want mql || continue
   EMB=$TXT; [ $MOD = image ] && EMB=$IMGE
   O=$TOK/mql_$MOD; TAG=$([ $MOD = text ] && echo lemb || echo vitemb)_mql
   if [ ! -f $DATA/$D/$D.index_$TAG.json ]; then
@@ -39,11 +43,12 @@ for MOD in text image; do
 done
 
 # ---- D: MACRec. k-means pseudo-labels (K=512 per modality), then cross RQ-VAE ----
-[ -f $DATA/$D/$D.index_vitemb_kmeans512.json ] || python $M/data/kmeans_dataset.py --dataset $D --data_root $DATA
+{ want macrec || want macrecpaper; } && [ ! -f $DATA/$D/$D.index_vitemb_kmeans512.json ] && python $M/data/kmeans_dataset.py --dataset $D --data_root $DATA
 # variant "macrec":      repo as shipped: run_rqvae.sh -> run_cross_rqvae.sh 0 <name> <D> 0.1 0.1 0.001
 #                        (begin_cross_layer 0; the weight flags are parsed but ignored by main.py)
 # variant "macrecpaper": paper setting: cross layers 2-3 (begin_cross_layer 2), weights 0.1/0.1/0.001 applied
 for V in macrec macrecpaper; do
+  want $V || continue
   O=$TOK/$V
   if [ ! -f $DATA/$D/$D.index_vitemb_$V.json ]; then
     mkdir -p $O; echo "== $V"; date

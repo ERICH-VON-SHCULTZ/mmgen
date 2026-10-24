@@ -1,5 +1,7 @@
 #!/bin/bash
 # Baselines: tokenizers. Submit: sbatch --export=ALL,D=Instruments sbatch/baselines/tokenizers.sbatch
+# D may list several datasets (D="Arts Games"): they run concurrently on the one GPU (keeps utilisation up).
+# ONLY="mql macrecpaper" restricts the tokenizers (see tokenizers.sh).
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -23,5 +25,11 @@ export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOA
 export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR" $WANDB_DIR
 echo "job $SLURM_JOB_ID on $(hostname)  D=${D:-} B=${B:-} SEED=${SEED:-}  commit $(cd $REPO && git rev-parse --short HEAD)"
 START=$(date +%s)
-singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin/bash -c "D=$D bash $REPO/sbatch/baselines/tokenizers.sh"
-echo "job wall time: $(( $(date +%s) - START )) s"
+FAIL=0; PIDS=()
+for DD in $D; do
+  singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin/bash -c "D=$DD ONLY='${ONLY:-}' bash $REPO/sbatch/baselines/tokenizers.sh" \
+    > /scratch/yw8866/mmgen_runs/logs/tokenizers_${SLURM_JOB_ID}_$DD.log 2>&1 &
+  PIDS+=($!)
+done
+for P in "${PIDS[@]}"; do wait $P || FAIL=1; done
+echo "job wall time: $(( $(date +%s) - START )) s  fail=$FAIL"; exit $FAIL
