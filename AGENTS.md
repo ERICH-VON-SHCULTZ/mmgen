@@ -183,7 +183,8 @@ the run dir are skipped. Set `RUN=` for a fresh run dir.
 sbatch sbatch/data_fetch_images.sbatch                 # meta + images (CPU)
 sbatch sbatch/features.sbatch                          # LLaMA + CLIP features
 sbatch --export=ALL,D=Instruments sbatch/baselines/tokenizers.sbatch
-sbatch --export=ALL,D="Arts Games",ONLY="mql macrecpaper" sbatch/baselines/tokenizers.sbatch   # several datasets run concurrently
+sbatch --export=ALL,D="Arts Games" sbatch/baselines/kmeans.sbatch     # MACRec k-means on CPU FIRST (GPU would sit idle)
+sbatch --dependency=afterok:<kmeans job> --export=ALL,D="Arts Games",ONLY="mql macrecpaper" sbatch/baselines/tokenizers.sbatch   # datasets run concurrently
 sbatch --export=ALL,RUNS="Instruments:mql:43 Instruments:macrecpaper:43" sbatch/baselines/pack_train.sbatch   # packed training
 sbatch --export=ALL,RUNS="Instruments:mql:43 Instruments:macrecpaper:43" sbatch/baselines/pack_eval.sbatch    # sequential eval
 sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch   # B in tiger_text|tiger_image|mql|macrec|macrecpaper
@@ -225,6 +226,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `cross_index/main.py` always loads both modalities; `data.py:47-50` always opens both index files | text-only: pass the text `.npy` as `--image_data_path`, and the text index as `--image_index_file` |
 | `cross_index/scripts/gen.sh` calls a non-existent script | use `gen_code.sh` |
 | `data/kmeans.py` hard-codes `dataset="Games"` | edit a copy, not the original |
+| k-means (sklearn, CPU) inside a GPU job leaves the GPU idle; Arts+Games took >2 h and the cluster cancelled job 20806460 | run `sbatch/baselines/kmeans.sbatch` on the CPU account first; `tokenizers.sh` skips existing k-means files |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
 | `evaluation_strategy=` is deprecated | works in transformers 4.47; **do not upgrade transformers past 4.47** |
