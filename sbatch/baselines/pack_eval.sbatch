@@ -3,6 +3,8 @@
 # MODE=sequential (default): runs are evaluated one after another, so every beam search runs alone on the
 #   GPU and its cost file is uncontended. (MODE=concurrent was tried in job 20769295: GPU 98.6% busy but each
 #   search ~20x slower than alone; beam search does not share a GPU well. Do not use it.)
+# A single beam search keeps the GPU only ~12% busy, so the job must END within 2 h or the cluster cancels it
+#   (job 20819917, cancelled at 2 h 09). Keep RUNS to ONE C/D run (~40 min) or two TIGER runs per job.
 # COST2K=1: extra cost phase on a 2,000-user test subsample (only needed after a concurrent phase).
 # Finished searches (results_*.json present) are skipped, so a timed-out job can simply be resubmitted.
 # Accepts any of the GPU partitions; the GPU type is recorded in every cost file.

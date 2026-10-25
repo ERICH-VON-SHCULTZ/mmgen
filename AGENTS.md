@@ -186,7 +186,7 @@ sbatch --export=ALL,D=Instruments sbatch/baselines/tokenizers.sbatch
 sbatch --export=ALL,D="Arts Games" sbatch/baselines/kmeans.sbatch     # MACRec k-means on CPU FIRST (GPU would sit idle)
 sbatch --dependency=afterok:<kmeans job> --export=ALL,D="Arts Games",ONLY="mql macrecpaper" sbatch/baselines/tokenizers.sbatch   # datasets run concurrently
 sbatch --export=ALL,RUNS="Instruments:mql:43 Instruments:macrecpaper:43" sbatch/baselines/pack_train.sbatch   # packed training
-sbatch --export=ALL,RUNS="Instruments:mql:43 Instruments:macrecpaper:43" sbatch/baselines/pack_eval.sbatch    # sequential eval
+sbatch --export=ALL,RUNS="Instruments:mql:43" sbatch/baselines/pack_eval.sbatch    # ONE run per eval job (<2 h, see §6)
 sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch   # B in tiger_text|tiger_image|mql|macrec|macrecpaper
 ```
 - Fine-tuning settings live in `sbatch/baselines/run_baseline.sh`; each run writes `config.json`
@@ -226,6 +226,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `cross_index/main.py` always loads both modalities; `data.py:47-50` always opens both index files | text-only: pass the text `.npy` as `--image_data_path`, and the text index as `--image_index_file` |
 | `cross_index/scripts/gen.sh` calls a non-existent script | use `gen_code.sh` |
 | `data/kmeans.py` hard-codes `dataset="Games"` | edit a copy, not the original |
+| sequential beam-search eval keeps the GPU ~12% busy; job 20819917 (4 runs) was cancelled at 2 h 09 | `pack_eval.sbatch` with ONE C/D run per job (~40 min); submit several jobs |
 | k-means (sklearn, CPU) inside a GPU job leaves the GPU idle; Arts+Games took >2 h and the cluster cancelled job 20806460 | run `sbatch/baselines/kmeans.sbatch` on the CPU account first; `tokenizers.sh` skips existing k-means files |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
@@ -258,6 +259,13 @@ pack_eval 20769295 + 20802837; runs in `mmgen_runs/baselines/Instruments/<B>/see
 
 Test beam search: 5 decoder steps × 20 beams per user, ≈21.7 ms/user on an H200 (uncontended).
 The valid seqrec cost files come from a contended concurrent job and are not usable for cost.
+
+Seeds 43/44 (test merged HR@10 / NDCG@10): MQL4GRec 0.1324 / 0.1013, 0.1304 / 0.1008;
+MACRec paper setting seed 43 0.1304 / 0.1005 (seed 44 eval: job 20839355).
+
+Data note: in Games, 2,287 items' first image URL is the same generic banner (`31BDm2VqflL.jpg`);
+3,475 Games items (25.1%) share an identical image file with another item, which is why the
+Games image tokenizers collide 25.8% before reassignment (Instruments 164 items, Arts 425).
 
 ---
 
