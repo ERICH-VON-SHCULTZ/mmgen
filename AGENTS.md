@@ -63,6 +63,7 @@ mmgen/
 │   ├── cross_index/generate_indices_tiger.py   TIGER SIDs: 3 RQ levels + appended collision index
 │   ├── cross_index/main_cross_weights.py       main.py with the contrast weights actually applied
 │   ├── data/kmeans_dataset.py                  data/kmeans.py parameterised (K=512 pseudo-labels)
+│   ├── data_process/fuse_features.py           baseline E input: concat(L2-normed | raw) text + image features
 │   └── data_process/fetch_item_images.py, clip_feature_ext.py   main image download; CLIP tolerant to missing images
 ├── legacy/grid/           READ-ONLY reference: old GRID fork (Tmall MD-RQ-VAE + MFD). Never import.
 │   ├── src/               md_rqvae.py, mfd_generation_model.py, tiger_generation_model.py, eval, data
@@ -93,7 +94,8 @@ mmgen/
     ├── baselines/pack_train.sbatch   several trainings concurrently on one GPU (keeps utilisation >95%)
     ├── baselines/pack_eval.sbatch    sequential eval; ONE run per job (<2 h)
     └── tools/                     sid_stats.py, summarize_run.py, check_features.py,
-                                   collect_baselines.py (all runs -> baselines/baselines_all.json)
+                                   collect_baselines.py (all runs -> baselines/baselines_all.json),
+                                   ami_first_level.py (E vs A/B first-level AMI)
 ```
 
 Where to look for what:
@@ -194,8 +196,13 @@ sbatch --export=ALL,RUNS="Instruments:mql:43 Instruments:macrecpaper:43" sbatch/
 sbatch --export=ALL,RUNS="Instruments:mql:43" sbatch/baselines/pack_eval.sbatch    # ONE run per eval job (<2 h, see §6)
 sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch   # B in tiger_text|tiger_image|mql|macrec|macrecpaper
 ```
-- Fine-tuning settings live in `sbatch/baselines/run_baseline.sh`; each run writes `config.json`
-  with the git commit and job id.
+- Fine-tuning settings live in `sbatch/baselines/run_baseline.sh`. Before training, each run writes
+  `run_config.json` (shell settings + every resolved argument + T5 config + GPU, via
+  `finetune_ext.py --run_config_file`). **`config.json` in a run dir is the HF model config** and is
+  overwritten on every save; runs before 2026-10-26 have their settings only in `config_eval.json`
+  and `training_args.bin`.
+- Baselines: `tiger_text` (A), `tiger_image` (B), `tiger_fnorm` / `tiger_fraw` (E early fusion),
+  `mql` (C), `macrecpaper` (D, official), `macrec` (D as shipped, deviation).
 - Effective batch = per-device × 2 GPUs × grad-accum 2, as in both repos' launchers, emulated on
   1 GPU with grad-accum 4.
 

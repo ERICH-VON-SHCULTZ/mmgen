@@ -5,10 +5,14 @@
                              (PlainT5 only drops the `task_flag` field that MACRec's collator adds.)
   --stats_file PATH          after training, write wall time, peak GPU memory, the selected
                              checkpoint, its epoch and validation loss.
+  --run_config_file PATH     BEFORE training, add every parsed argument and the T5 config to this JSON
+                             (keeps keys already there). HF saves its model config.json into the output
+                             dir, so the run settings must live in a file of another name.
 Training data, loss, optimizer, schedule, early stopping and model selection are MACRec's own.
 """
 import argparse
 import json
+import os
 import time
 
 import torch
@@ -62,10 +66,20 @@ def main():
     parser = parse_dataset_args(parser)
     parser.add_argument("--model_class", choices=["contrastive", "plain"], default="contrastive")
     parser.add_argument("--stats_file", default=None)
+    parser.add_argument("--run_config_file", default=None)
     parser.add_argument("--dataloader_num_workers", type=int, default=0,
                         help="DataLoader workers (MACRec leaves the HF default 0). Batches are unchanged; "
                              "only collation (string tokenisation) moves off the main process.")
     args = parser.parse_args()
+
+    if args.run_config_file and int(os.environ.get("LOCAL_RANK", 0)) == 0:
+        cfg = json.load(open(args.run_config_file)) if os.path.exists(args.run_config_file) else {}
+        cfg["resolved_args"] = vars(args)
+        cfg["t5_config"] = json.load(open(os.path.join(args.base_model, "config.json")))
+        cfg["gpu"] = torch.cuda.get_device_name(0)
+        cfg["torch"], cfg["transformers"] = torch.__version__, transformers.__version__
+        with open(args.run_config_file, "w") as f:
+            json.dump(cfg, f, indent=1)
 
     if args.dataloader_num_workers > 0:
         _TA = transformers.TrainingArguments

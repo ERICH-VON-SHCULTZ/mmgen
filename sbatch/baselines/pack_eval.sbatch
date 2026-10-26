@@ -58,9 +58,9 @@ for R in $RUNS; do
   IFS=: read D B SEED <<< "$R"
   $SING "source /ext3/env.sh && conda activate py310
     OUT=/scratch/yw8866/mmgen_runs/baselines/$D/$B/seed$SEED; C=\$OUT/eval/cost2000; mkdir -p \$C
-    IDX=\$(python -c \"import json; print(json.load(open('\$OUT/config.json'))['index_file'])\")
-    IIDX=\$(python -c \"import json; print(json.load(open('\$OUT/config.json'))['image_index_file'])\")
-    TESTS=\$(python -c \"import json; print(json.load(open('\$OUT/config.json'))['test_tasks'])\")
+    IDX=\$(python -c \"import json; print(json.load(open('\$OUT/config_eval.json'))['index_file'])\")
+    IIDX=\$(python -c \"import json; print(json.load(open('\$OUT/config_eval.json'))['image_index_file'])\")
+    TESTS=\$(python -c \"import json; print(json.load(open('\$OUT/config_eval.json'))['test_tasks'])\")
     cd $REPO/macrec
     for T in \$TESTS; do
       torchrun --nproc_per_node=1 --master_port=\$((20000 + RANDOM % 20000)) eval_split.py --split test --sample_num 2000 \

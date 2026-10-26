@@ -1,5 +1,5 @@
 #!/bin/bash
-# One baseline run (inside the container). Env: D (Instruments|Arts|Games), B (tiger_text|tiger_image|mql|
+# One baseline run (inside the container). Env: D (Instruments|Arts|Games), B (tiger_text|tiger_image|tiger_fnorm|tiger_fraw|mql|
 # macrec|macrecpaper), SEED, STAGE (train|eval|all; default all), NW (dataloader workers; default 2). Fine-tune with MACRec's trainer, then evaluate valid+test with trie beam
 # search (20 beams), single lists and (C/D) the MQL4GRec/MACRec merge (ensemble.py).
 set -euo pipefail
@@ -15,24 +15,31 @@ STAGE=${STAGE:-all}; NW=${NW:-2}
 case $B in
   tiger_text)  IDX=.index_lemb_tiger.json;   IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   tiger_image) IDX=.index_vitemb_tiger.json; IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
+  # E early-fusion TIGER: identical to A/B except the tokenizer input (concat of L2-normed / raw text+image)
+  tiger_fnorm) IDX=.index_fnorm_tiger.json;  IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
+  tiger_fraw)  IDX=.index_fraw_tiger.json;   IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   mql)         IDX=.index_lemb_mql.json; IIDX=.index_vitemb_mql.json
                TASKS=seqrec,seqimage,item2image,image2item,fusionseqrec; TESTS="seqrec seqimage"; MC=plain; BS=256; LR=5e-4 ;;
   macrec|macrecpaper) IDX=.index_lemb_$B.json; IIDX=.index_vitemb_$B.json
                TASKS=seqrec,seqimage,item2image,image2item,seqimage2item,seqitem2image; TESTS="seqrec seqimage"
                MC=contrastive; BS=1024; LR=1e-3 ;;
 esac
-CFG=$OUT/config.json; [ "$STAGE" = eval ] && CFG=$OUT/config_eval.json   # training config is never overwritten
+# run_config.json: written BEFORE training; finetune_ext adds every resolved argument + the T5 config.
+# (config.json in $OUT is the HF model config, overwritten on every save.) Eval stage: config_eval.json.
+CFG=$OUT/run_config.json; [ "$STAGE" = eval ] && CFG=$OUT/config_eval.json
+[ "$STAGE" != eval ] && [ -f $OUT/train_stats.json ] && CFG=$OUT/config_rerun.json   # never clobber a finished run's config
 cat > $CFG <<EOF
 {"dataset":"$D","baseline":"$B","seed":$SEED,"index_file":"$IDX","image_index_file":"$IIDX","tasks":"$TASKS",
  "test_tasks":"$TESTS","model_class":"$MC","per_device_batch_size":$BS,"gradient_accumulation_steps":4,
  "effective_batch":$((BS*4)),"learning_rate":"$LR","weight_decay":0.01,"epochs":200,"patient":10,
  "lr_scheduler":"cosine","warmup_ratio":0.01,"max_his_len":20,"prompt_num":4,"num_beams":20,
- "dataloader_num_workers":$NW,"git_commit":"$(cd $REPO && git rev-parse HEAD)","job_id":"${SLURM_JOB_ID:-}"}
+ "dataloader_num_workers":$NW,"tokenizer_dir":"/scratch/yw8866/mmgen_runs/baselines/$D/tok","git_commit":"$(cd $REPO && git rev-parse HEAD)","job_id":"${SLURM_JOB_ID:-}"}
 EOF
 cd $M
 if [ "$STAGE" != eval ] && [ ! -f $OUT/train_stats.json ]; then
   echo "== train $D $B seed $SEED"; date
   torchrun --nproc_per_node=1 --master_port=$PORT finetune_ext.py --model_class $MC --stats_file $OUT/train_stats.json --dataloader_num_workers $NW \
+    --run_config_file $CFG \
     --seed $SEED --data_path $DATA --dataset $D --output_dir $OUT --base_model ./config/ckpt \
     --per_device_batch_size $BS --gradient_accumulation_steps 4 --learning_rate $LR --epochs 200 --weight_decay 0.01 \
     --save_and_eval_strategy epoch --logging_step 50 --max_his_len 20 --prompt_num 4 --patient 10 \
