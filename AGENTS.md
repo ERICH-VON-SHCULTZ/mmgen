@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-24 (baseline reproduction in progress; Instruments seed 42 done).
+Last updated: 2026-10-26 (baseline reproduction done; report in `docs/BASELINE_REPORT.md`).
 
 ---
 
@@ -25,13 +25,13 @@ Baselines to compare against: **TIGER**, **MQL4GRec**, **MACRec**. The working c
 reference. Behavior modeling, rerankers, history forcing and Tmall pipelines from the old project
 are reference-only, not part of the main line.
 
-**Current status (2026-10-24):**
+**Current status (2026-10-26):**
 - Repo, docs and environment are done.
 - The TIGER smoke test on Instruments passes.
-- **Baseline reproduction in progress** (TIGER-text, TIGER-image, MQL4GRec, MACRec on
-  Instruments → Arts → Games). Workflow in §4b; report in `docs/BASELINE_REPORT.md`.
-  Instruments seed 42: MQL4GRec and MACRec (paper setting) match; TIGER-text and MACRec as shipped
-  miss (§7). Only matched baselines are extended to more seeds and datasets.
+- **Baseline reproduction done** (report: `docs/BASELINE_REPORT.md`, numbers in §7).
+  MQL4GRec matches on all three datasets (3 seeds). MACRec (paper setting) matches on Instruments,
+  misses Arts/Games by 4.5–6.3% and ties MQL4GRec everywhere. TIGER-text and MACRec-as-shipped miss
+  on Instruments and were not extended. Open questions for the user: report §9.
 - **MD-RQ-VAE and MFD are NOT yet ported into MACRec.** The plan and the open decisions are in
   `docs/PORTING.md`.
 
@@ -74,6 +74,7 @@ mmgen/
 ├── docs/
 │   ├── MDRQVAE.md         old tokenizer: architecture, loss, hyperparams, verified properties (cited file:line)
 │   ├── MFD.md             old decoder: block layout, scoring, candidate construction, results, obsolete parts
+│   ├── BASELINE_REPORT.md ★ baseline reproduction: results, diagnostics, deviations, open questions
 │   ├── PORTING.md         ★ MACRec component map + how/where to port MD-RQ-VAE + MFD + OPEN DECISIONS
 │   └── LEGACY_MAP.md      every legacy path with status KEEP-AS-REFERENCE / SUPPORT / OBSOLETE
 ├── envs/
@@ -86,9 +87,13 @@ mmgen/
     ├── smoke_tiger_instruments.sbatch / .sh   STEP-4 smoke test (TIGER-style, Instruments)
     ├── data_fetch_images.sbatch   raw Amazon-18 meta + main images (CPU)
     ├── features.sbatch            LLaMA-7B text + CLIP ViT-L/14 image features (GPU)
-    ├── baselines/tokenizers.{sbatch,sh}   all baseline tokenizers for one dataset
+    ├── baselines/tokenizers.{sbatch,sh}   baseline tokenizers (D="Arts Games" concurrent, ONLY= filter)
+    ├── baselines/kmeans.sbatch    MACRec k-means pseudo-labels on CPU (run before tokenizers)
     ├── baselines/baseline.sbatch + run_baseline.sh   one (dataset, baseline, seed) train + valid/test eval
-    └── tools/                     sid_stats.py, summarize_run.py, check_features.py
+    ├── baselines/pack_train.sbatch   several trainings concurrently on one GPU (keeps utilisation >95%)
+    ├── baselines/pack_eval.sbatch    sequential eval; ONE run per job (<2 h)
+    └── tools/                     sid_stats.py, summarize_run.py, check_features.py,
+                                   collect_baselines.py (all runs -> baselines/baselines_all.json)
 ```
 
 Where to look for what:
@@ -246,6 +251,19 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 These are pipeline checks, not tuned baselines: 50 epochs vs MACRec's 200 with early stopping,
 on 1 GPU instead of 2. Every future result goes here and in `docs/` as appropriate.
 
+**Final baseline table (TEST, mean over seeds 42/43/44, HR@10 / NDCG@10; C/D merged list).**
+Full tables, std, single-list results and cost: `docs/BASELINE_REPORT.md`;
+raw: `mmgen_runs/baselines/baselines_all.json` (`python3 sbatch/tools/collect_baselines.py`).
+
+| baseline | Instruments | Arts | Games |
+|---|---|---|---|
+| A TIGER-text (1 seed) | 0.1131 / 0.0859 (−7.4% / −9.6%, miss) | — | — |
+| C MQL4GRec | 0.1310 / 0.1006 (+1.4% / +0.9%) | 0.1262 / 0.0898 (+0.6% / 0.0%) | 0.1007 / 0.0537 (0.0% / −0.2%) |
+| D MACRec paper setting | 0.1310 / 0.1011 (−3.9% / −3.4%) | 0.1255 / 0.0893 (−5.6% / −6.3%, miss) | 0.1020 / 0.0539 (−5.4% / −4.5%, miss) |
+| D MACRec as shipped (1 seed) | 0.1221 / 0.0949 (−10.4% / −9.3%, miss) | — | — |
+
+Earlier per-seed notes:
+
 **Baselines, Instruments, seed 42, TEST** (HR@10 / NDCG@10; C/D = merged list; pack_train 20637308,
 pack_eval 20769295 + 20802837; runs in `mmgen_runs/baselines/Instruments/<B>/seed42/run_summary.json`):
 
@@ -261,7 +279,7 @@ Test beam search: 5 decoder steps × 20 beams per user, ≈21.7 ms/user on an H2
 The valid seqrec cost files come from a contended concurrent job and are not usable for cost.
 
 Seeds 43/44 (test merged HR@10 / NDCG@10): MQL4GRec 0.1324 / 0.1013, 0.1304 / 0.1008;
-MACRec paper setting seed 43 0.1304 / 0.1005 (seed 44 eval: job 20839355).
+MACRec paper setting seed 43 0.1304 / 0.1005, seed 44 0.1306 / 0.1007.
 
 Data note: in Games, 2,287 items' first image URL is the same generic banner (`31BDm2VqflL.jpg`);
 3,475 Games items (25.1%) share an identical image file with another item, which is why the
@@ -320,7 +338,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `7bef831` | smoke-test fixes and results; MACRec bugs documented |
 | `f5144fc` | AGENTS.md, CLAUDE.md |
 | `747c6c0`…`6202cc8` | baseline entry points, PlainT5 fix, packed train / sequential eval jobs |
-| (next) | Instruments seed-42 results; tokenizer ONLY filter and multi-dataset jobs |
+| `84fc4d2`…`24ef25a` | Instruments results; tokenizer ONLY filter; CPU k-means job; one run per eval job |
+| (next) | `docs/BASELINE_REPORT.md`, `collect_baselines.py`, final results |
 
 ---
 
