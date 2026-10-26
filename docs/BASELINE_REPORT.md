@@ -14,6 +14,23 @@ No cross-domain pre-training was used. No hyperparameter was tuned after seeing 
 
 ---
 
+## 0. Decisions (recorded 2026-10-26)
+
+1. **TIGER:** our reproduction is accepted as is. The paper's TIGER numbers, which we do not reach,
+   are reported next to ours. The TIGER tokenizer and training settings are our own reading of the
+   paper, because neither repo ships a TIGER setup.
+2. **MACRec:** the paper setting (`macrecpaper`: cross-modal contrast on layers 2 and 3 only,
+   weight 0.1; reconstruction 0.001 and the other weights as in the paper) is the official MACRec
+   baseline. The repo-as-shipped setting (`macrec`) is recorded as a deviation that misses.
+3. **MACRec on Arts and Games:** accepted and reported as is, next to the published numbers. The
+   authors will not be contacted. Our MACRec ties our MQL4GRec on all three datasets.
+4. **Reference numbers:** our own reproduced numbers are the reference for all comparisons;
+   published numbers are listed alongside them.
+5. **Data and features are frozen:** all datasets stay exactly as now, including the Games banner
+   images, and every baseline uses the current text and image features.
+
+---
+
 ## 1. Status
 
 | baseline | Instruments | Arts | Games |
@@ -275,7 +292,9 @@ code with the paper's settings.
 
 ---
 
-## 9. What is needed from you
+## 9. Open questions (status after the 2026-10-26 decisions)
+
+Items 1–4 below are resolved by the decisions in §0; item 5 is still open.
 
 1. **TIGER (A/B):** decide whether to accept A as "not reproduced" with the diagnosis above, or to
    specify a TIGER setup to follow (e.g. a public TIGER implementation's tokenizer and fine-tuning

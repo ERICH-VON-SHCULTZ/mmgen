@@ -32,6 +32,10 @@ are reference-only, not part of the main line.
   MQL4GRec matches on all three datasets (3 seeds). MACRec (paper setting) matches on Instruments,
   misses Arts/Games by 4.5–6.3% and ties MQL4GRec everywhere. TIGER-text and MACRec-as-shipped miss
   on Instruments and were not extended. Open questions for the user: report §9.
+- **Baseline decisions (2026-10-26, report §0):** our reproduced numbers are the reference
+  (published ones listed alongside); `macrecpaper` is the official MACRec; TIGER is accepted as our
+  reading of the paper; data and features are frozen (Games banner images kept).
+- **In progress:** TIGER A/B on Arts/Games and Instruments seeds 43/44; new early-fusion TIGER (E).
 - **MD-RQ-VAE and MFD are NOT yet ported into MACRec.** The plan and the open decisions are in
   `docs/PORTING.md`.
 
