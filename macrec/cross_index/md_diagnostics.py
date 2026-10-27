@@ -15,6 +15,7 @@
     reference, as the chain RQ-VAE was on Tmall.
   7 additivity: cos of D(q_f + q_m), D(q_f), D(q_m); share of items where the sum beats both parts
 Usage: python md_diagnostics.py --ckpt <dir>/best.pth  -> <dir>/diagnostics.json
+       --codes <dir>/codes_<tag>.npy --out_name diagnostics_<tag>.json : diagnose a given (e.g. reassigned) SID set
 """
 import argparse
 import collections
@@ -120,11 +121,15 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--ckpt", required=True)
     p.add_argument("--reps", type=int, default=100)
+    p.add_argument("--codes", default=None, help="(N, S+2L) codes to diagnose instead of the argmin codes")
+    p.add_argument("--out_name", default="diagnostics.json")
     a = p.parse_args()
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     model, c, epoch = load(a.ckpt)
     D, S, L = c["dataset"], c["n_shared"], c["n_modal"]
     codes, xt, xi = compute_codes(model, c, dev)
+    if a.codes:
+        codes = np.load(a.codes)
     N = len(codes)
     out = {"ckpt": a.ckpt, "epoch": epoch, "config": c}
     dd = f"{c['data_root']}/{D}/{D}"
@@ -196,7 +201,8 @@ def main():
             sep[f"E_level{lv}"] = norm(separation(other, [e[lv] for e in E], Xt, Xi, rng))
     out["separation"] = sep
 
-    json.dump(out, open(f"{os.path.dirname(a.ckpt)}/diagnostics.json", "w"), indent=1, default=str)
+    out["codes_file"] = a.codes
+    json.dump(out, open(f"{os.path.dirname(a.ckpt)}/{a.out_name}", "w"), indent=1, default=str)
     brief = {k: out[k] for k in ("recon", "utilization", "full_sid_collision", "ami_shared_vs_A0", "ami_shared_vs_B0")}
     brief["cmi1"] = {k: out["cmi_first_level"][k] for k in ("cmi_plugin_bits", "null_mean", "null_std", "p_value", "frac_plugin", "frac_corrected")}
     brief["sep_ratio"] = {k: v.get("normalized_ratio") for k, v in sep.items() if isinstance(v, dict)}
