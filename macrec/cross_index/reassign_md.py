@@ -54,7 +54,7 @@ def main():
     S, L, N = c["n_shared"], c["n_modal"], len(codes)
     R = level_residuals(model, xt, xi)
     # distances of every item to every code at every level: dist[chain][level] (N, K)
-    dist = {k: [torch.cdist(r, w).pow(2).cpu().numpy() for r, w in v] for k, v in R.items()}
+    dist = {k: [torch.cdist(r, w.detach()).pow(2).cpu().numpy() for r, w in v] for k, v in R.items()}
     col = {"s": list(range(S)), "t": list(range(S, S + L)), "v": list(range(S + L, S + 2 * L))}
     own = np.zeros(N)
     for k in ("s", "t", "v"):
