@@ -168,8 +168,9 @@ def main():
     # 5 modality balance of the shared code
     lvl0 = lambda tag: [json.load(open(f"{dd}.index_{tag}.json"))[str(k)][0] for k in range(N)]
     A0, B0 = lvl0("lemb_tiger"), lvl0("vitemb_tiger")
-    out["ami_shared_vs_A0"] = adjusted_mutual_info_score(f, A0)
-    out["ami_shared_vs_B0"] = adjusted_mutual_info_score(f, B0)
+    f_lab = ["-".join(map(str, x)) for x in f]
+    out["ami_shared_vs_A0"] = adjusted_mutual_info_score(f_lab, A0)
+    out["ami_shared_vs_B0"] = adjusted_mutual_info_score(f_lab, B0)
     out["ami_A0_vs_B0"] = adjusted_mutual_info_score(A0, B0)
 
     # 6 separation

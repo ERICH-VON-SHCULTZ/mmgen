@@ -25,7 +25,7 @@ singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
 cd $REPO/macrec/cross_index
-python -u main_mdrqvae.py --dataset $D --out_dir $OUT $ARGS > $OUT/train.out 2>&1
+[ -f $OUT/final.pth ] || python -u main_mdrqvae.py --dataset $D --out_dir $OUT $ARGS > $OUT/train.out 2>&1
 python -u generate_indices_md.py --ckpt $OUT/best.pth --tag $TAG
 python -u md_diagnostics.py --ckpt $OUT/best.pth
 "
