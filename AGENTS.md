@@ -243,6 +243,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `cross_index/scripts/gen.sh` calls a non-existent script | use `gen_code.sh` |
 | `data/kmeans.py` hard-codes `dataset="Games"` | edit a copy, not the original |
 | sequential beam-search eval keeps the GPU ~12% busy; job 20819917 (4 runs) was cancelled at 2 h 09 | `pack_eval.sbatch` with ONE C/D run per job (~40 min); submit several jobs |
+| bash reads a script while it runs: editing `run_baseline.sh` during a job broke job 21047067 (syntax error after its last eval) | `pack_*.sbatch` / `baseline.sbatch` now run a snapshot copied to `$TMPDIR` at job start |
 | k-means (sklearn, CPU) inside a GPU job leaves the GPU idle; Arts+Games took >2 h and the cluster cancelled job 20806460 | run `sbatch/baselines/kmeans.sbatch` on the CPU account first; `tokenizers.sh` skips existing k-means files |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |

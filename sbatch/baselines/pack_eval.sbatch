@@ -31,6 +31,8 @@ if [ -z "${WANDB_API_KEY:-}" ] && [ ! -f "$HOME/.netrc" ]; then export WANDB_MOD
 export WANDB_PROJECT=mmgen-baselines WANDB_DIR=/scratch/yw8866/mmgen_runs/wandb
 export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR" $WANDB_DIR
+# bash reads scripts while running: run a snapshot so later edits of run_baseline.sh cannot break this job (job 21047067)
+RB=$TMPDIR/run_baseline.sh; cp $REPO/sbatch/baselines/run_baseline.sh $RB
 LOGD=/scratch/yw8866/mmgen_runs/logs/pack_eval_$SLURM_JOB_ID; mkdir -p $LOGD
 echo "job $SLURM_JOB_ID on $(hostname) partition $SLURM_JOB_PARTITION  RUNS=$RUNS  commit $(cd $REPO && git rev-parse --short HEAD)"
 nvidia-smi --query-gpu=name,utilization.gpu --format=csv,noheader -l 10 > $LOGD/gpu_util.csv &
@@ -42,10 +44,10 @@ MODE=${MODE:-sequential}; FAIL=0; PIDS=()
 for R in $RUNS; do
   IFS=: read D B SEED <<< "$R"
   if [ $MODE = concurrent ]; then
-    $SING "D=$D B=$B SEED=$SEED STAGE=eval bash $REPO/sbatch/baselines/run_baseline.sh" > $LOGD/$D-$B-$SEED.log 2>&1 &
+    $SING "D=$D B=$B SEED=$SEED STAGE=eval bash $RB" > $LOGD/$D-$B-$SEED.log 2>&1 &
     PIDS+=($!); sleep 10
   else
-    $SING "D=$D B=$B SEED=$SEED STAGE=eval bash $REPO/sbatch/baselines/run_baseline.sh" > $LOGD/$D-$B-$SEED.log 2>&1 || FAIL=1
+    $SING "D=$D B=$B SEED=$SEED STAGE=eval bash $RB" > $LOGD/$D-$B-$SEED.log 2>&1 || FAIL=1
     echo "$R done after $(( $(date +%s) - START )) s"
   fi
 done

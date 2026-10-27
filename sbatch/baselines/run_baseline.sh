@@ -17,6 +17,8 @@ case $B in
   tiger_image) IDX=.index_vitemb_tiger.json; IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   # E early-fusion TIGER: identical to A/B except the tokenizer input (concat of L2-normed / raw text+image)
   tiger_fnorm) IDX=.index_fnorm_tiger.json;  IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
+  # MD-RQ-VAE + chain decoder (Part 3): SID [shared, text chain, image chain] as one sequence, TIGER settings
+  md*)         IDX=.index_$B.json;          IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   tiger_fnormj) IDX=.index_fnormj_tiger.json; IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256; LR=5e-4 ;;
   tiger_fraw)  IDX=.index_fraw_tiger.json;   IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   mql)         IDX=.index_lemb_mql.json; IIDX=.index_vitemb_mql.json
