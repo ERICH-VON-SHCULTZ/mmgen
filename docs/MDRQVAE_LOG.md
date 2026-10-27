@@ -53,3 +53,56 @@ Notes:
   level of the early-fusion chain E (≥ 0.54).
 - Verdict: passes utilisation, collisions, separation, additivity; CMI excess above null is
   the open point. Next: try to reduce it with one change at a time.
+
+---
+
+## All attempts (one row per attempt; columns as in a01)
+
+| attempt | parent → change | ckpt ep. | rec cos text / image | util per level (s; t…; v…) | full-SID coll. | CMI₁ plug-in / null (sd) | corrected, % H(t₁\|f) | AMI f~A0 / f~B0 | sep. ratio shared / text / image | additivity t / i | balance cos(D_t(q_f)) − cos(D_i(q_f)) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| a01 1+2+2 | — (Tmall design, MLP fusion) | 420 | 0.9475 / 0.8790 | 113 112 253 108 240 | 0.40% | 3.215 / 3.007 (0.005) | 0.208, 4.52% | 0.371 / 0.318 | 0.728 / 1.092 / 0.406 | 0.929 / 0.908 | +0.094 |
+| a01 1+3+3 | — | 310 | 0.9463 / 0.8718 | 110 168 252 254 112 248 250 | 0.27% | 3.380 / 3.194 (0.006) | 0.186, 3.79% | 0.342 / 0.305 | 0.667 / 1.097 / 0.443 | 0.913 / 0.877 | +0.105 |
+| a02 1+2+2 | a01 → dead-code reset every 10 epochs until epoch 400 | 500 | 0.9532 / 0.8978 | 256 254 256 255 256 | 0.32% | 3.548 / 3.482 (0.003) | 0.066, 1.56% | 0.360 / 0.331 | 0.697 / 1.073 / 0.367 | 0.954 / 0.954 | +0.092 |
+| a03 1+2+2 | a01 → InfoNCE weight 1.0 → 3.0 | 420 | 0.9398 / 0.8659 | 105 161 253 151 248 | 0.32% | 3.718 / 3.558 (0.004) | 0.160, 3.20% | 0.342 / 0.297 | 0.737 / 0.948 / 0.471 | 0.888 / 0.871 | +0.113 |
+| a04 1+3+3 | a02 settings at 1+3+3 | 490 | 0.9577 / 0.9010 | 256 256 256 255 256 256 256 | 0.26% | 3.500 / 3.425 (0.003) | 0.076, 1.83% | 0.339 / 0.309 | 0.636 / 1.127 / 0.378 | 0.975 / 0.963 | +0.103 |
+| **a05 1+2+2** | a02 → cross-attention fusion (Tmall CrossAttentionFusion, 2 tokens, 4 heads) | 440 | **0.9565 / 0.9081** | 256 255 256 256 256 | 0.30% | 4.214 / 4.162 (0.001) | **0.052, 1.14%** | 0.320 / 0.292 | 0.769 / **1.271** / 0.360 | 0.975 / 0.990 | +0.078 |
+| **a06 1+3+3** | a05 settings at 1+3+3 | 500 | **0.9659 / 0.9265** | 256 256 256 254 255 256 255 | 0.26% | 4.261 / 4.219 (0.001) | **0.043, 0.93%** | 0.299 / 0.269 | 0.765 / **1.330** / 0.370 | 0.995 / 0.996 | +0.080 |
+
+References (same items): A text rec cos 0.9527, B image 0.9023.
+
+### a02: dead-code reset (parent a01)
+Why: a01 used only 108–119 of 256 codes on the shared and first modality levels; an under-used
+shared code leaves common information to both chains, which couples them. Change: every 10
+epochs, codes unused by the full catalog are re-seeded from random encoder outputs of the same
+quantizer; stopped after epoch 400 so codes settle. Result: every level 254–256 codes; recon
+matches A/B; corrected CMI 4.5% → 1.6%. **Kept.**
+
+### a03: InfoNCE weight 3.0 (parent a01)
+Why: a stronger pull of z_f toward both modality latents could make f carry more shared
+information. Result: worse on every diagnostic (recon, CMI 3.2%, text separation 0.95 < 1).
+**Rejected.**
+
+### a04: a02 at 1+3+3
+The second configuration with a02's settings: passes (CMI 1.8%, all levels used).
+
+### a05: cross-attention fusion (parent a02)
+Why: Tmall's fusion; with one vector per modality it mixes two tokens, but with residual
+connections and LayerNorm the shared latent keeps both modality latents visible. Result: better
+than a02 on reconstruction (text 0.9565, image 0.9081, both above A/B), CMI (1.14%), text
+separation (1.27) and additivity (0.975 / 0.990). **Kept: final 1+2+2.**
+
+### a06: a05 at 1+3+3
+Final 1+3+3: reconstruction 0.9659 / 0.9265, CMI 0.93%, text separation 1.33, additivity ≈ 0.995.
+**Final 1+3+3.**
+
+### Stop
+The bar is met by a05 and a06 after 6 attempts: no level collapsed (all ≥ 254 codes at the end;
+the early dip at epoch 1–10 recovers by epoch 20–30), full-SID collision 0.26–0.30%, and the CMI
+excess over the permutation null is 0.04–0.05 bits (0.9–1.1% of H(t₁|f)), the same order as
+Tmall's bias-corrected 1.7%. The excess is still many null standard deviations above the null
+(p = 0 / 100 shuffles): the dependence is real but small. The full-chain CMI is not informative at
+6,250 items (plug-in ≈ null ≈ H).
+
+Collision handling: the 0.26–0.30% of items with a duplicate full SID (groups of at most 2) get a
+trailing disambiguation token `<x_k>` (k = 0 for the first item), as A/B/E do; the shared code is
+never changed. Index files: `Instruments.index_md122_a05.json` (6 tokens), `index_md133_a06.json` (8).
