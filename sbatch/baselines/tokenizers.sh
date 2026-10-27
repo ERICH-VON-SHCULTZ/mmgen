@@ -1,6 +1,6 @@
 #!/bin/bash
 # Tokenizers for all baselines on one dataset (runs inside the container). Usage: D=Instruments bash tokenizers.sh
-# Optional ONLY="mql macrecpaper" restricts to those tokenizers (tags: tiger tiger_fnorm tiger_fraw mql macrec macrecpaper).
+# Optional ONLY="mql macrecpaper" restricts to those tokenizers (tags: tiger tiger_fnorm tiger_fnormj tiger_fraw mql macrec macrecpaper).
 # Outputs: $DATA/$D/$D.index_<tag>.json + $RUN/tok/<tag>/ (ckpts, logs, stats). Skips finished steps.
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
@@ -30,7 +30,7 @@ done
 # ---- E: early-fusion TIGER. Same RQ-VAE command and SID rule as A/B; only the input vector differs
 # (fuse_features.py: concat of L2-normalised (fnorm) or raw (fraw) text + image). The RQ-VAE input
 # layer follows the input width (EmbDataset.dim), the only architectural difference to A/B.
-for F in fnorm fraw; do
+for F in fnorm fnormj fraw; do
   want tiger_$F || continue
   EMB=$DATA/$D/$D.emb-fused-${F#f}.npy
   [ -f $EMB ] || python $M/data_process/fuse_features.py --dataset $D --data_root $DATA
