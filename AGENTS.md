@@ -39,12 +39,12 @@ are reference-only, not part of the main line.
 - **MD-RQ-VAE built (2026-10-27)**: `macrec/cross_index/models/mdrqvae.py`; final configs a05
   (1+2+2) and a06 (1+3+3), attempt log `docs/MDRQVAE_LOG.md`.
 - **Official MD-RQ-VAE SID (2026-10-27):** the distance-reassigned index with no trailing token
-  (`<D>.index_md122_a05_reassign.json`, 5 tokens; `<D>.index_md133_a06_reassign.json`, 7 tokens).
-  Tokenizer checkpoint = final epoch (500), no selection (`final.pth`; tags `*_ep500_reassign`).
+  (`<D>.index_md122_a05_ep500_reassign.json`, 5 tokens; `<D>.index_md133_a06_ep500_reassign.json`,
+  7 tokens). Tokenizer checkpoint = final epoch (500), no selection (`final.pth`). The
+  `*_a0X_reassign.json` files (no `ep500`) are the superseded best-collision sets, kept as controls.
   Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0; all six are
-  final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is not locked**
-  until the Instruments chain-decoder control (old-token vs reassigned) is done and the user
-  confirms. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
+  final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is not locked**:
+  the Instruments control is done; locking waits for the user's confirmation. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
 - **Instruments Step 3 done (2026-10-28), report `docs/MDRQVAE_REPORT.md`:** chain decoder on the
   official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
