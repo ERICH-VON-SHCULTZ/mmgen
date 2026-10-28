@@ -171,8 +171,14 @@ slightly with the final epoch on Instruments 1+2+2 (0.30 → 0.38%), Arts 1+3+3 
 (0.87 → 1.02%, 0.50 → 0.58%), and is 0 after reassignment everywhere. All reassignment changes stay
 on the last level. Instruments and Arts improve or stay equal on every diagnostic. Games 1+2+2
 gains a lot in reconstruction (now above A / B) but its CMI more than doubles (excl. 0.79 → 1.82%,
-under the bar); Games 1+3+3 rises to 2.02% excl., above the ~2% bar, so its v1 was **not**
-replaced (still the epoch-450 best-collision set). In both Games sets the text-chain separation drops
+under the bar); Games 1+3+3 rises to 2.02% excl., marginally above the ~2% bar. It was first held
+back; the user then accepted it (2.02% is within "about 2%") so that all six sets follow one rule.
+**All six v1 sets are now final-epoch sets.**
+
+Observation: on Games the corrected CMI rises with training (excl. shared images: 1+2+2 0.79% →
+1.82%, 1+3+3 1.64% → 2.02%; all items 1.86% → 3.10%, 3.09% → 3.61%), while on Instruments and Arts
+it does not (it falls or stays equal: Instruments 0.73 → 0.68%, 0.51% = 0.51%; Arts 0.72% = 0.72%,
+0.61 → 0.55%). In both Games sets the text-chain separation drops
 (2.21 → 2.01, 2.60 → 2.44): the later epochs trade some modality specificity for reconstruction.
 
 **E-norm under the final-epoch rule (Instruments; job 21165054).** The E-norm (fnormj) tokenizer

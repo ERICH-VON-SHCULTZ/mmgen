@@ -38,11 +38,11 @@ set: corrected first-level CMI after excluding items with byte-identical images 
 - v1 Arts 1+2+2: `mmgen_runs/md/sids/v1/Arts/1+2+2/index.json` sha256 `cbc70c4ed3da57fe3172bc280a2feccee5ab92bec1689691c9cb3eb88a7e0960` (final epoch; same as best-collision)
 - v1 Arts 1+3+3: `mmgen_runs/md/sids/v1/Arts/1+3+3/index.json` sha256 `8612e3cbfd92fa1929df7134aa0898c842c2515b98a3889aa93ccb81f6a14961` (final epoch)
 - v1 Games 1+2+2: `mmgen_runs/md/sids/v1/Games/1+2+2/index.json` sha256 `48851182c58e4cfd89106efa7bfbdbd080c9b36a7761ff8c062622ea44c5e144` (final epoch)
-- v1 Games 1+3+3: `mmgen_runs/md/sids/v1/Games/1+3+3/index.json` sha256 `1c1f4220540df25c03c206283760fa18656ec73b5109784c0c7a17c70187b712` (**still best-collision, epoch 450**: the final-epoch candidate fails the CMI bar, 2.02%; pending decision)
+- v1 Games 1+3+3: `mmgen_runs/md/sids/v1/Games/1+3+3/index.json` sha256 `15c68e21bcec5ae48e6bfe9c37df84145209b2f5998140e5809d3d2798fb4121` (final epoch; excl. CMI 2.02%, accepted by the user as within ~2% so all six follow one rule)
 
 Superseded (kept): `mmgen_runs/md/sids/superseded/v1_20261028/<D>/<cfg>/`, the best-collision sets
 of Instruments 1+2+2 (sha256 `aa514208…`), Instruments 1+3+3, Arts 1+2+2, Arts 1+3+3
-(`73d5b133…`), Games 1+2+2 (`f5a30990…`).
+(`73d5b133…`), Games 1+2+2 (`f5a30990…`), Games 1+3+3 (`1c1f4220…`).
 
 Everything below §0 describes the old Tmall implementation in `legacy/grid/`.
 

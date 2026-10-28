@@ -41,15 +41,18 @@ are reference-only, not part of the main line.
 - **Official MD-RQ-VAE SID (2026-10-27):** the distance-reassigned index with no trailing token
   (`<D>.index_md122_a05_reassign.json`, 5 tokens; `<D>.index_md133_a06_reassign.json`, 7 tokens).
   Tokenizer checkpoint = final epoch (500), no selection (`final.pth`; tags `*_ep500_reassign`).
-  Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0. Games 1+3+3 v1 is
-  still the best-collision set (final epoch fails the ~2% CMI bar); pending decision. **v1 is not locked**
+  Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0; all six are
+  final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is not locked**
   until the Instruments chain-decoder control (old-token vs reassigned) is done and the user
   confirms. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
-- **In progress (Instruments, seed 42):** chain decoder on the official final-epoch reassigned
-  index (21164568); E-norm final-epoch tokenizer (21165054) + T5, packed with the chain decoder on
-  the best-collision reassigned index (21165055); old-token chain decoder + E-norm-j TIGER on all
-  three datasets (21103991).
+- **In progress (seed 42), in this queue order:** 21164568 chain decoder on the official
+  final-epoch reassigned index (Instruments); 21165055 E-norm final-epoch T5 + chain decoder on the
+  best-collision reassigned index (Instruments); 21168750 E-norm-j TIGER on Arts and Games;
+  21168751 old-token chain decoder (Instruments). (21103991 was cancelled and split into the last two.)
+- **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
+  vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
+  (HR@10 0.0931–0.1061) is larger than the differences we expect to measure.
 - **MFD is NOT yet ported into MACRec.** The plan and the open decisions are in `docs/PORTING.md`.
 
 ---
