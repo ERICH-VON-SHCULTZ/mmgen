@@ -1,15 +1,76 @@
-# MD-RQ-VAE: the multi-modal decomposed tokenizer (old implementation)
+# MD-RQ-VAE: the multi-modal decomposed tokenizer
 
-What the GRID code actually does, cited to `legacy/grid/` (paths below are relative to it). This
-describes the reference only. For how to rebuild it in MACRec, see `PORTING.md`.
+This doc has two parts. **Part A is the current implementation on Amazon** (mmgen, MACRec code
+base): what was built, the official SIDs, and where everything lives. **Part B is the old Tmall
+implementation** in `legacy/grid/`, kept as the design reference (cited file:line). Part B's
+section numbers (§1–§7) are stable; other docs link to them.
 
-## 0. Official MD-RQ-VAE SID on Amazon (mmgen, decision 2026-10-27)
+Reading order for a new member: Part A here → `docs/MDRQVAE_REPORT.md` (results and decisions) →
+`docs/MDRQVAE_LOG.md` (every attempt and control, in order) → `docs/BASELINE_REPORT.md` (the
+baselines MD-RQ-VAE is compared against) → `docs/MFD.md` (the planned decoder; design not final).
+
+# Part A. Current implementation (Amazon Instruments / Arts / Games)
+
+## A1. What was built
+
+SID = `[f ; t_1..t_L ; i_1..i_L]`: one shared code `f`, then an L-level residual text chain and an
+L-level residual image chain. Two configurations: **1+2+2** (L = 2, SID length 5) and **1+3+3**
+(L = 3, length 7); 256 codes per level, 32-d codes. The design principles (fixed by the task, not
+tuned): the shared code is quantized first from a fused representation; each modality branch is
+built from the shared residual plus the modality latent; text is reconstructed from shared + text
+codes, image from shared + image codes; conditional independence of the two chains given `f` is
+measured, not assumed.
+
+Forward pass (`macrec/cross_index/models/mdrqvae.py`, class `MDRQVAE`):
+
+| step | Amazon implementation |
+|---|---|
+| inputs | LLaMA-7B text features (4096-d, `<D>.emb-llama-td.npy`) and CLIP ViT-L/14 image features (768-d, `<D>.emb-ViT-L-14.npy`): the baselines' own files |
+| input norm | per modality, L2-normalize × √dim (unit per-dimension RMS); this is also the reconstruction target |
+| encoders | per modality, MLP [2048, 1024, 512, 256, 128, 64] → 32 (the A/B RQ-VAE MLP) |
+| fusion | cross-attention of the two latents as 2 tokens, 4 heads (Tmall `CrossAttentionFusion`) → `z_f` |
+| shared quant | 1 level × 256, `q_f` |
+| branches | `r_f = z_f − q_f.detach()`; `v_t = Linear([r_f ; z_t])`, `v_i = Linear([r_f ; z_i])` |
+| modality quant | residual VQ, L levels × 256 per chain |
+| decoders | `x̂_t = D_t(q_f + q_t)`, `x̂_i = D_i(q_f + q_i)` (mirror MLPs) |
+| codebooks | MACRec `VectorQuantizer`: gradient-trained, k-means init on the first batch, L2 lookup, β = 0.25; dead codes (unused by the whole catalog) re-seeded from encoder outputs every 10 epochs until epoch 400 |
+| loss | MSE_t + MSE_i + VQ + 1.0 × (InfoNCE(z_f, z_t) + InfoNCE(z_f, z_i)), one-directional, learnable temperature |
+| training | AdamW lr 1e-3, wd 1e-4, batch 2048, 500 epochs, seed 42, whole catalog (no interactions used) |
+| checkpoint | **final epoch (500), no selection** (`final.pth`); see A2 |
+
+Final settings = attempt **a05** (1+2+2) and **a06** (1+3+3), found on Instruments in 6 attempts
+(one change at a time, `docs/MDRQVAE_LOG.md`), applied unchanged to Arts and Games. Differences from
+Tmall are tabulated in `docs/MDRQVAE_REPORT.md` §2.
+
+Code and jobs (all new files; MACRec's own files are untouched):
+
+| file | role |
+|---|---|
+| `macrec/cross_index/models/mdrqvae.py` | the model |
+| `macrec/cross_index/main_mdrqvae.py` | trainer: writes `run_config.json` first, then `train_log.jsonl` (every 10 epochs: utilization, full-SID collision, reconstruction cos), `best.pth` (lowest collision; superseded rule), `final.pth` (official), `train_summary.json` |
+| `macrec/cross_index/generate_indices_md.py` | codes from a checkpoint (`codes.npy`, `sid_stats.json`); its index file adds the old `<x_k>` token (superseded) |
+| `macrec/cross_index/reassign_md.py` | **official index**: distance-based reassignment, no extra token (rule in A2) |
+| `macrec/cross_index/md_diagnostics.py` | diagnostics 1–7 (reconstruction vs A/B, utilization, collision, CMI with permutation null, AMI with A/B, separation, additivity, shared balance) |
+| `sbatch/md/tok_attempt.sbatch` | one tokenizer attempt: train → codes → diagnostics (on `best.pth`, as in the attempt log) |
+| `sbatch/md/reassign.sbatch` | reassignment + diagnostics on the new index (`CKPT=final`, official) |
+| `sbatch/tools/freeze_md_sids.py` | versioned, hashed SID sets; `--lock` makes them read-only |
+| `sbatch/tools/cmi_shared_image.py` | first-level CMI without items whose image file is shared (acceptance check) |
+| `sbatch/baselines/run_baseline.sh` case `md*` | chain decoder on an MD index: TIGER settings (plain T5, batch 256, lr 5e-4, seqrec only, one list) |
+
+Run directories: tokenizers in `mmgen_runs/md/<D>/tok/<attempt>/` (`a05_122`, `a06_133` are the
+final ones); chain-decoder runs in `mmgen_runs/baselines/<D>/<tag>/seed42/`, with
+`<tag>` = `md122_a05_ep500_reassign` or `md133_a06_ep500_reassign`.
+
+## A2. Official SID on Amazon (decision 2026-10-27; v1 locked 2026-10-28)
 
 The official SID is the **reassigned, token-free index**: `[shared, text chain, image chain]`,
 length 5 for 1+2+2 (a05 settings) and 7 for 1+3+3 (a06 settings), with no trailing disambiguation
 token. Every later run, chain decoder and MFD alike, uses it; chain vs MFD comparisons must both
-use the same set. The older `<D>.index_md122_a05.json` / `index_md133_a06.json` files (one extra
-`<x_k>` token) are kept only as the comparison point for job 21103991.
+use the same set. Index files: `mmgen_runs/data/<D>/<D>.index_md122_a05_ep500_reassign.json` (1+2+2) and
+`<D>.index_md133_a06_ep500_reassign.json` (1+3+3). Two older index files exist only as controls
+for the Step-3 comparison (`docs/MDRQVAE_REPORT.md` §7.3): `<D>.index_md1X2_a0X.json` (best-collision
+checkpoint + an extra `<x_k>` token) and `<D>.index_md1X2_a0X_reassign.json` (best-collision
+checkpoint, reassigned). Do not use them for new work.
 
 Reassignment rule (`macrec/cross_index/reassign_md.py`; the tokenizers are not retrained):
 1. the shared code never changes;
@@ -45,7 +106,10 @@ Superseded (kept): `mmgen_runs/md/sids/superseded/v1_20261028/<D>/<cfg>/`, the b
 of Instruments 1+2+2 (sha256 `aa514208…`), Instruments 1+3+3, Arts 1+2+2, Arts 1+3+3
 (`73d5b133…`), Games 1+2+2 (`f5a30990…`), Games 1+3+3 (`1c1f4220…`).
 
-Everything below §0 describes the old Tmall implementation in `legacy/grid/`.
+# Part B. The old Tmall implementation (design reference, `legacy/grid/`)
+
+What the GRID code actually does, cited to `legacy/grid/` (paths below are relative to it). For how
+it maps onto MACRec, see `PORTING.md`.
 
 ## 1. Summary
 

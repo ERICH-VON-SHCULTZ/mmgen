@@ -107,9 +107,12 @@ Collision handling (superseded 2026-10-27): the 0.26–0.30% of items with a dup
 (groups of at most 2) first got a trailing disambiguation token `<x_k>`, as A/B/E do
 (`Instruments.index_md122_a05.json`, 6 tokens; `index_md133_a06.json`, 8). **Official from
 2026-10-27:** distance-based reassignment with no extra token (`reassign_md.py`, rule in
-`docs/MDRQVAE.md` §0): `Instruments.index_md122_a05_reassign.json` (5 tokens, 19 items changed,
+`docs/MDRQVAE.md` §A2): `Instruments.index_md122_a05_reassign.json` (5 tokens, 19 items changed,
 all on the last text/image level) and `index_md133_a06_reassign.json` (7 tokens, 16 items changed).
-Diagnostics are unchanged except collision → 0 (first levels untouched).
+Diagnostics are unchanged except collision → 0 (first levels untouched). These were built on the
+best-collision checkpoint; the same day the checkpoint rule changed to the final epoch, so the
+**current official files are `<D>.index_md1X2_a0X_ep500_reassign.json`** (see "Final-epoch
+checkpoint" below and `docs/MDRQVAE.md` §A2).
 
 ---
 

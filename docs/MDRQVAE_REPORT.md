@@ -3,7 +3,7 @@
 Date: 2026-10-28. Seed 42 for every new run. All test numbers are full ranking, trie-constrained
 beam search with 20 beams, and a checkpoint chosen on validation loss. Raw numbers:
 `mmgen_runs/baselines/baselines_all.json` (`sbatch/tools/collect_baselines.py`). Attempt-level
-detail: `docs/MDRQVAE_LOG.md`. Official SID: `docs/MDRQVAE.md` §0.
+detail: `docs/MDRQVAE_LOG.md`. Official SID and the current implementation: `docs/MDRQVAE.md` Part A.
 
 Status: Instruments is complete (Parts 2–3 and the Step-3 controls). The chain decoder on Arts and
 Games has not been run yet; it waits for the v1 lock (user confirmation).

@@ -42,7 +42,7 @@ are reference-only, not part of the main line.
   (`<D>.index_md122_a05_ep500_reassign.json`, 5 tokens; `<D>.index_md133_a06_ep500_reassign.json`,
   7 tokens). Tokenizer checkpoint = final epoch (500), no selection (`final.pth`). The
   `*_a0X_reassign.json` files (no `ep500`) are the superseded best-collision sets, kept as controls.
-  Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0; all six are
+  Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §A2; all six are
   final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is LOCKED (2026-10-28)**:
   never overwrite; changes become v2. Check the data-dir index against `index.sha256` before runs. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
@@ -100,7 +100,7 @@ mmgen/
 │   ├── AGENTS.md          the OLD project's handbook (not this one)
 │   └── README_LEGACY.md
 ├── docs/
-│   ├── MDRQVAE.md         old tokenizer: architecture, loss, hyperparams, verified properties (cited file:line)
+│   ├── MDRQVAE.md         ★ tokenizer: Part A current Amazon implementation + official SID (v1); Part B Tmall reference
 │   ├── MFD.md             old decoder: block layout, scoring, candidate construction, results, obsolete parts
 │   ├── BASELINE_REPORT.md ★ baseline reproduction: results, diagnostics, deviations, open questions
 │   ├── MDRQVAE_REPORT.md  ★ MD-RQ-VAE on Amazon: implementation, diagnostics, chain decoder vs baselines, official SID
@@ -162,7 +162,7 @@ Where to look for what:
 | raw Amazon-18 meta + downloaded images | `/scratch/yw8866/mmgen_runs/raw/amazon18/{Metadata,Images}` |
 | baseline runs | `/scratch/yw8866/mmgen_runs/baselines/<D>/<baseline>/seed<S>/` (`run_summary.json`) and `.../<D>/tok/` |
 | MD-RQ-VAE tokenizer runs | `/scratch/yw8866/mmgen_runs/md/<D>/tok/<attempt>/` |
-| frozen MD SID sets (official) | `/scratch/yw8866/mmgen_runs/md/sids/v1/<D>/1+X+X/` (see `docs/MDRQVAE.md` §0) |
+| frozen MD SID sets (official) | `/scratch/yw8866/mmgen_runs/md/sids/v1/<D>/1+X+X/` (see `docs/MDRQVAE.md` §A2) |
 | MQL4GRec reference clone (ships Instruments LLaMA/CLIP features + index files) | `/scratch/yw8866/tmp/ref/MQL4GRec` (@5ad9c27) |
 | old GRID repo (source of `legacy/`) | `/scratch/yw8866/GRID` (contains an un-rotated W&B key) |
 | old Tmall data, embeddings, dumps | `/scratch/yw8866/rec-tmall/` |
