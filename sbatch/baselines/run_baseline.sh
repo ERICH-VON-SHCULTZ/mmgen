@@ -1,5 +1,5 @@
 #!/bin/bash
-# One baseline run (inside the container). Env: D (Instruments|Arts|Games), B (tiger_text|tiger_image|tiger_fnorm|tiger_fnormj|tiger_fraw|mql|
+# One baseline run (inside the container). Env: D (Instruments|Arts|Games), B (tiger_text|tiger_image|tiger_fnorm|tiger_fnormj|tiger_fnormj_ep500|tiger_fraw|mql|
 # macrec|macrecpaper), SEED, STAGE (train|eval|all; default all), NW (dataloader workers; default 2). Fine-tune with MACRec's trainer, then evaluate valid+test with trie beam
 # search (20 beams), single lists and (C/D) the MQL4GRec/MACRec merge (ensemble.py).
 set -euo pipefail
@@ -20,6 +20,7 @@ case $B in
   # MD-RQ-VAE + chain decoder (Part 3): SID [shared, text chain, image chain] as one sequence, TIGER settings
   md*)         IDX=.index_$B.json;          IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   tiger_fnormj) IDX=.index_fnormj_tiger.json; IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256; LR=5e-4 ;;
+  tiger_fnormj_ep500) IDX=.index_fnormj_ep500_tiger.json; IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256; LR=5e-4 ;;
   tiger_fraw)  IDX=.index_fraw_tiger.json;   IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   mql)         IDX=.index_lemb_mql.json; IIDX=.index_vitemb_mql.json
                TASKS=seqrec,seqimage,item2image,image2item,fusionseqrec; TESTS="seqrec seqimage"; MC=plain; BS=256; LR=5e-4 ;;
