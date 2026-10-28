@@ -226,7 +226,21 @@ at epoch 197 of the 200-epoch cap, so it may be under-trained under the shared T
   bit-identical, so T5 training is deterministic at seed 42.
 - **E-raw extension:** E-raw − E-norm on Instruments = +0.0077 HR@10, more than the seed spread, so
   E-raw is extended to Arts and Games (tokenizer 21251957, T5 21251971).
-- Token effect (old index with `<x_k>`): eval 21220669 running.
+- **Token effect** (old index with a trailing `<x_k>` token, best-collision checkpoint; train 21168751,
+  eval 21220669 on H200). Same checkpoint, token vs reassignment:
+
+  | config | index | SID len | passes/user | ms/user | valid HR@10 / NDCG@10 | test HR@1 / HR@10 / NDCG@10 |
+  |---|---|---|---|---|---|---|
+  | 1+2+2 | old, with token (ep 440) | 6 | 7 | 30.0 | 0.1456 / 0.1111 | 0.0720 / 0.1186 / 0.0919 |
+  | 1+2+2 | reassigned (ep 440) | 5 | 6 | 28.0 | 0.1457 / 0.1120 | 0.0708 / 0.1148 / 0.0895 |
+  | 1+2+2 | **official**: reassigned, final epoch | 5 | 6 | 25.3 | 0.1476 / 0.1132 | 0.0751 / 0.1181 / 0.0932 |
+  | 1+3+3 | old, with token (ep 500) | 8 | 9 | 37.4 | 0.1454 / 0.1118 | 0.0747 / 0.1165 / 0.0922 |
+  | 1+3+3 | **official**: reassigned (ep 500) | 7 | 8 | 32.0 | 0.1435 / 0.1105 | 0.0732 / 0.1161 / 0.0916 |
+
+  As expected: one decoder pass fewer and 7–14% less time per user, metrics within seed noise
+  (|Δ test HR@10| ≤ 0.0038 ≈ 1.7× A's seed std; 1+2+2 valid HR@10 is identical, 0.1456 vs 0.1457).
+  The official 1+2+2 set is at least as good as the old token index on every metric except test
+  HR@10 (−0.0005).
 
 E-norm on Arts / Games (seed 42, test HR@10 / NDCG@10): 0.0825 / 0.0520 and 0.0843 / 0.0454
 (A 3-seed 0.0986 / 0.0661 and 0.0885 / 0.0471; B 0.0957 / 0.0657 and 0.0782 / 0.0415).
