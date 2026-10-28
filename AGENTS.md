@@ -114,7 +114,8 @@ mmgen/
                                    collect_baselines.py (all runs -> baselines/baselines_all.json),
                                    ami_first_level.py (E vs A/B first-level AMI),
                                    rank_metrics.py (independent metric/merge check),
-                                   freeze_md_sids.py (versioned SID sets; --lock makes them read-only)
+                                   freeze_md_sids.py (versioned SID sets; --lock makes them read-only),
+                                   cmi_shared_image.py (first-level CMI without items sharing an image file)
     ├── md/tok_attempt.sbatch      MD-RQ-VAE tokenizer attempt: train -> SIDs -> diagnostics
     ├── md/reassign.sbatch         reassignment + diagnostics on the new index
 ```

@@ -110,3 +110,45 @@ Collision handling (superseded 2026-10-27): the 0.26–0.30% of items with a dup
 `docs/MDRQVAE.md` §0): `Instruments.index_md122_a05_reassign.json` (5 tokens, 19 items changed,
 all on the last text/image level) and `index_md133_a06_reassign.json` (7 tokens, 16 items changed).
 Diagnostics are unchanged except collision → 0 (first levels untouched).
+
+---
+
+## Follow-ups on Arts/Games (2026-10-27; observations, no tokenizer change)
+
+**Convergence check (all six; checkpoint rule = lowest full-SID collision, later epoch wins ties,
+500 epochs).** Best epochs: Instruments 440 / 500, Arts 500 / 400, Games 200 / 450 (1+2+2 / 1+3+3).
+At the epoch limit: Instruments 1+3+3 (collision 0.256% at 290 and again at 500, a tie) and Arts
+1+2+2 (0.573% at 450 and 500, a tie). Games 1+2+2 is **not** at the limit: it trained 500 epochs,
+its collision minimum is at epoch 200 (0.87%) and later epochs are 0.87–1.14%. Its reconstruction
+keeps improving to epoch 500 (cos text / image 0.9366 / 0.8841 at 200 → 0.9560 / 0.9176 at 500,
+above A / B 0.9462 / 0.9049), as it does in every run: the Games 1+2+2 reconstruction gap
+comes from the collision-based checkpoint choice, not from too few epochs. Pending a user decision.
+
+**CMI without shared images** (`sbatch/tools/cmi_shared_image.py` →
+`mmgen_runs/md/cmi_shared_image.json`). First-level corrected CMI (plug-in − permutation-null mean,
+% of H(t₁|f)) on the official reassigned sets, all items vs after excluding every item whose image
+file is byte-identical (SHA-256) to another item's, the Games banner included:
+
+| dataset | items excluded (groups, largest) | 1+2+2 all → excl. | 1+3+3 all → excl. |
+|---|---|---|---|
+| Instruments | 270 (106, 8) | 0.052 bits 1.14% → 0.033 bits 0.73% | 0.043 bits 0.93% → 0.023 bits 0.51% |
+| Arts | 634 (208, 63) | 0.071 bits 1.42% → 0.036 bits 0.72% | 0.070 bits 1.40% → 0.030 bits 0.61% |
+| Games | 4,213 (738, 2,287) | 0.099 bits 1.86% → 0.040 bits 0.79% | 0.158 bits 3.09% → 0.079 bits 1.64% |
+
+Items sharing an image account for about half of the excess in every set, not only in Games.
+Without them Games 1+3+3 (1.64%) is still the highest, about twice the other sets (0.51–0.79%).
+The byte-identical count for Games (4,213) is larger than the 3,475 noted earlier; that figure
+counted a different notion of "identical image file", so the two should not be mixed.
+
+**Shared-code balance** (observation): AMI(f, A0) / AMI(f, B0); balance = cos(D_t(q_f), x_t) −
+cos(D_i(q_f), x_i); separation ratio of the shared code (>1 moves text more, relative to baseline).
+
+| dataset | 1+2+2 AMI A0 / B0 | 1+3+3 AMI A0 / B0 | balance 1+2+2 / 1+3+3 | sep. shared 1+2+2 / 1+3+3 | AMI(A0, B0) |
+|---|---|---|---|---|---|
+| Instruments | 0.320 / 0.292 (text) | 0.299 / 0.269 (text) | +0.078 / +0.080 | 0.769 / 0.765 | 0.326 |
+| Arts | 0.354 / 0.304 (text) | 0.307 / 0.256 (text) | +0.115 / +0.121 | 0.784 / 0.807 | 0.270 |
+| Games | 0.322 / 0.341 (image) | 0.315 / 0.356 (image) | +0.055 / +0.061 | 1.012 / 0.864 | 0.283 |
+
+By AMI the shared code leans to text on Instruments and Arts and to image on Games. By
+reconstruction, q_f alone reconstructs text better than image everywhere, with the smallest margin
+on Games. The measures agree that Games is the most image-leaning dataset.
