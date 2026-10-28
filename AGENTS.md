@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-27 (MD-RQ-VAE built on Amazon; official SID = reassigned, token-free index, v1 frozen).
+Last updated: 2026-10-28 (Instruments chain decoder on the official MD SID done; report docs/MDRQVAE_REPORT.md).
 
 ---
 
@@ -46,10 +46,13 @@ are reference-only, not part of the main line.
   until the Instruments chain-decoder control (old-token vs reassigned) is done and the user
   confirms. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
-- **In progress (seed 42), in this queue order:** 21164568 chain decoder on the official
-  final-epoch reassigned index (Instruments); 21165055 E-norm final-epoch T5 + chain decoder on the
-  best-collision reassigned index (Instruments); 21168750 E-norm-j TIGER on Arts and Games;
-  21168751 old-token chain decoder (Instruments). (21103991 was cancelled and split into the last two.)
+- **Instruments Step 3 done (2026-10-28), report `docs/MDRQVAE_REPORT.md`:** chain decoder on the
+  official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
+  passes), 1+3+3 0.1161 / 0.0916; E-norm 0.1055 / 0.0822; E-raw 0.1132 / 0.0870. Token vs
+  reassignment: within seed noise, one decoder pass fewer.
+- **Next:** v1 lock (waits for user confirmation), then the 1+2+2 chain decoder on Arts and Games.
+  In flight: E-raw on Arts/Games (tokenizer 21251957 → T5 21251971), triggered by the agreed rule
+  (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
   (HR@10 0.0931–0.1061) is larger than the differences we expect to measure.
@@ -86,6 +89,7 @@ mmgen/
 │   ├── cross_index/generate_indices_md.py      MD SIDs (old: + <x_k> token on collision)
 │   ├── cross_index/reassign_md.py              ★ official MD SIDs: distance reassignment, no extra token
 │   ├── cross_index/md_diagnostics.py           diagnostics 1-7 (recon, util, collision, CMI+null, AMI, separation, additivity)
+│   ├── cross_index/main_single_final.py        main_single.py unchanged + also saves final_model.pth (E final-epoch rule)
 │   ├── data/kmeans_dataset.py                  data/kmeans.py parameterised (K=512 pseudo-labels)
 │   ├── data_process/fuse_features.py           baseline E input: concat(L2-normed | raw) text + image features
 │   └── data_process/fetch_item_images.py, clip_feature_ext.py   main image download; CLIP tolerant to missing images
@@ -100,6 +104,8 @@ mmgen/
 │   ├── MDRQVAE.md         old tokenizer: architecture, loss, hyperparams, verified properties (cited file:line)
 │   ├── MFD.md             old decoder: block layout, scoring, candidate construction, results, obsolete parts
 │   ├── BASELINE_REPORT.md ★ baseline reproduction: results, diagnostics, deviations, open questions
+│   ├── MDRQVAE_REPORT.md  ★ MD-RQ-VAE on Amazon: implementation, diagnostics, chain decoder vs baselines, official SID
+│   ├── MDRQVAE_LOG.md     every MD-RQ-VAE attempt and control, in order (Part 2 log)
 │   ├── PORTING.md         ★ MACRec component map + how/where to port MD-RQ-VAE + MFD + OPEN DECISIONS
 │   └── LEGACY_MAP.md      every legacy path with status KEEP-AS-REFERENCE / SUPPORT / OBSOLETE
 ├── envs/
@@ -116,7 +122,8 @@ mmgen/
     ├── baselines/kmeans.sbatch    MACRec k-means pseudo-labels on CPU (run before tokenizers)
     ├── baselines/baseline.sbatch + run_baseline.sh   one (dataset, baseline, seed) train + valid/test eval
     ├── baselines/pack_train.sbatch   several trainings concurrently on one GPU (keeps utilisation >95%)
-    ├── baselines/pack_eval.sbatch    sequential eval; ONE run per job (<2 h)
+    ├── baselines/pack_eval.sbatch    sequential eval; ONE run per job (<2 h); use --partition=h200_tandon for cost comparable to the baselines
+    ├── baselines/e_final_tok.sbatch  E-norm tokenizer rerun, indexed from the final epoch
     └── tools/                     sid_stats.py, summarize_run.py, check_features.py,
                                    collect_baselines.py (all runs -> baselines/baselines_all.json),
                                    ami_first_level.py (E vs A/B first-level AMI),
@@ -272,6 +279,8 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | sequential beam-search eval keeps the GPU ~12% busy; job 20819917 (4 runs) was cancelled at 2 h 09 | `pack_eval.sbatch` with ONE C/D run per job (~40 min); submit several jobs |
 | bash reads a script while it runs: editing `run_baseline.sh` during a job broke job 21047067 (syntax error after its last eval) | `pack_*.sbatch` / `baseline.sbatch` now run a snapshot copied to `$TMPDIR` at job start |
 | k-means (sklearn, CPU) inside a GPU job leaves the GPU idle; Arts+Games took >2 h and the cluster cancelled job 20806460 | run `sbatch/baselines/kmeans.sbatch` on the CPU account first; `tokenizers.sh` skips existing k-means files |
+| `scontrol update` / `hold` / `nice` on our pending jobs fails with "Unspecified error" | job order can only be set at submit time (`--dependency=after:<job>`); otherwise cancel and resubmit |
+| ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
 | `evaluation_strategy=` is deprecated | works in transformers 4.47; **do not upgrade transformers past 4.47** |
@@ -301,6 +310,17 @@ raw: `mmgen_runs/baselines/baselines_all.json` (`python3 sbatch/tools/collect_ba
 | C MQL4GRec | 0.1310 / 0.1006 (+1.4% / +0.9%) | 0.1262 / 0.0898 (+0.6% / 0.0%) | 0.1007 / 0.0537 (0.0% / −0.2%) |
 | D MACRec paper setting | 0.1310 / 0.1011 (−3.9% / −3.4%) | 0.1255 / 0.0893 (−5.6% / −6.3%, miss) | 0.1020 / 0.0539 (−5.4% / −4.5%, miss) |
 | D MACRec as shipped (1 seed) | 0.1221 / 0.0949 (−10.4% / −9.3%, miss) | — | — |
+
+**MD-RQ-VAE chain decoder and E (Instruments, seed 42, TEST, one list; HR@10 / NDCG@10; decoder
+passes / user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §7.3.
+
+| method | HR@10 / NDCG@10 | passes |
+|---|---|---|
+| MD 1+2+2 (official SID) | 0.1181 / 0.0932 | 6 |
+| MD 1+3+3 (official SID) | 0.1161 / 0.0916 | 8 |
+| E-norm (rescaled) | 0.1055 / 0.0822 (Arts 0.0825 / 0.0520, Games 0.0843 / 0.0454) | 5 |
+| E-raw | 0.1132 / 0.0870 | 5 |
+| C / D, best single list (3 seeds) | 0.1287 / 0.0988, 0.1302 / 0.0997 | 5 |
 
 Earlier per-seed notes:
 
@@ -380,7 +400,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `747c6c0`…`6202cc8` | baseline entry points, PlainT5 fix, packed train / sequential eval jobs |
 | `84fc4d2`…`24ef25a` | Instruments results; tokenizer ONLY filter; CPU k-means job; one run per eval job |
 | `bd4bb27`…`3e026d1` | MD-RQ-VAE model, attempts a01–a06, diagnostics, distance reassignment |
-| (next) | `freeze_md_sids.py`, official SID docs, v1 sets |
+| `f6e5b9d`…`714968b` | official SID (reassigned), final-epoch checkpoint rule, v1 sets, CMI without shared images, E final-epoch tokenizer, TIGER A/B 3-seed report |
+| `69b23fd`…(next) | Instruments chain decoder results, controls, `docs/MDRQVAE_REPORT.md` |
 
 ---
 
