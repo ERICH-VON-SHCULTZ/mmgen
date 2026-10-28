@@ -203,8 +203,8 @@ TIGER settings (plain T5, BS 256, LR 5e-4, seqrec, 200 epochs, patience 10), sin
 | A TIGER-text, seed 42 (3-seed mean) | 4 | 107 | — | 0.0655 / 0.0929 / 0.1131 (0.1154) / 0.0794 / 0.0859 (0.0876) | 5 | 21.8 |
 | B TIGER-image, seed 42 (3-seed mean) | 4 | 113 | — | 0.0689 / 0.0915 / 0.1120 (0.1139) / 0.0801 / 0.0867 (0.0883) | 5 | 22.3 |
 | E-raw, seed 42 | 4 | — | — | 0.0676 / 0.0928 / 0.1132 / 0.0805 / 0.0870 | 5 | 20.7 |
-| C MQL4GRec, seed 42, merged | 5+5 | — | — | — / — / 0.1301 / — / 0.0998 | 2 lists | — |
-| D MACRec, seed 42, merged | 5+5 | — | — | — / — / 0.1321 / — / 0.1021 | 2 lists | — |
+| C MQL4GRec, seed 42, merged | 4 per list | — | — | — / — / 0.1301 / — / 0.0998 | 5 × 2 lists | 21.6 per list |
+| D MACRec, seed 42, merged | 4 per list | — | — | — / — / 0.1321 / — / 0.1021 | 5 × 2 lists | 21.6 per list |
 
 1+2+2 is the better config (all five test metrics, and cheaper). The 1+3+3 run's best checkpoint is
 at epoch 197 of the 200-epoch cap, so it may be under-trained under the shared TIGER budget.
