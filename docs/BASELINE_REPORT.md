@@ -37,6 +37,8 @@ No cross-domain pre-training was used. No hyperparameter was tuned after seeing 
 |---|---|---|---|
 | A TIGER-text | **miss**, 3 seeds (−5.5% / −7.8%) | **miss**, 3 seeds (−15.5% / −18.0%) | **match**, 3 seeds (+3.3% / +4.1%) |
 | B TIGER-image | 3 seeds, no published target | 3 seeds, no published target | 3 seeds, no published target |
+| E-norm early fusion (rescaled, official) | seed 42, no published target | seed 42 | seed 42 |
+| E-raw early fusion | seed 42 | queued (21251957 → 21251971) | queued |
 | C MQL4GRec (no pre-training) | **match**, 3 seeds | **match**, 3 seeds | **match**, 3 seeds |
 | D MACRec, spec / paper setting (`macrecpaper`) | **match**, 3 seeds | **miss**, 3 seeds (−5.6% / −6.3%) | **miss**, 3 seeds (−5.4% / −4.5%) |
 | D MACRec, repo as shipped (`macrec`) | **miss**, 1 seed (−10.4% / −9.3%) | not run | not run |
@@ -126,11 +128,17 @@ in every tokenizer** (`all_unique = true`).
 | dataset | tokenizer | text collision | image collision | text utilization per level | image utilization per level |
 |---|---|---|---|---|---|
 | Instruments | A/B TIGER (3×256 + index) | 6.08% (max group 15) | 6.13% (max group 10) | [84, 239, 254] | [104, 256, 256] |
+| Instruments | E-norm (fused, 3×256 + index) | 5.33% (max group 6) | (one fused SID) | [67, 221, 248] | — |
+| Instruments | E-raw (fused) | 8.02% (max group 13) | (one fused SID) | [73, 237, 248] | — |
 | Instruments | C MQL4GRec (4×256) | 2.42% | 3.31% | [58, 225, 243, 256] | [97, 256, 256, 256] |
 | Instruments | D MACRec spec | 2.54% | 3.17% | [98, 252, 255, 255] | [120, 256, 256, 256] |
 | Instruments | D MACRec repo | 0.58% | 2.64% | [204, 256, 256, 256] | [227, 256, 256, 256] |
+| Arts | A/B TIGER | 9.78% (max group 25) | 6.98% (max group 63) | [86, 254, 256] | [144, 256, 256] |
+| Arts | E-norm (fused) | 7.33% (max group 16) | (one fused SID) | [42, 248, 255] | — |
 | Arts | C MQL4GRec | 3.75% | 5.10% | [55, 238, 245, 256] | [84, 256, 256, 256] |
 | Arts | D MACRec spec | 4.43% | 5.07% | [70, 245, 255, 256] | [99, 256, 256, 256] |
+| Games | A/B TIGER | 9.06% (max group 13) | 27.79% (max group 2,290) | [99, 256, 256] | [115, 256, 256] |
+| Games | E-norm (fused) | 12.59% (max group 105) | (one fused SID) | [38, 252, 256] | — |
 | Games | C MQL4GRec | 2.34% | 25.75% | [103, 235, 244, 256] | [101, 256, 256, 256] |
 | Games | D MACRec spec | 2.86% | 25.76% | [73, 240, 253, 256] | [69, 252, 256, 256] |
 
@@ -151,6 +159,9 @@ searches (text, image) plus a CPU merge.
 | Instruments (17,112) | 21.5–22.3 | 368–382 s | 1.7–1.8 s | H200 |
 | Arts (22,171) | 21.3–21.8 / 17.2–17.3 / 26.3–26.9 | 473–483 / 382–384 / 584–596 s | 1.8–2.5 s | H200 / H100 / A100 |
 | Games (42,259) | 20.9–21.3 / 17.5–17.7 | 885–898 / 738–748 s | 3.3–4.1 s | H200 / H100 |
+
+E-norm / E-raw (one list, 4 SID tokens): 5 passes, 20.7–21.7 ms/user on H200 on all three datasets,
+the same as A/B.
 
 So a C or D prediction costs 2 × 5 = 10 decoder passes per user (≈ 2 × 21.7 ms on H200) versus
 5 for TIGER. The same GPU type gives the same ms/user across baselines; the differences between
@@ -317,3 +328,56 @@ Items 1–4 below are resolved by the decisions in §0; item 5 is still open.
 4. **Games images:** decide whether to keep the generic-banner images (current, follows the
    download rule) or to treat them as missing; either choice should be applied to all baselines.
 5. **Security, still open:** rotate the W&B key `wandb_v1_VF5U…` found in the old GRID repo.
+
+---
+
+## 10. Baseline E: early-fusion TIGER (added 2026-10-28)
+
+**What it is.** TIGER with one fused input per item: concat(text feature, image feature), then the
+same RQ-VAE command (MQL4GRec `main_single.py`, 3×256, checkpoint = lowest collision) and the same
+SID rule as A/B (3 codes + collision index), then the same T5 (seqrec only, one list). Only the
+tokenizer input differs from A/B (`macrec/data_process/fuse_features.py`; job case
+`tiger_fnormj` / `tiger_fraw` in `sbatch/baselines/run_baseline.sh`).
+
+**Variants** (`<D>.emb-fused-*.npy`; stats in `<D>.emb-fused.stats.json`):
+
+| variant | input | status |
+|---|---|---|
+| **E-norm (official, `fnormj`)** | L2-normalize text and image separately, concatenate, multiply the joint vector by c, so the joint mean length equals A's mean text length (each half ≈ c). c = mean train-item text norm / √2, computed once from training items (items[:-2]) and not tuned: Instruments 37.868 (6,240 items), Arts 37.359, Games 36.744 | done, seed 42 |
+| E-raw (`fraw`) | raw concat (text norm ≈ 53.5 vs image ≈ 17.7 on Instruments: text-dominated) | Instruments seed 42; Arts/Games queued |
+| E-norm unscaled (`fnormunscaled`) | L2-normalized halves, no scale | **failed**: codebook collapse on Instruments (levels used [49, 30, 14], collision 42.86%); not trained |
+| E-norm ×53 (`fnorm`) | each half × mean text norm (joint length ≈ √2 × A's) | superseded by `fnormj` (user decision); kept as a record: test HR@10 / NDCG@10 Instruments 0.1044 / 0.0811, Arts 0.0925 / 0.0578. Job 20981380 (its seeds 43/44) was cancelled |
+
+**Results (TEST, seed 42, one list).**
+
+| dataset | E-norm HR@1 / HR@5 / HR@10 / NDCG@5 / NDCG@10 | E-raw HR@10 / NDCG@10 | A (3-seed) | B (3-seed) |
+|---|---|---|---|---|
+| Instruments | 0.0651 / 0.0877 / 0.1055 / 0.0765 / 0.0822 | 0.1132 / 0.0870 | 0.1154 / 0.0876 | 0.1139 / 0.0883 |
+| Arts | 0.0275 / 0.0628 / 0.0825 / 0.0457 / 0.0520 | queued | 0.0986 / 0.0661 | 0.0957 / 0.0657 |
+| Games | 0.0180 / 0.0530 / 0.0843 / 0.0354 / 0.0454 | queued | 0.0885 / 0.0471 | 0.0782 / 0.0415 |
+
+E-norm is below the better of A/B on every dataset (Instruments −8.6%, Arts −16.3%, Games −4.7%
+HR@10) and far below C/D. It beats B only on Games. E-raw beats E-norm on Instruments by +0.0077
+HR@10, more than the seed spread, so E-raw was extended to Arts and Games (agreed rule).
+Under the final-epoch checkpoint rule (used by MD-RQ-VAE) the E-norm Instruments index is
+byte-identical to the best-collision one, and a T5 rerun gives the same numbers
+(`tiger_fnormj_ep500`, 0.1055 / 0.0822).
+
+**Diagnostics.** First-level codes used (of 256): E-norm 67 / 42 / 38 (Instruments / Arts /
+Games), fewer than A (84 / 86 / 99) or B (104 / 144 / 115). First-level AMI with A and B
+(`sbatch/tools/ami_first_level.py` → `baselines/<D>/tok/ami_first_level.json`; A~B for reference):
+
+| dataset | E-norm~A | E-norm~B | E-raw~A | E-raw~B | A~B |
+|---|---|---|---|---|---|
+| Instruments | 0.542 | 0.515 | 0.687 | 0.344 | 0.326 |
+| Arts | 0.526 | 0.400 | queued | queued | 0.270 |
+| Games | 0.465 | 0.535 | queued | queued | 0.283 |
+
+E-norm's first level mixes both modalities, leaning to text on Instruments and Arts and to image on
+Games. E-raw's first level is mostly text (0.69 vs 0.34), as its raw norms predict.
+
+**Failed or stopped E runs.** Unscaled E-norm collapse (above, not trained); the ×53 variant
+superseded; job 20981380 cancelled; eval jobs 21047067 / 21047068 reported FAILED only in their
+summary step (run_baseline.sh was edited while they ran; all results files exist; jobs now run a
+snapshot of the script).
+

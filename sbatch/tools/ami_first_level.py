@@ -16,7 +16,10 @@ p.add_argument("--data_root", default="/scratch/yw8866/mmgen_runs/data")
 p.add_argument("--out_root", default="/scratch/yw8866/mmgen_runs/baselines")
 a = p.parse_args()
 D = a.dataset
-files = {"A_text": "lemb_tiger", "B_image": "vitemb_tiger", "E_norm": "fnorm_tiger", "E_raw": "fraw_tiger"}
+# E_norm = the official rescaled E-norm (fnormj: joint length = A's mean text norm); E_norm_x53 = the
+# superseded variant (each half x mean text norm), kept as a record.
+files = {"A_text": "lemb_tiger", "B_image": "vitemb_tiger", "E_norm": "fnormj_tiger", "E_norm_x53": "fnorm_tiger",
+         "E_raw": "fraw_tiger"}
 codes = {}
 for k, tag in files.items():
     f = f"{a.data_root}/{D}/{D}.index_{tag}.json"
