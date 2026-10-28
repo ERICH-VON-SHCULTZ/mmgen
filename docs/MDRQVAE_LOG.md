@@ -103,6 +103,10 @@ Tmall's bias-corrected 1.7%. The excess is still many null standard deviations a
 (p = 0 / 100 shuffles): the dependence is real but small. The full-chain CMI is not informative at
 6,250 items (plug-in ≈ null ≈ H).
 
-Collision handling: the 0.26–0.30% of items with a duplicate full SID (groups of at most 2) get a
-trailing disambiguation token `<x_k>` (k = 0 for the first item), as A/B/E do; the shared code is
-never changed. Index files: `Instruments.index_md122_a05.json` (6 tokens), `index_md133_a06.json` (8).
+Collision handling (superseded 2026-10-27): the 0.26–0.30% of items with a duplicate full SID
+(groups of at most 2) first got a trailing disambiguation token `<x_k>`, as A/B/E do
+(`Instruments.index_md122_a05.json`, 6 tokens; `index_md133_a06.json`, 8). **Official from
+2026-10-27:** distance-based reassignment with no extra token (`reassign_md.py`, rule in
+`docs/MDRQVAE.md` §0): `Instruments.index_md122_a05_reassign.json` (5 tokens, 19 items changed,
+all on the last text/image level) and `index_md133_a06_reassign.json` (7 tokens, 16 items changed).
+Diagnostics are unchanged except collision → 0 (first levels untouched).

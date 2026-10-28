@@ -3,6 +3,39 @@
 What the GRID code actually does, cited to `legacy/grid/` (paths below are relative to it). This
 describes the reference only. For how to rebuild it in MACRec, see `PORTING.md`.
 
+## 0. Official MD-RQ-VAE SID on Amazon (mmgen, decision 2026-10-27)
+
+The official SID is the **reassigned, token-free index**: `[shared, text chain, image chain]`,
+length 5 for 1+2+2 (a05 settings) and 7 for 1+3+3 (a06 settings), with no trailing disambiguation
+token. Every later run, chain decoder and MFD alike, uses it; chain vs MFD comparisons must both
+use the same set. The older `<D>.index_md122_a05.json` / `index_md133_a06.json` files (one extra
+`<x_k>` token) are kept only as the comparison point for job 21103991.
+
+Reassignment rule (`macrec/cross_index/reassign_md.py`; the tokenizers are not retrained):
+1. the shared code never changes;
+2. only full-SID collision groups are touched; the item with the lowest total quantization
+   distance to its own codes (ties: lower item id) keeps its SID;
+3. every other item of the group changes exactly one code, on the LAST level of the text or image
+   chain: the code with the smallest increase in that level's quantization distance (searched over
+   both chains), among codes whose new SID is not already used;
+4. only if no such code exists, the second-to-last level (MQL4GRec logic); never the shared level;
+5. deterministic (no randomness): groups ordered by their first item id, items by id.
+
+Frozen sets: `/scratch/yw8866/mmgen_runs/md/sids/<version>/<D>/<cfg>/` with `tokenizer.pth`,
+`run_config.json`, `index.json`, `index.sha256`, `reassign.json`, `diagnostics.{json,md}`, `STATUS`
+(`sbatch/tools/freeze_md_sids.py`). **v1, not locked**: lock (read-only) only after the Instruments
+chain-decoder control is done and the user has confirmed. After locking, any change becomes v2
+with a note; v1 is never overwritten.
+
+- v1 Instruments 1+2+2: `mmgen_runs/md/sids/v1/Instruments/1+2+2/index.json` sha256 `aa514208413066302c1886d6d58df1a72d350635c55bc9fde2044a04d8e591bd`
+- v1 Instruments 1+3+3: `mmgen_runs/md/sids/v1/Instruments/1+3+3/index.json` sha256 `1fe4df38cd83c69ec0bb18c94293c441b9bb57e61a43c8bc1270f35b8955c3af`
+- v1 Arts 1+2+2: `mmgen_runs/md/sids/v1/Arts/1+2+2/index.json` sha256 `cbc70c4ed3da57fe3172bc280a2feccee5ab92bec1689691c9cb3eb88a7e0960`
+- v1 Arts 1+3+3: `mmgen_runs/md/sids/v1/Arts/1+3+3/index.json` sha256 `73d5b133c7e953027516d86aae10d736d0331d01980f04aa868f3bea0ef867b1`
+- v1 Games 1+2+2: `mmgen_runs/md/sids/v1/Games/1+2+2/index.json` sha256 `f5a30990b47107fd4c6226a460d0dfb36fc1e8e71026ec65feff2bf9050a623a`
+- v1 Games 1+3+3: `mmgen_runs/md/sids/v1/Games/1+3+3/index.json` sha256 `1c1f4220540df25c03c206283760fa18656ec73b5109784c0c7a17c70187b712`
+
+Everything below §0 describes the old Tmall implementation in `legacy/grid/`.
+
 ## 1. Summary
 
 Each item has a text embedding `x_t` and an image embedding `x_i`. MD-RQ-VAE turns the pair into a

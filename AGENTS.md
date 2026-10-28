@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-26 (baseline reproduction done; report in `docs/BASELINE_REPORT.md`).
+Last updated: 2026-10-27 (MD-RQ-VAE built on Amazon; official SID = reassigned, token-free index, v1 frozen).
 
 ---
 
@@ -36,8 +36,17 @@ are reference-only, not part of the main line.
   (published ones listed alongside); `macrecpaper` is the official MACRec; TIGER is accepted as our
   reading of the paper; data and features are frozen (Games banner images kept).
 - **In progress:** TIGER A/B on Arts/Games and Instruments seeds 43/44; new early-fusion TIGER (E).
-- **MD-RQ-VAE and MFD are NOT yet ported into MACRec.** The plan and the open decisions are in
-  `docs/PORTING.md`.
+- **MD-RQ-VAE built (2026-10-27)**: `macrec/cross_index/models/mdrqvae.py`; final configs a05
+  (1+2+2) and a06 (1+3+3), attempt log `docs/MDRQVAE_LOG.md`.
+- **Official MD-RQ-VAE SID (2026-10-27):** the distance-reassigned index with no trailing token
+  (`<D>.index_md122_a05_reassign.json`, 5 tokens; `<D>.index_md133_a06_reassign.json`, 7 tokens).
+  Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0. **v1 is not locked**
+  until the Instruments chain-decoder control (old-token vs reassigned) is done and the user
+  confirms. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
+  `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
+- **In progress:** chain decoder on the old (job 21103991) and reassigned (job 21154242) index,
+  Instruments seed 42; E-norm-j (rescaled) TIGER on all three datasets (21103991).
+- **MFD is NOT yet ported into MACRec.** The plan and the open decisions are in `docs/PORTING.md`.
 
 ---
 
@@ -66,6 +75,10 @@ mmgen/
 │   ├── cross_index/main_single.py, generate_indices_single.py   MQL4GRec single-modality tokenizer (verbatim @5ad9c27)
 │   ├── cross_index/generate_indices_tiger.py   TIGER SIDs: 3 RQ levels + appended collision index
 │   ├── cross_index/main_cross_weights.py       main.py with the contrast weights actually applied
+│   ├── cross_index/models/mdrqvae.py, main_mdrqvae.py   MD-RQ-VAE model + trainer
+│   ├── cross_index/generate_indices_md.py      MD SIDs (old: + <x_k> token on collision)
+│   ├── cross_index/reassign_md.py              ★ official MD SIDs: distance reassignment, no extra token
+│   ├── cross_index/md_diagnostics.py           diagnostics 1-7 (recon, util, collision, CMI+null, AMI, separation, additivity)
 │   ├── data/kmeans_dataset.py                  data/kmeans.py parameterised (K=512 pseudo-labels)
 │   ├── data_process/fuse_features.py           baseline E input: concat(L2-normed | raw) text + image features
 │   └── data_process/fetch_item_images.py, clip_feature_ext.py   main image download; CLIP tolerant to missing images
@@ -99,7 +112,11 @@ mmgen/
     ├── baselines/pack_eval.sbatch    sequential eval; ONE run per job (<2 h)
     └── tools/                     sid_stats.py, summarize_run.py, check_features.py,
                                    collect_baselines.py (all runs -> baselines/baselines_all.json),
-                                   ami_first_level.py (E vs A/B first-level AMI)
+                                   ami_first_level.py (E vs A/B first-level AMI),
+                                   rank_metrics.py (independent metric/merge check),
+                                   freeze_md_sids.py (versioned SID sets; --lock makes them read-only)
+    ├── md/tok_attempt.sbatch      MD-RQ-VAE tokenizer attempt: train -> SIDs -> diagnostics
+    ├── md/reassign.sbatch         reassignment + diagnostics on the new index
 ```
 
 Where to look for what:
@@ -130,6 +147,8 @@ Where to look for what:
 | baseline data (processed + features + SID index files) | `/scratch/yw8866/mmgen_runs/data/<D>/` |
 | raw Amazon-18 meta + downloaded images | `/scratch/yw8866/mmgen_runs/raw/amazon18/{Metadata,Images}` |
 | baseline runs | `/scratch/yw8866/mmgen_runs/baselines/<D>/<baseline>/seed<S>/` (`run_summary.json`) and `.../<D>/tok/` |
+| MD-RQ-VAE tokenizer runs | `/scratch/yw8866/mmgen_runs/md/<D>/tok/<attempt>/` |
+| frozen MD SID sets (official) | `/scratch/yw8866/mmgen_runs/md/sids/v1/<D>/1+X+X/` (see `docs/MDRQVAE.md` §0) |
 | MQL4GRec reference clone (ships Instruments LLaMA/CLIP features + index files) | `/scratch/yw8866/tmp/ref/MQL4GRec` (@5ad9c27) |
 | old GRID repo (source of `legacy/`) | `/scratch/yw8866/GRID` (contains an un-rotated W&B key) |
 | old Tmall data, embeddings, dumps | `/scratch/yw8866/rec-tmall/` |
@@ -351,7 +370,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `f5144fc` | AGENTS.md, CLAUDE.md |
 | `747c6c0`…`6202cc8` | baseline entry points, PlainT5 fix, packed train / sequential eval jobs |
 | `84fc4d2`…`24ef25a` | Instruments results; tokenizer ONLY filter; CPU k-means job; one run per eval job |
-| (next) | `docs/BASELINE_REPORT.md`, `collect_baselines.py`, final results |
+| `bd4bb27`…`3e026d1` | MD-RQ-VAE model, attempts a01–a06, diagnostics, distance reassignment |
+| (next) | `freeze_md_sids.py`, official SID docs, v1 sets |
 
 ---
 
