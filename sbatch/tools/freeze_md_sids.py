@@ -1,7 +1,7 @@
 """Freeze one MD-RQ-VAE SID set into a versioned directory (never overwritten once locked).
 
   /scratch/yw8866/mmgen_runs/md/sids/<version>/<D>/<cfg>/
-      tokenizer.pth          copy of the tokenizer checkpoint (best.pth)
+      tokenizer.pth          copy of the tokenizer checkpoint (final.pth: last epoch, no selection)
       run_config.json        resolved tokenizer config
       index.json             item -> SID (the reassigned, token-free index)
       index.sha256           SHA-256 of index.json
@@ -10,9 +10,12 @@
       diagnostics.md         one-row diagnostics table
       STATUS                 "v1 (not locked)" until --lock; locking makes every file read-only
 Usage: python3 freeze_md_sids.py --dataset Instruments --cfg 122 [--version v1] [--lock]
+       --supersede "<reason>": an existing UNLOCKED set is first moved to
+       sids/superseded/<version>_<UTC date>/<D>/<cfg>/ (kept, STATUS says why), then rewritten.
 Refuses to touch a locked directory; a change needs a new --version and a --note.
 """
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -20,7 +23,9 @@ import shutil
 import stat
 
 RUNS = "/scratch/yw8866/mmgen_runs"
-CFG = {"122": ("a05_122", "md122_a05_reassign"), "133": ("a06_133", "md133_a06_reassign")}
+# official from 2026-10-27: final-epoch checkpoint (superseded: best.pth + md1X2_a0X_reassign)
+CFG = {"122": ("a05_122", "md122_a05_ep500_reassign"), "133": ("a06_133", "md133_a06_ep500_reassign")}
+CKPT = "final.pth"
 
 
 def main():
@@ -30,6 +35,7 @@ def main():
     p.add_argument("--version", default="v1")
     p.add_argument("--lock", action="store_true")
     p.add_argument("--note", default="")
+    p.add_argument("--supersede", default="", help="reason; move an existing unlocked set aside first")
     a = p.parse_args()
     name, tag = CFG[a.cfg]
     D = a.dataset
@@ -39,8 +45,20 @@ def main():
     if os.path.exists(status) and "locked" in open(status).read() and "not locked" not in open(status).read():
         raise SystemExit(f"{dst} is locked; create a new version instead")
     if not a.lock:
+        if os.path.exists(dst):
+            if not a.supersede:
+                raise SystemExit(f"{dst} exists; pass --supersede '<reason>' to replace it (the old set is kept)")
+            stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
+            old = f"{RUNS}/md/sids/superseded/{a.version}_{stamp}/{D}/1+{a.cfg[1]}+{a.cfg[2]}"
+            if os.path.exists(old):
+                raise SystemExit(f"{old} already exists; move it by hand")
+            os.makedirs(os.path.dirname(old), exist_ok=True)
+            shutil.move(dst, old)
+            prev = open(f"{old}/STATUS").read() if os.path.exists(f"{old}/STATUS") else ""
+            open(f"{old}/STATUS", "w").write(f"SUPERSEDED {stamp}: {a.supersede}\n(was: {prev.strip()})\n")
+            print(f"moved old set to {old}")
         os.makedirs(dst, exist_ok=True)
-        shutil.copy2(f"{src}/best.pth", f"{dst}/tokenizer.pth")
+        shutil.copy2(f"{src}/{CKPT}", f"{dst}/tokenizer.pth")
         shutil.copy2(f"{src}/run_config.json", f"{dst}/run_config.json")
         shutil.copy2(f"{RUNS}/data/{D}/{D}.index_{tag}.json", f"{dst}/index.json")
         shutil.copy2(f"{src}/reassign_{tag}.json", f"{dst}/reassign.json")
@@ -60,7 +78,7 @@ def main():
                f"{s['text']['normalized_ratio']:.3f} / {s['image']['normalized_ratio']:.3f} | "
                f"{d['additivity']['text']['frac_sum_beats_both']:.3f} / {d['additivity']['image']['frac_sum_beats_both']:.3f} |\n")
         open(f"{dst}/diagnostics.md", "w").write(row)
-        open(status, "w").write(f"{a.version} (not locked)\n{a.note}\n")
+        open(status, "w").write(f"{a.version} (not locked)\ncheckpoint: {CKPT}, index tag: {tag}\n{a.note}\n")
         print(f"{dst}  sha256 {h}")
     else:
         open(status, "w").write(f"{a.version} locked\n{a.note}\n")
