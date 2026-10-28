@@ -2,8 +2,10 @@
 whose image file is shared with any other item (identical bytes, SHA-256; this includes the Games
 banner image). Same estimator and permutation null as md_diagnostics.cmi_test (100 reps, seed 0).
 Observation only: the tokenizer is not changed based on this.
-Usage: python3 cmi_shared_image.py [--datasets Instruments Arts Games]
-       -> /scratch/yw8866/mmgen_runs/md/cmi_shared_image.json
+Usage: python3 cmi_shared_image.py [--datasets Instruments Arts Games] [--variant ep500]
+       -> /scratch/yw8866/mmgen_runs/md/cmi_shared_image[_<variant>].json
+--variant ep500 = the final-epoch sets (official from 2026-10-27; acceptance: excluded-items
+corrected CMI <= ~2% of H(t1|f)); no variant = the superseded best-collision sets.
 """
 import argparse
 import collections
@@ -45,12 +47,14 @@ def shared_image_items(D):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--datasets", nargs="+", default=["Instruments", "Arts", "Games"])
+    p.add_argument("--variant", default="", help="ep500 -> md1X2_a0X_ep500_reassign")
     a = p.parse_args()
+    sets = {cfg: (n, t.replace("_reassign", f"_{a.variant}_reassign") if a.variant else t, L) for cfg, (n, t, L) in SETS.items()}
     out = {}
     for D in a.datasets:
         shared, st = shared_image_items(D)
         out[D] = {"image_sharing": st}
-        for cfg, (name, tag, L) in SETS.items():
+        for cfg, (name, tag, L) in sets.items():
             codes = np.load(f"{RUNS}/md/{D}/tok/{name}/codes_{tag}.npy")
             keep = np.setdiff1d(np.arange(len(codes)), shared)
             res = {}
@@ -62,7 +66,7 @@ def main():
             out[D][cfg] = res
             print(D, cfg, {k: (v["items"], round(v["cmi_corrected_bits"], 4), round(v["frac_corrected"] * 100, 2))
                            for k, v in res.items()}, st, flush=True)
-    json.dump(out, open(f"{RUNS}/md/cmi_shared_image.json", "w"), indent=1)
+    json.dump(out, open(f"{RUNS}/md/cmi_shared_image{'_' + a.variant if a.variant else ''}.json", "w"), indent=1)
 
 
 if __name__ == "__main__":
