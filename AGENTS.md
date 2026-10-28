@@ -35,7 +35,7 @@ are reference-only, not part of the main line.
 - **Baseline decisions (2026-10-26, report §0):** our reproduced numbers are the reference
   (published ones listed alongside); `macrecpaper` is the official MACRec; TIGER is accepted as our
   reading of the paper; data and features are frozen (Games banner images kept).
-- **In progress:** TIGER A/B on Arts/Games and Instruments seeds 43/44; new early-fusion TIGER (E).
+- **Done:** TIGER A/B on Arts/Games (seeds 42–44) and Instruments seeds 43/44 (evaluated; report update pending).
 - **MD-RQ-VAE built (2026-10-27)**: `macrec/cross_index/models/mdrqvae.py`; final configs a05
   (1+2+2) and a06 (1+3+3), attempt log `docs/MDRQVAE_LOG.md`.
 - **Official MD-RQ-VAE SID (2026-10-27):** the distance-reassigned index with no trailing token
