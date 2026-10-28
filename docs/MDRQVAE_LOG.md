@@ -203,9 +203,30 @@ TIGER settings (plain T5, BS 256, LR 5e-4, seqrec, 200 epochs, patience 10), sin
 | A TIGER-text, seed 42 (3-seed mean) | 4 | 107 | — | 0.0655 / 0.0929 / 0.1131 (0.1154) / 0.0794 / 0.0859 (0.0876) | 5 | 21.8 |
 | B TIGER-image, seed 42 (3-seed mean) | 4 | 113 | — | 0.0689 / 0.0915 / 0.1120 (0.1139) / 0.0801 / 0.0867 (0.0883) | 5 | 22.3 |
 | E-raw, seed 42 | 4 | — | — | 0.0676 / 0.0928 / 0.1132 / 0.0805 / 0.0870 | 5 | 20.7 |
-| C MQL4GRec, seed 42, merged | 4 per list | — | — | — / — / 0.1301 / — / 0.0998 | 5 × 2 lists | 21.6 per list |
-| D MACRec, seed 42, merged | 4 per list | — | — | — / — / 0.1321 / — / 0.1021 | 5 × 2 lists | 21.6 per list |
+| **E-norm (fnormj, final-epoch rule = same index), seed 42** | 4 | 103 / 113 | 0.1352 / 0.1035 | 0.0651 / 0.0877 / 0.1055 / 0.0765 / 0.0822 | 5 | 21.5 |
+| control: MD 1+2+2, best-collision ckpt (ep 440), reassigned | 5 | 189 / 199 | 0.1457 / 0.1120 | 0.0708 / 0.0951 / 0.1148 / 0.0832 / 0.0895 | 6 | 28.0 |
+| control: MD 1+3+3, best-collision ckpt (= ep 500, same index) | 7 | 197 / 200 | 0.1435 / 0.1105 | identical to the official 1+3+3 run | 8 | 32.4 |
+| C MQL4GRec, one list (text / image), 3-seed mean | 4 | — | — | HR@10 0.1275 / 0.1287, NDCG@10 0.0984 / 0.0988 | 5 | 21.6 |
+| D MACRec, one list (text / image), 3-seed mean | 4 | — | — | HR@10 0.1302 / 0.1285, NDCG@10 0.0997 / 0.0992 | 5 | 21.6 |
+| C / D merged (two beam searches + union), seed 42 | 4 per list | — | — | HR@10 0.1301 / 0.1321, NDCG@10 0.0998 / 0.1021 | 5 × 2 | 2 × 21.6 |
+
+Fair comparison: MD, A, B and E all train T5 on seqrec only and decode one list; C/D train on extra
+cross-modal tasks, and their published protocol decodes two lists (text, image) and merges them.
+C/D's lead does not come from the merge (+0.001–0.004 HR@10 over their best single list): their
+single lists, at 5 passes, are already above MD. C/D are full-system references, not controls.
 
 1+2+2 is the better config (all five test metrics, and cheaper). The 1+3+3 run's best checkpoint is
 at epoch 197 of the 200-epoch cap, so it may be under-trained under the shared TIGER budget.
-E-norm (the key comparison) and the token / checkpoint controls are being evaluated.
+
+- **MD vs E (key comparison):** MD 1+2+2 beats E-norm on every test metric: HR@10 0.1181 vs 0.1055
+  (+12%), NDCG@10 0.0932 vs 0.0822 (+13%), HR@1 +15%. E-norm is also below E-raw (0.1132) and A/B.
+- **Checkpoint effect (1+2+2):** final epoch 0.1181 / 0.0932 vs best-collision 0.1148 / 0.0895 test
+  (valid 0.1476 vs 0.1457 HR@10); +0.0033 HR@10, ~1.5× A's seed std (0.0022). Same SID length, same
+  decoder passes. 1+3+3 has no checkpoint contrast (both rules pick epoch 500); its two T5 runs are
+  bit-identical, so T5 training is deterministic at seed 42.
+- **E-raw extension:** E-raw − E-norm on Instruments = +0.0077 HR@10, more than the seed spread, so
+  E-raw is extended to Arts and Games (tokenizer 21251957, T5 21251971).
+- Token effect (old index with `<x_k>`): eval 21220669 running.
+
+E-norm on Arts / Games (seed 42, test HR@10 / NDCG@10): 0.0825 / 0.0520 and 0.0843 / 0.0454
+(A 3-seed 0.0986 / 0.0661 and 0.0885 / 0.0471; B 0.0957 / 0.0657 and 0.0782 / 0.0415).
