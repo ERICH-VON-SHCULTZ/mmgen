@@ -23,9 +23,10 @@ Reassignment rule (`macrec/cross_index/reassign_md.py`; the tokenizers are not r
 
 Frozen sets: `/scratch/yw8866/mmgen_runs/md/sids/<version>/<D>/<cfg>/` with `tokenizer.pth`,
 `run_config.json`, `index.json`, `index.sha256`, `reassign.json`, `diagnostics.{json,md}`, `STATUS`
-(`sbatch/tools/freeze_md_sids.py`). **v1, not locked**: lock (read-only) only after the Instruments
-chain-decoder control is done and the user has confirmed. After locking, any change becomes v2
-with a note; v1 is never overwritten.
+(`sbatch/tools/freeze_md_sids.py`). **v1 LOCKED 2026-10-28** (user confirmation after the
+Instruments chain-decoder control): every file read-only. Any change becomes v2 with a note; v1 is
+never overwritten. Jobs read `mmgen_runs/data/<D>/<D>.index_md1X2_a0X_ep500_reassign.json`; check it
+against `index.sha256` before a run.
 
 Checkpoint rule (decision 2026-10-27): the tokenizer at the **final epoch (500), no selection**
 (`final.pth`). Reconstruction rises roughly monotonically in all six runs and is still rising at

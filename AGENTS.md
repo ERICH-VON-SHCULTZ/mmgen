@@ -43,15 +43,14 @@ are reference-only, not part of the main line.
   7 tokens). Tokenizer checkpoint = final epoch (500), no selection (`final.pth`). The
   `*_a0X_reassign.json` files (no `ep500`) are the superseded best-collision sets, kept as controls.
   Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0; all six are
-  final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is not locked**:
-  the Instruments control is done; locking waits for the user's confirmation. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
+  final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is LOCKED (2026-10-28)**:
+  never overwrite; changes become v2. Check the data-dir index against `index.sha256` before runs. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
 - **Instruments Step 3 done (2026-10-28), report `docs/MDRQVAE_REPORT.md`:** chain decoder on the
   official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
   passes), 1+3+3 0.1161 / 0.0916; E-norm 0.1055 / 0.0822; E-raw 0.1132 / 0.0870. Token vs
   reassignment: within seed noise, one decoder pass fewer.
-- **Next:** v1 lock (waits for user confirmation), then the 1+2+2 chain decoder on Arts and Games.
-  In flight: E-raw on Arts/Games (tokenizer 21251957 → T5 21251971), triggered by the agreed rule
+- **In flight:** 1+2+2 chain decoder on Arts and Games (seed 42, train 21258335); E-raw on Arts/Games (tokenizer 21251957 → T5 21251971), triggered by the agreed rule
   (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
