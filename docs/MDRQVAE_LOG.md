@@ -152,3 +152,25 @@ cos(D_i(q_f), x_i); separation ratio of the shared code (>1 moves text more, rel
 By AMI the shared code leans to text on Instruments and Arts and to image on Games. By
 reconstruction, q_f alone reconstructs text better than image everywhere, with the smallest margin
 on Games. The measures agree that Games is the most image-leaning dataset.
+
+**Final-epoch checkpoint (decision 2026-10-27).** All six tokenizers re-indexed from `final.pth`
+(epoch 500), reassigned (tags `md1X2_a0X_ep500_reassign`), diagnostics rerun. Before → after
+(best-collision → final epoch); excl. CMI = corrected CMI without items with byte-identical images.
+
+| set | ckpt epoch | rec cos text / image | corrected CMI all | excl. CMI | AMI f~A0 / f~B0 | sep. shared / text / image | additivity t / i | balance | items changed |
+|---|---|---|---|---|---|---|---|---|---|
+| Instruments 1+2+2 | 440 → 500 | 0.9565 / 0.9081 → 0.9600 / 0.9150 | 1.14% → 1.05% | 0.73% → 0.68% | 0.320 / 0.292 → 0.321 / 0.296 | 0.769 / 1.271 / 0.360 → 0.749 / 1.279 / 0.354 | 0.975 / 0.990 → 0.980 / 0.990 | +0.078 → +0.082 | 19 → 24 |
+| Instruments 1+3+3 | 500 → 500 | unchanged 0.9659 / 0.9265 | 0.93% | 0.51% | 0.299 / 0.269 | 0.765 / 1.330 / 0.370 | 0.995 / 0.996 | +0.080 | 16 |
+| Arts 1+2+2 | 500 → 500 | unchanged 0.9677 / 0.9136 | 1.42% | 0.72% | 0.354 / 0.304 | 0.784 / 1.599 / 0.266 | 0.991 / 0.995 | +0.115 | 54 |
+| Arts 1+3+3 | 400 → 500 | 0.9644 / 0.9074 → 0.9676 / 0.9160 | 1.40% → 1.27% | 0.61% → 0.55% | 0.307 / 0.256 → 0.319 / 0.268 | 0.807 / 1.419 / 0.321 → 0.825 / 1.362 / 0.307 | 0.994 / 0.996 → 0.994 / 0.997 | +0.121 → +0.122 | 41 → 44 |
+| Games 1+2+2 | 200 → 500 | 0.9366 / 0.8841 → 0.9560 / 0.9176 | **1.86% → 3.10%** | **0.79% → 1.82%** | 0.322 / 0.341 → 0.373 / 0.373 | 1.012 / 2.209 / 0.442 → 1.046 / 2.011 / 0.367 | 0.970 / 0.970 → 0.984 / 0.987 | +0.055 → +0.078 | 120 → 141 |
+| Games 1+3+3 | 450 → 500 | 0.9584 / 0.9182 → 0.9601 / 0.9223 | **3.09% → 3.61%** | **1.64% → 2.02%** | 0.315 / 0.356 → 0.316 / 0.358 | 0.864 / 2.602 / 0.439 → 0.839 / 2.436 / 0.425 | 0.982 / 0.976 → 0.985 / 0.975 | +0.061 → +0.072 | 69 → 80 |
+
+Utilisation stays 253–256 per level everywhere; full-SID collision before reassignment rises
+slightly with the final epoch on Instruments 1+2+2 (0.30 → 0.38%), Arts 1+3+3 (0.44 → 0.47%), Games
+(0.87 → 1.02%, 0.50 → 0.58%), and is 0 after reassignment everywhere. All reassignment changes stay
+on the last level. Instruments and Arts improve or stay equal on every diagnostic. Games 1+2+2
+gains a lot in reconstruction (now above A / B) but its CMI more than doubles (excl. 0.79 → 1.82%,
+under the bar); Games 1+3+3 rises to 2.02% excl., above the ~2% bar, so its v1 was **not**
+replaced (still the epoch-450 best-collision set). In both Games sets the text-chain separation drops
+(2.21 → 2.01, 2.60 → 2.44): the later epochs trade some modality specificity for reconstruction.

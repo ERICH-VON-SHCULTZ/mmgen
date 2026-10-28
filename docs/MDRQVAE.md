@@ -27,12 +27,22 @@ Frozen sets: `/scratch/yw8866/mmgen_runs/md/sids/<version>/<D>/<cfg>/` with `tok
 chain-decoder control is done and the user has confirmed. After locking, any change becomes v2
 with a note; v1 is never overwritten.
 
-- v1 Instruments 1+2+2: `mmgen_runs/md/sids/v1/Instruments/1+2+2/index.json` sha256 `aa514208413066302c1886d6d58df1a72d350635c55bc9fde2044a04d8e591bd`
-- v1 Instruments 1+3+3: `mmgen_runs/md/sids/v1/Instruments/1+3+3/index.json` sha256 `1fe4df38cd83c69ec0bb18c94293c441b9bb57e61a43c8bc1270f35b8955c3af`
-- v1 Arts 1+2+2: `mmgen_runs/md/sids/v1/Arts/1+2+2/index.json` sha256 `cbc70c4ed3da57fe3172bc280a2feccee5ab92bec1689691c9cb3eb88a7e0960`
-- v1 Arts 1+3+3: `mmgen_runs/md/sids/v1/Arts/1+3+3/index.json` sha256 `73d5b133c7e953027516d86aae10d736d0331d01980f04aa868f3bea0ef867b1`
-- v1 Games 1+2+2: `mmgen_runs/md/sids/v1/Games/1+2+2/index.json` sha256 `f5a30990b47107fd4c6226a460d0dfb36fc1e8e71026ec65feff2bf9050a623a`
-- v1 Games 1+3+3: `mmgen_runs/md/sids/v1/Games/1+3+3/index.json` sha256 `1c1f4220540df25c03c206283760fa18656ec73b5109784c0c7a17c70187b712`
+Checkpoint rule (decision 2026-10-27): the tokenizer at the **final epoch (500), no selection**
+(`final.pth`). Reconstruction rises roughly monotonically in all six runs and is still rising at
+epoch 500. The earlier rule (lowest full-SID collision, `best.pth`) is MQL4GRec's; A, B, E, C and D
+keep it, except the final-epoch E-norm control (`tiger_fnormj_ep500`). Acceptance for a final-epoch
+set: corrected first-level CMI after excluding items with byte-identical images ≤ ~2% of H(t₁|f).
+
+- v1 Instruments 1+2+2: `mmgen_runs/md/sids/v1/Instruments/1+2+2/index.json` sha256 `512221a10e72602185bb0bae1127daef72f6f4f54e67ca0b1a704de331166564` (final epoch)
+- v1 Instruments 1+3+3: `mmgen_runs/md/sids/v1/Instruments/1+3+3/index.json` sha256 `1fe4df38cd83c69ec0bb18c94293c441b9bb57e61a43c8bc1270f35b8955c3af` (final epoch; same as best-collision)
+- v1 Arts 1+2+2: `mmgen_runs/md/sids/v1/Arts/1+2+2/index.json` sha256 `cbc70c4ed3da57fe3172bc280a2feccee5ab92bec1689691c9cb3eb88a7e0960` (final epoch; same as best-collision)
+- v1 Arts 1+3+3: `mmgen_runs/md/sids/v1/Arts/1+3+3/index.json` sha256 `8612e3cbfd92fa1929df7134aa0898c842c2515b98a3889aa93ccb81f6a14961` (final epoch)
+- v1 Games 1+2+2: `mmgen_runs/md/sids/v1/Games/1+2+2/index.json` sha256 `48851182c58e4cfd89106efa7bfbdbd080c9b36a7761ff8c062622ea44c5e144` (final epoch)
+- v1 Games 1+3+3: `mmgen_runs/md/sids/v1/Games/1+3+3/index.json` sha256 `1c1f4220540df25c03c206283760fa18656ec73b5109784c0c7a17c70187b712` (**still best-collision, epoch 450**: the final-epoch candidate fails the CMI bar, 2.02%; pending decision)
+
+Superseded (kept): `mmgen_runs/md/sids/superseded/v1_20261028/<D>/<cfg>/`, the best-collision sets
+of Instruments 1+2+2 (sha256 `aa514208…`), Instruments 1+3+3, Arts 1+2+2, Arts 1+3+3
+(`73d5b133…`), Games 1+2+2 (`f5a30990…`).
 
 Everything below §0 describes the old Tmall implementation in `legacy/grid/`.
 

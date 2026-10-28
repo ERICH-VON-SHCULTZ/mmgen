@@ -40,12 +40,16 @@ are reference-only, not part of the main line.
   (1+2+2) and a06 (1+3+3), attempt log `docs/MDRQVAE_LOG.md`.
 - **Official MD-RQ-VAE SID (2026-10-27):** the distance-reassigned index with no trailing token
   (`<D>.index_md122_a05_reassign.json`, 5 tokens; `<D>.index_md133_a06_reassign.json`, 7 tokens).
-  Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0. **v1 is not locked**
+  Tokenizer checkpoint = final epoch (500), no selection (`final.pth`; tags `*_ep500_reassign`).
+  Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §0. Games 1+3+3 v1 is
+  still the best-collision set (final epoch fails the ~2% CMI bar); pending decision. **v1 is not locked**
   until the Instruments chain-decoder control (old-token vs reassigned) is done and the user
   confirms. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
-- **In progress:** chain decoder on the old (job 21103991) and reassigned (job 21154242) index,
-  Instruments seed 42; E-norm-j (rescaled) TIGER on all three datasets (21103991).
+- **In progress (Instruments, seed 42):** chain decoder on the official final-epoch reassigned
+  index (21164568); E-norm final-epoch tokenizer (21165054) + T5, packed with the chain decoder on
+  the best-collision reassigned index (21165055); old-token chain decoder + E-norm-j TIGER on all
+  three datasets (21103991).
 - **MFD is NOT yet ported into MACRec.** The plan and the open decisions are in `docs/PORTING.md`.
 
 ---
