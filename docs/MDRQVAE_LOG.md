@@ -174,3 +174,12 @@ gains a lot in reconstruction (now above A / B) but its CMI more than doubles (e
 under the bar); Games 1+3+3 rises to 2.02% excl., above the ~2% bar, so its v1 was **not**
 replaced (still the epoch-450 best-collision set). In both Games sets the text-chain separation drops
 (2.21 → 2.01, 2.60 → 2.44): the later epochs trade some modality specificity for reconstruction.
+
+**E-norm under the final-epoch rule (Instruments; job 21165054).** The E-norm (fnormj) tokenizer
+was retrained with the unchanged MQL4GRec command through `main_single_final.py` (seed 2023 as in
+main_single.py). The rerun's best-collision index is byte-identical to the original
+`Instruments.index_fnormj_tiger.json` (training is reproducible), and the final-epoch index
+`Instruments.index_fnormj_ep500_tiger.json` is also byte-identical to it: E-norm's lowest collision
+(5.328%) is reached at the last evaluation (epoch 499), so for E on Instruments both rules give the
+same SIDs. The T5 run `tiger_fnormj_ep500` (21165055) therefore uses the same index and seed as
+`tiger_fnormj` (21103991) and doubles as a T5 reproducibility check.
