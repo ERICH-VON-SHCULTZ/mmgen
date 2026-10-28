@@ -1,6 +1,6 @@
 # Baseline reproduction report: TIGER, MQL4GRec, MACRec on Amazon 2018
 
-Date: 2026-10-26. Repo commit of the last eval jobs: `24ef25a`.
+Date: 2026-10-26; TIGER A/B 3-seed results on all datasets added 2026-10-28.
 All numbers below are read from `/scratch/yw8866/mmgen_runs/baselines/baselines_all.json`
 (written by `sbatch/tools/collect_baselines.py`). Each run directory also holds `run_summary.json`.
 
@@ -35,8 +35,8 @@ No cross-domain pre-training was used. No hyperparameter was tuned after seeing 
 
 | baseline | Instruments | Arts | Games |
 |---|---|---|---|
-| A TIGER-text | **miss**, 1 seed (−7.4% / −9.6%) | not run (Instruments miss) | not run (Instruments miss) |
-| B TIGER-image | 1 seed, no published target | not run | not run |
+| A TIGER-text | **miss**, 3 seeds (−5.5% / −7.8%) | **miss**, 3 seeds (−15.5% / −18.0%) | **match**, 3 seeds (+3.3% / +4.1%) |
+| B TIGER-image | 3 seeds, no published target | 3 seeds, no published target | 3 seeds, no published target |
 | C MQL4GRec (no pre-training) | **match**, 3 seeds | **match**, 3 seeds | **match**, 3 seeds |
 | D MACRec, spec / paper setting (`macrecpaper`) | **match**, 3 seeds | **miss**, 3 seeds (−5.6% / −6.3%) | **miss**, 3 seeds (−5.4% / −4.5%) |
 | D MACRec, repo as shipped (`macrec`) | **miss**, 1 seed (−10.4% / −9.3%) | not run | not run |
@@ -56,8 +56,8 @@ C and D: merged list. A and B: their single list. Gap = mean / target − 1.
 
 | baseline | n | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | target HR@10 / NDCG@10 | gap |
 |---|---|---|---|---|---|---|---|---|
-| A TIGER-text | 1 | 0.0655 | 0.0929 | 0.1131 | 0.0794 | 0.0859 | 0.1221 / 0.0950 | −7.4% / −9.6% |
-| B TIGER-image | 1 | 0.0689 | 0.0915 | 0.1120 | 0.0801 | 0.0867 | — | — |
+| A TIGER-text | 3 | 0.0669 ± 0.0013 | 0.0940 ± 0.0011 | 0.1154 ± 0.0022 | 0.0807 ± 0.0012 | 0.0876 ± 0.0015 | 0.1221 / 0.0950 | −5.5% / −7.8% |
+| B TIGER-image | 3 | 0.0696 ± 0.0006 | 0.0937 ± 0.0020 | 0.1139 ± 0.0019 | 0.0818 ± 0.0015 | 0.0883 ± 0.0014 | — | — |
 | C MQL4GRec | 3 | 0.0787 ± 0.0006 | 0.1069 ± 0.0005 | 0.1310 ± 0.0012 | 0.0929 ± 0.0007 | 0.1006 ± 0.0008 | 0.1291 / 0.0997 | +1.4% / +0.9% |
 | D MACRec (spec) | 3 | 0.0785 ± 0.0012 | 0.1082 ± 0.0009 | 0.1310 ± 0.0009 | 0.0938 ± 0.0008 | 0.1011 ± 0.0009 | 0.1363 / 0.1046 | −3.9% / −3.4% |
 | D MACRec (repo) | 1 | 0.0747 | 0.1020 | 0.1221 | 0.0885 | 0.0949 | 0.1363 / 0.1046 | −10.4% / −9.3% |
@@ -66,6 +66,8 @@ Extra TIGER references (MQL4GRec Table 2, Instruments): without user token 0.121
 (A: −7.0% / −10.3%); with reassignment 0.1277 / 0.0987 (A: −11.4% / −13.0%).
 
 Per seed (HR@10 / NDCG@10):
+- A: 0.1131 / 0.0859, 0.1157 / 0.0884, 0.1173 / 0.0885 (best epochs 107, 128, 172).
+- B: 0.1120 / 0.0867, 0.1141 / 0.0890, 0.1156 / 0.0893.
 - C: 0.1301 / 0.0998, 0.1324 / 0.1013, 0.1304 / 0.1008.
 - D (spec): 0.1321 / 0.1021, 0.1304 / 0.1005, 0.1306 / 0.1007.
 
@@ -73,17 +75,25 @@ Per seed (HR@10 / NDCG@10):
 
 | baseline | n | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | target | gap |
 |---|---|---|---|---|---|---|---|---|
+| A TIGER-text | 3 | 0.0407 ± 0.0040 | 0.0763 ± 0.0056 | 0.0986 ± 0.0068 | 0.0589 ± 0.0049 | 0.0661 ± 0.0052 | 0.1167 / 0.0806 | −15.5% / −18.0% |
+| B TIGER-image | 3 | 0.0425 ± 0.0026 | 0.0739 ± 0.0017 | 0.0957 ± 0.0015 | 0.0587 ± 0.0020 | 0.0657 ± 0.0019 | — | — |
 | C MQL4GRec | 3 | 0.0624 ± 0.0011 | 0.0996 ± 0.0011 | 0.1262 ± 0.0012 | 0.0813 ± 0.0011 | 0.0898 ± 0.0011 | 0.1254 / 0.0898 | +0.6% / +0.0% |
 | D MACRec (spec) | 3 | 0.0621 ± 0.0015 | 0.0987 ± 0.0026 | 0.1255 ± 0.0027 | 0.0807 ± 0.0020 | 0.0893 ± 0.0021 | 0.1329 / 0.0953 | −5.6% / −6.3% |
 
-Per seed HR@10: C 0.1267, 0.1270, 0.1248; D 0.1277, 0.1224, 0.1264.
+Per seed HR@10: A 0.0931, 0.0964, 0.1061 (the largest seed spread of any baseline); B 0.0949, 0.0949,
+0.0974; C 0.1267, 0.1270, 0.1248; D 0.1277, 0.1224, 0.1264.
 
 ### Games
 
 | baseline | n | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | target | gap |
 |---|---|---|---|---|---|---|---|---|
+| A TIGER-text | 3 | 0.0178 ± 0.0007 | 0.0552 ± 0.0011 | 0.0885 ± 0.0018 | 0.0365 ± 0.0009 | 0.0471 ± 0.0011 | 0.0857 / 0.0453 | +3.3% / +4.1% |
+| B TIGER-image | 3 | 0.0157 ± 0.0010 | 0.0485 ± 0.0022 | 0.0782 ± 0.0030 | 0.0319 ± 0.0015 | 0.0415 ± 0.0018 | — | — |
 | C MQL4GRec | 3 | 0.0205 ± 0.0003 | 0.0627 ± 0.0014 | 0.1007 ± 0.0008 | 0.0415 ± 0.0009 | 0.0537 ± 0.0007 | 0.1007 / 0.0538 | −0.0% / −0.2% |
 | D MACRec (spec) | 3 | 0.0202 ± 0.0007 | 0.0623 ± 0.0007 | 0.1020 ± 0.0019 | 0.0412 ± 0.0006 | 0.0539 ± 0.0010 | 0.1078 / 0.0565 | −5.4% / −4.5% |
+
+Per seed HR@10: A 0.0873, 0.0877, 0.0906; B 0.0767, 0.0817, 0.0763 (image is weakest on Games,
+where 25% of items share an image file with another item, §8).
 
 Validation metrics for every run and list are in `baselines_all.json` (`runs.<D>/<B>/<seed>.valid`).
 Validation is consistently higher than test (e.g. Instruments C merged valid HR@10 0.1594 vs test 0.1310).

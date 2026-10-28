@@ -293,7 +293,8 @@ raw: `mmgen_runs/baselines/baselines_all.json` (`python3 sbatch/tools/collect_ba
 
 | baseline | Instruments | Arts | Games |
 |---|---|---|---|
-| A TIGER-text (1 seed) | 0.1131 / 0.0859 (−7.4% / −9.6%, miss) | — | — |
+| A TIGER-text | 0.1154 / 0.0876 (−5.5% / −7.8%, miss) | 0.0986 / 0.0661 (−15.5% / −18.0%, miss) | 0.0885 / 0.0471 (+3.3% / +4.1%) |
+| B TIGER-image (no target) | 0.1139 / 0.0883 | 0.0957 / 0.0657 | 0.0782 / 0.0415 |
 | C MQL4GRec | 0.1310 / 0.1006 (+1.4% / +0.9%) | 0.1262 / 0.0898 (+0.6% / 0.0%) | 0.1007 / 0.0537 (0.0% / −0.2%) |
 | D MACRec paper setting | 0.1310 / 0.1011 (−3.9% / −3.4%) | 0.1255 / 0.0893 (−5.6% / −6.3%, miss) | 0.1020 / 0.0539 (−5.4% / −4.5%, miss) |
 | D MACRec as shipped (1 seed) | 0.1221 / 0.0949 (−10.4% / −9.3%, miss) | — | — |
