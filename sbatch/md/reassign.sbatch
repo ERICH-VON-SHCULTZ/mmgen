@@ -1,6 +1,7 @@
 #!/bin/bash
 # MD-RQ-VAE: distance-based reassignment (no extra token) + diagnostics on the reassigned SIDs.
-# Submit: sbatch --export=ALL,D=Instruments,NAME=a05_122,TAG=md122_a05_reassign sbatch/md/reassign.sbatch
+# Submit: sbatch --export=ALL,D=Instruments,NAME=a05_122,TAG=md122_a05_ep500_reassign,CKPT=final sbatch/md/reassign.sbatch
+# CKPT=final (official from 2026-10-27: last epoch, no selection) or best (lowest collision; superseded)
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=h200_tandon,a100_tandon,h100_tandon
 #SBATCH --nodes=1
@@ -22,11 +23,12 @@ export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR"
 # frozen copy of the code this job runs (later edits cannot affect it)
 SNAP=$TMPDIR/cross_index; cp -r $REPO/macrec/cross_index $SNAP
 OUT=/scratch/yw8866/mmgen_runs/md/$D/tok/$NAME
-echo "job $SLURM_JOB_ID on $(hostname) D=$D NAME=$NAME TAG=$TAG commit $(cd $REPO && git rev-parse --short HEAD)"
+CKPT=${CKPT:-final}
+echo "job $SLURM_JOB_ID on $(hostname) D=$D NAME=$NAME TAG=$TAG CKPT=$CKPT commit $(cd $REPO && git rev-parse --short HEAD)"
 singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin/bash -c "
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
 cd $SNAP
-python -u reassign_md.py --ckpt $OUT/best.pth --tag $TAG
-python -u md_diagnostics.py --ckpt $OUT/best.pth --codes $OUT/codes_$TAG.npy --out_name diagnostics_$TAG.json
+python -u reassign_md.py --ckpt $OUT/$CKPT.pth --tag $TAG
+python -u md_diagnostics.py --ckpt $OUT/$CKPT.pth --codes $OUT/codes_$TAG.npy --out_name diagnostics_$TAG.json
 "

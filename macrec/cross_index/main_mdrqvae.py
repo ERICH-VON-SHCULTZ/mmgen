@@ -4,8 +4,9 @@ Inputs are the baselines' own feature files (<D>.emb-llama-td.npy, <D>.emb-ViT-L
 item-id order; the tokenizer trains on the whole catalog, as the baseline tokenizers do.
 Writes into --out_dir: run_config.json (before training), train_log.jsonl (every --eval_every
 epochs: losses, codebook utilisation per level, full-SID collision rate, reconstruction cosine),
-best.pth (lowest full-SID collision rate, later epoch wins ties, as main_single.py / A,B select)
-and final.pth.
+best.pth (lowest full-SID collision rate, later epoch wins ties; MQL4GRec's trainer selects the same
+way but the EARLIER epoch wins ties) and final.pth. Official from 2026-10-27: final.pth (last epoch,
+no selection).
 """
 import argparse
 import json
