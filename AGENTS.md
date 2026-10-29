@@ -50,7 +50,8 @@ are reference-only, not part of the main line.
   official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
   passes), 1+3+3 0.1161 / 0.0916; E-norm 0.1055 / 0.0822; E-raw 0.1132 / 0.0870. Token vs
   reassignment: within seed noise, one decoder pass fewer.
-- **In flight:** 1+2+2 chain decoder on Arts and Games (seed 42, train 21258335); E-raw on Arts/Games (tokenizer 21251957 → T5 21251971), triggered by the agreed rule
+- **In flight:** MD chain decoder on Arts and Games, 1+2+2 and 1+3+3 (seed 42; trained, evals 21335753 /
+  21335755 on H200); E-raw on Arts/Games (tokenizer 21335767 → T5 21335768), triggered by the agreed rule
   (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
@@ -279,6 +280,8 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | bash reads a script while it runs: editing `run_baseline.sh` during a job broke job 21047067 (syntax error after its last eval) | `pack_*.sbatch` / `baseline.sbatch` now run a snapshot copied to `$TMPDIR` at job start |
 | k-means (sklearn, CPU) inside a GPU job leaves the GPU idle; Arts+Games took >2 h and the cluster cancelled job 20806460 | run `sbatch/baselines/kmeans.sbatch` on the CPU account first; `tokenizers.sh` skips existing k-means files |
 | `scontrol update` / `hold` / `nice` on our pending jobs fails with "Unspecified error" | job order can only be set at submit time (`--dependency=after:<job>`); otherwise cancel and resubmit |
+| `tokenizers.sbatch` asks for `gpu:a100` only; job 21251957 waited 17 h for an A100 | submit with `--partition=a100_tandon,h100_tandon,h200_tandon --gres=gpu:1` |
+| HF schedules `epochs × floor(batches / grad_accum)` steps, so runs can end at a fractional epoch (Arts 1+3+3: 21,000 steps = epoch 198.1) | normal; the cosine schedule has finished |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
