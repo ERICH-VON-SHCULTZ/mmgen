@@ -1,12 +1,12 @@
 # MD-RQ-VAE on Amazon: report
 
-Date: 2026-10-28. Seed 42 for every new run. All test numbers are full ranking, trie-constrained
+Date: 2026-10-28, Arts/Games chain decoder added 2026-10-30. Seed 42 for every new run. All test numbers are full ranking, trie-constrained
 beam search with 20 beams, and a checkpoint chosen on validation loss. Raw numbers:
 `mmgen_runs/baselines/baselines_all.json` (`sbatch/tools/collect_baselines.py`). Attempt-level
 detail: `docs/MDRQVAE_LOG.md`. Official SID and the current implementation: `docs/MDRQVAE.md` Part A.
 
-Status: Instruments is complete (Parts 2–3 and the Step-3 controls). The chain decoder on Arts and
-Games has not been run yet; it waits for the v1 lock (user confirmation).
+Status: v1 locked (2026-10-28). Chain decoder done on all three datasets for 1+2+2 and 1+3+3 (§5,
+§5.1). Pending: E-raw on Arts/Games (tokenizer done, T5 job 21335768 queued).
 
 ---
 
@@ -126,17 +126,67 @@ Cost is measured on an H200 with no other job on the GPU.
 - **C and D are full-system references, not controls.** Their extra training tasks and their
   tokenizers keep even their single lists above MD. The merge itself adds only +0.001 to +0.004 HR@10.
 
+### 5.1 Arts and Games (seed 42, TEST; train 21258335 / 21260038, eval 21382066–21382069 on H200)
+
+Same decoder settings as Instruments. A and B are 3-seed means ± std; C/D are the better single
+list by 3-seed mean (C = image list, D = text list on both datasets); E-raw is pending.
+
+**Arts**
+
+| method | SID length | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | passes | ms / user |
+|---|---|---|---|---|---|---|---|---|
+| **MD 1+2+2 (official)** | 5 | 0.0488 | 0.0833 | **0.1059** | 0.0665 | **0.0739** | 6 | 24.9 |
+| MD 1+3+3 (official) | 7 | 0.0489 | 0.0814 | 0.1027 | 0.0657 | 0.0726 | 8 | 31.5 |
+| A TIGER-text, seed 42 | 4 | 0.0382 | 0.0719 | 0.0931 | 0.0554 | 0.0622 | 5 | 21.1 |
+| A TIGER-text, 3 seeds | 4 | — | — | 0.0986 ± 0.0068 | — | 0.0661 ± 0.0052 | 5 | — |
+| B TIGER-image, 3 seeds | 4 | — | — | 0.0957 ± 0.0015 | — | 0.0657 ± 0.0019 | 5 | — |
+| E-norm | 4 | 0.0275 | 0.0628 | 0.0825 | 0.0457 | 0.0520 | 5 | 21.4 |
+| E-raw | 4 | pending | | | | | 5 | |
+| C MQL4GRec, best single list | 4 | — | — | 0.1217 | — | 0.0871 | 5 | — |
+| D MACRec, best single list | 4 | — | — | 0.1218 | — | 0.0861 | 5 | — |
+
+**Games**
+
+| method | SID length | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | passes | ms / user |
+|---|---|---|---|---|---|---|---|---|
+| MD 1+2+2 (official) | 5 | 0.0169 | 0.0548 | 0.0885 | 0.0360 | 0.0468 | 6 | 24.5 |
+| **MD 1+3+3 (official)** | 7 | 0.0174 | 0.0562 | **0.0899** | 0.0367 | **0.0475** | 8 | 32.3 |
+| A TIGER-text, seed 42 | 4 | 0.0173 | 0.0546 | 0.0873 | 0.0359 | 0.0464 | 5 | 21.1 |
+| A TIGER-text, 3 seeds | 4 | — | — | 0.0885 ± 0.0018 | — | 0.0471 ± 0.0011 | 5 | — |
+| B TIGER-image, 3 seeds | 4 | — | — | 0.0782 ± 0.0030 | — | 0.0415 ± 0.0018 | 5 | — |
+| E-norm | 4 | 0.0180 | 0.0530 | 0.0843 | 0.0354 | 0.0454 | 5 | 21.7 |
+| E-raw | 4 | pending | | | | | 5 | |
+| C MQL4GRec, best single list | 4 | — | — | 0.0970 | — | 0.0514 | 5 | — |
+| D MACRec, best single list | 4 | — | — | 0.0976 | — | 0.0513 | 5 | — |
+
+Best T5 epochs: Arts 1+2+2 176 of 186, 1+3+3 198 of 198.1 (cap; 21,000 steps); Games 1+2+2 129 of
+139, 1+3+3 173 of 183.
+
+- **MD vs E-norm:** MD wins on both datasets. Arts 1+2+2 HR@10 +28% (0.1059 vs 0.0825), NDCG@10 +42%.
+  Games: 1+2+2 +5% / +3%, 1+3+3 +7% / +5%. On Games E-norm's HR@1 (0.0180) is above both MD configs.
+- **MD vs A/B:** Arts: MD 1+2+2 is above A's 3-seed mean by +0.0073 HR@10 (≈1.1 std) and +0.0078
+  NDCG@10 (≈1.5 std), and above B by more. Against A at the same seed (42) the gap is +0.0128 /
+  +0.0117. Games: MD ties A (1+2+2 equals A's mean on HR@10; 1+3+3 is +0.0014 ≈ 0.8 std) and clearly
+  beats B (+0.010 to +0.012 HR@10).
+- **1+2+2 vs 1+3+3:** 1+2+2 is better on Instruments and Arts; 1+3+3 is slightly better on Games
+  (+0.0014 HR@10, within one A std). 1+3+3 again stopped at the epoch cap on Arts.
+- **C and D stay above MD** on both datasets, as on Instruments (Arts −0.016 HR@10, Games −0.007 to
+  −0.009 vs the best MD config).
+- **One seed.** The Arts gap to A is the size of A's own seed spread (0.0931–0.1061); MD 1+2+2's
+  0.1059 sits at A's best seed. 3 seeds are needed before claiming MD > A on Arts.
+
 ---
 
 ## 6. Blockers and open items
 
-- **Not done yet:** v1 lock (needs your confirmation), then the 1+2+2 chain decoder on Arts and
-  Games (seed 42).
+- **E-raw on Arts/Games:** tokenizer done (21335767), T5 job 21335768 queued; then H200 eval and the
+  E-raw rows of §5.1.
+- **Next step: MFD** (`docs/MFD.md`, design not final), on the same v1 sets as the chain decoder.
 - **One seed:** several gaps are near seed noise. Final paper comparisons need seeds 42/43/44, at
   least on Arts, where TIGER-text's HR@10 ranges from 0.0931 to 0.1061 across seeds.
 - **Optional:** a C/D control trained on seqrec only, to separate their tokenizer gain from their
   training-task gain.
-- **Optional:** 1+3+3 with a larger epoch cap.
+- **Optional:** 1+3+3 with a larger epoch cap (best epoch at the cap on Instruments and Arts).
 
 ---
 

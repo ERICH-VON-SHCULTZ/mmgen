@@ -247,3 +247,22 @@ at epoch 197 of the 200-epoch cap, so it may be under-trained under the shared T
 
 E-norm on Arts / Games (seed 42, test HR@10 / NDCG@10): 0.0825 / 0.0520 and 0.0843 / 0.0454
 (A 3-seed 0.0986 / 0.0661 and 0.0885 / 0.0471; B 0.0957 / 0.0657 and 0.0782 / 0.0415).
+
+## Chain decoder on Arts and Games (seed 42; train 21258335 / 21260038, eval 21382066–21382069 on H200)
+
+Official v1 sets, same settings as Instruments. Test HR@1 / HR@10 / NDCG@10, decoder passes, ms/user:
+
+| dataset | config | test HR@1 / HR@10 / NDCG@10 | passes | ms/user | best epoch |
+|---|---|---|---|---|---|
+| Arts | 1+2+2 | 0.0488 / 0.1059 / 0.0739 | 6 | 24.9 | 176 of 186 |
+| Arts | 1+3+3 | 0.0489 / 0.1027 / 0.0726 | 8 | 31.5 | 198 of 198.1 (cap) |
+| Games | 1+2+2 | 0.0169 / 0.0885 / 0.0468 | 6 | 24.5 | 129 of 139 |
+| Games | 1+3+3 | 0.0174 / 0.0899 / 0.0475 | 8 | 32.3 | 173 of 183 |
+
+- MD beats E-norm on both datasets (Arts by a wide margin, +28% HR@10; Games +5–7%).
+- Arts: MD 1+2+2 is above A's 3-seed mean (+0.0073 HR@10, ≈1.1 std). Games: MD ties A, beats B.
+- 1+3+3 wins only on Games, by less than one A std.
+- The eval jobs were first pinned to H200 (21335753/55), waited on the tandon H200 group cap, and were
+  resubmitted on any GPU one run per job; all four still landed on H200, so ms/user is comparable.
+- Side note: the superseded E-norm ×53 (`tiger_fnorm`) on Arts scores 0.0925 / 0.0578, above the
+  official E-norm (`tiger_fnormj`, 0.0825 / 0.0520). Not pursued; the official E rule is unchanged.

@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-29 (Arts/Games MD evals moved off H200-only; cost of those runs not comparable).
+Last updated: 2026-10-30 (MD chain decoder done on Arts/Games; only E-raw Arts/Games pending).
 
 ---
 
@@ -50,9 +50,14 @@ are reference-only, not part of the main line.
   official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
   passes), 1+3+3 0.1161 / 0.0916; E-norm 0.1055 / 0.0822; E-raw 0.1132 / 0.0870. Token vs
   reassignment: within seed noise, one decoder pass fewer.
-- **In flight:** MD chain decoder on Arts and Games, 1+2+2 and 1+3+3 (seed 42; trained, evals 21382066–21382069,
-  one run per job, any GPU: ms/user of these runs is NOT comparable to the H200 cost files); E-raw on Arts/Games (tokenizer 21335767 → T5 21335768), triggered by the agreed rule
-  (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
+- **Arts/Games chain decoder done (2026-10-30), report §5.1:** seed 42, test HR@10 / NDCG@10:
+  Arts MD 1+2+2 0.1059 / 0.0739 (1+3+3 0.1027 / 0.0726) vs A 3-seed 0.0986 / 0.0661, E-norm
+  0.0825 / 0.0520; Games MD 1+3+3 0.0899 / 0.0475 (1+2+2 0.0885 / 0.0468) vs A 0.0885 / 0.0471,
+  E-norm 0.0843 / 0.0454. MD > E-norm everywhere; MD ≥ A (Arts within A's seed spread, Games tie);
+  C/D single lists stay above MD. Evals 21382066–21382069 all ran on H200 (cost comparable).
+- **In flight:** E-raw on Arts/Games (tokenizer 21335767 done → T5 21335768 queued; then eval),
+  triggered by the agreed rule (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
+- **Next:** MFD on the v1 sets (`docs/MFD.md`, design not final), after discussion with the user.
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
   (HR@10 0.0931–0.1061) is larger than the differences we expect to measure.
@@ -313,16 +318,16 @@ raw: `mmgen_runs/baselines/baselines_all.json` (`python3 sbatch/tools/collect_ba
 | D MACRec paper setting | 0.1310 / 0.1011 (−3.9% / −3.4%) | 0.1255 / 0.0893 (−5.6% / −6.3%, miss) | 0.1020 / 0.0539 (−5.4% / −4.5%, miss) |
 | D MACRec as shipped (1 seed) | 0.1221 / 0.0949 (−10.4% / −9.3%, miss) | — | — |
 
-**MD-RQ-VAE chain decoder and E (Instruments, seed 42, TEST, one list; HR@10 / NDCG@10; decoder
-passes / user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §7.3.
+**MD-RQ-VAE chain decoder and E (seed 42, TEST, one list; HR@10 / NDCG@10; decoder passes /
+user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §7.3.
 
-| method | HR@10 / NDCG@10 | passes |
-|---|---|---|
-| MD 1+2+2 (official SID) | 0.1181 / 0.0932 | 6 |
-| MD 1+3+3 (official SID) | 0.1161 / 0.0916 | 8 |
-| E-norm (rescaled) | 0.1055 / 0.0822 (Arts 0.0825 / 0.0520, Games 0.0843 / 0.0454) | 5 |
-| E-raw | 0.1132 / 0.0870 | 5 |
-| C / D, best single list (3 seeds) | 0.1287 / 0.0988, 0.1302 / 0.0997 | 5 |
+| method | passes | Instruments | Arts | Games |
+|---|---|---|---|---|
+| MD 1+2+2 (official SID) | 6 | 0.1181 / 0.0932 | 0.1059 / 0.0739 | 0.0885 / 0.0468 |
+| MD 1+3+3 (official SID) | 8 | 0.1161 / 0.0916 | 0.1027 / 0.0726 | 0.0899 / 0.0475 |
+| E-norm (rescaled) | 5 | 0.1055 / 0.0822 | 0.0825 / 0.0520 | 0.0843 / 0.0454 |
+| E-raw | 5 | 0.1132 / 0.0870 | pending | pending |
+| C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
 
 Earlier per-seed notes:
 
@@ -403,7 +408,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `84fc4d2`…`24ef25a` | Instruments results; tokenizer ONLY filter; CPU k-means job; one run per eval job |
 | `bd4bb27`…`3e026d1` | MD-RQ-VAE model, attempts a01–a06, diagnostics, distance reassignment |
 | `f6e5b9d`…`714968b` | official SID (reassigned), final-epoch checkpoint rule, v1 sets, CMI without shared images, E final-epoch tokenizer, TIGER A/B 3-seed report |
-| `69b23fd`…(next) | Instruments chain decoder results, controls, `docs/MDRQVAE_REPORT.md` |
+| `69b23fd`…`a7e6801` | Instruments chain decoder results, controls, `docs/MDRQVAE_REPORT.md`, v1 lock, docs restructure |
+| (next) | Arts/Games chain decoder results (report §5.1) |
 
 ---
 
