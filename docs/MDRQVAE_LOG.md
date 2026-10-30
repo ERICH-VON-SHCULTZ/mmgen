@@ -266,3 +266,29 @@ Official v1 sets, same settings as Instruments. Test HR@1 / HR@10 / NDCG@10, dec
   resubmitted on any GPU one run per job; all four still landed on H200, so ms/user is comparable.
 - Side note: the superseded E-norm ×53 (`tiger_fnorm`) on Arts scores 0.0925 / 0.0578, above the
   official E-norm (`tiger_fnormj`, 0.0825 / 0.0520). Not pursued; the official E rule is unchanged.
+
+## Controls for the C/D gap (queued 2026-10-30; seed 42; Instruments + Arts)
+
+C/D's "best single list" is decoded exactly like A/B/E/MD (same `eval_split.py`, trie beam search,
+20 beams, one list), but it comes from a model trained on both SIDs with 5–6 tasks. Two controls
+split their advantage into tokenizer vs training recipe:
+
+1. `mqltext` / `mqlimage`: C's MQL4GRec SIDs (4 learned levels, last-level collision reassignment),
+   seqrec only, TIGER settings. Train 21422951, evals 21422953–56.
+2. `mdmt122`: MD 1+2+2 v1 SID, one SID sequence, C-style multi-task (`macrec/md_mt_data.py`): seqrec
+   (history → full SID) + mdshared (→ [s]) + mdtext (→ [s;t]) + mdimage (→ [s;v]), each with its own
+   soft prompt, + mdtrans ([s;t] → [v] and [s;v] → [t], per item). C's batch/LR (256 / 5e-4), plain T5,
+   valid and test on seqrec only, so decoding and passes (6) are unchanged. Train 21422952, evals
+   21422957–58.
+
+Training volume (`sbatch/tools/train_examples.py`; examples seen = steps × 1024):
+
+| run | Instruments ex/epoch | steps | seen | Arts ex/epoch | steps | seen |
+|---|---|---|---|---|---|---|
+| A TIGER-text | 84,890 | 9,711 | 9.9M | 107,566 | 11,342 | 11.6M |
+| MD 1+2+2 (seqrec) | 84,890 | 16,019 | 16.4M | 107,566 | 19,716 | 20.2M |
+| C MQL4GRec | 267,170 | 26,622 | 27.3M | 341,530 | 39,960 | 40.9M |
+| D MACRec (batch 4096) | 352,060 | 9,116 | 37.3M | 449,096 | 12,210 | 50.0M |
+| MD multi-task (`mdmt122`) | 352,060 | pending | | pending | | |
+
+Seqrec-only runs stop by early stopping at different epochs: MD already trains ~1.7× the steps of A.

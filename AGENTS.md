@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-30 (MD chain decoder done on Arts/Games; only E-raw Arts/Games pending).
+Last updated: 2026-10-30 (C/D-gap controls queued: MQL4GRec SIDs seqrec-only, MD multi-task).
 
 ---
 
@@ -57,6 +57,13 @@ are reference-only, not part of the main line.
   C/D single lists stay above MD. Evals 21382066–21382069 all ran on H200 (cost comparable).
 - **In flight:** E-raw on Arts/Games (tokenizer 21335767 done → T5 21335768 queued; then eval),
   triggered by the agreed rule (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
+- **C/D-gap controls (queued 2026-10-30, seed 42, Instruments + Arts):** (1) C's MQL4GRec SIDs
+  trained seqrec-only with TIGER settings, one run per modality (`mqltext`, `mqlimage`; train
+  21422951, evals 21422953–56); (2) MD 1+2+2 v1 SID with C-style multi-task training, one SID
+  sequence (`mdmt122`, `macrec/md_mt_data.py`: seqrec + mdshared/mdtext/mdimage + mdtrans; train
+  21422952, evals 21422957–58). Report optimizer steps and training examples next to metrics
+  (`sbatch/tools/train_examples.py`). Why: C/D's single lists come from multi-task models, so they
+  are not single-modality controls; decoding is identical for all runs.
 - **Next:** MFD on the v1 sets (`docs/MFD.md`, design not final), after discussion with the user.
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
@@ -85,7 +92,8 @@ mmgen/
 │   ├── config/ckpt/       T5 config + tokenizer (d_model 128, 4+4 layers, 6 heads, d_ff 1024)
 │   ├── scripts/           upstream launchers (finetune_full.sh, run_finetune.sh)
 │   │   ── mmgen additions (new files only; upstream files untouched, see git diff f3c9707 -- macrec) ──
-│   ├── finetune_ext.py    finetune_contrastive.train + --model_class plain|contrastive + train stats
+│   ├── finetune_ext.py    finetune_contrastive.train + --model_class plain|contrastive + train stats (+ examples per task)
+│   ├── md_mt_data.py      C-style multi-task datasets on one MD SID (mdshared, mdtext, mdimage, mdtrans)
 │   ├── eval_split.py      test_ddp_save on --split valid|test + inference cost (decoder steps, ms/user)
 │   ├── cross_index/main_single.py, generate_indices_single.py   MQL4GRec single-modality tokenizer (verbatim @5ad9c27)
 │   ├── cross_index/generate_indices_tiger.py   TIGER SIDs: 3 RQ levels + appended collision index
@@ -134,7 +142,8 @@ mmgen/
                                    ami_first_level.py (E vs A/B first-level AMI),
                                    rank_metrics.py (independent metric/merge check),
                                    freeze_md_sids.py (versioned SID sets; --lock makes them read-only),
-                                   cmi_shared_image.py (first-level CMI without items sharing an image file)
+                                   cmi_shared_image.py (first-level CMI without items sharing an image file),
+                                   train_examples.py (examples per epoch/task, optimizer steps, examples seen)
     ├── md/tok_attempt.sbatch      MD-RQ-VAE tokenizer attempt: train -> SIDs -> diagnostics
     ├── md/reassign.sbatch         reassignment + diagnostics on the new index
 ```
@@ -245,7 +254,8 @@ sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch
   overwritten on every save; runs before 2026-10-26 have their settings only in `config_eval.json`
   and `training_args.bin`.
 - Baselines: `tiger_text` (A), `tiger_image` (B), `tiger_fnorm` / `tiger_fraw` (E early fusion),
-  `mql` (C), `macrecpaper` (D, official), `macrec` (D as shipped, deviation).
+  `mql` (C), `macrecpaper` (D, official), `macrec` (D as shipped, deviation). Controls: `mqltext` /
+  `mqlimage` (C's SIDs, seqrec only), `mdmt122` (MD 1+2+2 + C-style multi-task).
 - Effective batch = per-device × 2 GPUs × grad-accum 2, as in both repos' launchers, emulated on
   1 GPU with grad-accum 4.
 
@@ -287,6 +297,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `scontrol update` / `hold` / `nice` on our pending jobs fails with "Unspecified error" | job order can only be set at submit time (`--dependency=after:<job>`); otherwise cancel and resubmit |
 | `tokenizers.sbatch` asks for `gpu:a100` only; job 21251957 waited 17 h for an A100 | submit with `--partition=a100_tandon,h100_tandon,h200_tandon --gres=gpu:1` |
 | HF schedules `epochs × floor(batches / grad_accum)` steps, so runs can end at a fractional epoch (Arts 1+3+3: 21,000 steps = epoch 198.1) | normal; the cosine schedule has finished |
+| `pack_train.sbatch` (24 CPUs, long time limit) is rejected on h200_tandon ("partition not valid for this job") | train with `--partition=a100_tandon,h100_tandon --gres=gpu:1`; H200 only for evals |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
@@ -409,7 +420,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `bd4bb27`…`3e026d1` | MD-RQ-VAE model, attempts a01–a06, diagnostics, distance reassignment |
 | `f6e5b9d`…`714968b` | official SID (reassigned), final-epoch checkpoint rule, v1 sets, CMI without shared images, E final-epoch tokenizer, TIGER A/B 3-seed report |
 | `69b23fd`…`a7e6801` | Instruments chain decoder results, controls, `docs/MDRQVAE_REPORT.md`, v1 lock, docs restructure |
-| (next) | Arts/Games chain decoder results (report §5.1) |
+| `a6f8637` | Arts/Games chain decoder results (report §5.1) |
+| `5f782e1`…(next) | C/D-gap controls: `mqltext`/`mqlimage`, `mdmt122` + `md_mt_data.py`, `train_examples.py` |
 
 ---
 
