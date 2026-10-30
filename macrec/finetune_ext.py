@@ -5,6 +5,9 @@
                              (PlainT5 only drops the `task_flag` field that MACRec's collator adds.)
   --stats_file PATH          after training, write wall time, peak GPU memory, the selected
                              checkpoint, its epoch and validation loss.
+  MD tasks                   --tasks may include mdshared, mdtext, mdimage, mdtrans (md_mt_data.py:
+                             C-style multi-task training on one MD SID sequence).
+  The stats file also records the training examples per epoch, per task.
   --run_config_file PATH     BEFORE training, add every parsed argument and the T5 config to this JSON
                              (keeps keys already there). HF saves its model config.json into the output
                              dir, so the run settings must live in a file of another name.
@@ -20,6 +23,7 @@ import transformers
 from transformers import T5ForConditionalGeneration
 
 import finetune_contrastive as fc
+import md_mt_data
 from utils import parse_global_args, parse_train_args, parse_dataset_args
 
 
@@ -88,6 +92,17 @@ def main():
             k.setdefault("dataloader_num_workers", args.dataloader_num_workers)
             return _TA(*a, **k)
         transformers.TrainingArguments = _training_args   # finetune_contrastive calls transformers.TrainingArguments(...)
+
+    _load = fc.load_datasets
+    if any(t.lower() in md_mt_data.MD_TASKS for t in args.tasks.split(",")):
+        _load = md_mt_data.make_load_datasets(_load)
+
+    def _counted_load(a):
+        train_data, valid_data = _load(a)
+        _STATS["train_examples_per_task"] = {d.task: len(d) for d in train_data.datasets}
+        _STATS["train_examples_per_epoch"] = len(train_data)
+        return train_data, valid_data
+    fc.load_datasets = _counted_load             # finetune_contrastive calls load_datasets(args) via `from utils import *`
 
     if args.model_class == "plain":
         fc.create_contrastive_model = lambda config: PlainT5(config)
