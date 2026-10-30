@@ -38,7 +38,7 @@ No cross-domain pre-training was used. No hyperparameter was tuned after seeing 
 | A TIGER-text | **miss**, 3 seeds (−5.5% / −7.8%) | **miss**, 3 seeds (−15.5% / −18.0%) | **match**, 3 seeds (+3.3% / +4.1%) |
 | B TIGER-image | 3 seeds, no published target | 3 seeds, no published target | 3 seeds, no published target |
 | E-norm early fusion (rescaled, official) | seed 42, no published target | seed 42 | seed 42 |
-| E-raw early fusion | seed 42 | queued (21251957 → 21251971) | queued |
+| E-raw early fusion | seed 42 | seed 42 trained (21335768), eval 21450640 queued | seed 42 trained, eval 21450641 queued |
 | C MQL4GRec (no pre-training) | **match**, 3 seeds | **match**, 3 seeds | **match**, 3 seeds |
 | D MACRec, spec / paper setting (`macrecpaper`) | **match**, 3 seeds | **miss**, 3 seeds (−5.6% / −6.3%) | **miss**, 3 seeds (−5.4% / −4.5%) |
 | D MACRec, repo as shipped (`macrec`) | **miss**, 1 seed (−10.4% / −9.3%) | not run | not run |
@@ -344,7 +344,7 @@ tokenizer input differs from A/B (`macrec/data_process/fuse_features.py`; job ca
 | variant | input | status |
 |---|---|---|
 | **E-norm (official, `fnormj`)** | L2-normalize text and image separately, concatenate, multiply the joint vector by c, so the joint mean length equals A's mean text length (each half ≈ c). c = mean train-item text norm / √2, computed once from training items (items[:-2]) and not tuned: Instruments 37.868 (6,240 items), Arts 37.359, Games 36.744 | done, seed 42 |
-| E-raw (`fraw`) | raw concat (text norm ≈ 53.5 vs image ≈ 17.7 on Instruments: text-dominated) | Instruments seed 42; Arts/Games queued |
+| E-raw (`fraw`) | raw concat (text norm ≈ 53.5 vs image ≈ 17.7 on Instruments: text-dominated) | Instruments seed 42; Arts/Games trained (tokenizer 21335767, T5 21335768), evals queued |
 | E-norm unscaled (`fnormunscaled`) | L2-normalized halves, no scale | **failed**: codebook collapse on Instruments (levels used [49, 30, 14], collision 42.86%); not trained |
 | E-norm ×53 (`fnorm`) | each half × mean text norm (joint length ≈ √2 × A's) | superseded by `fnormj` (user decision); kept as a record: test HR@10 / NDCG@10 Instruments 0.1044 / 0.0811, Arts 0.0925 / 0.0578. Job 20981380 (its seeds 43/44) was cancelled |
 
@@ -370,11 +370,12 @@ Games), fewer than A (84 / 86 / 99) or B (104 / 144 / 115). First-level AMI with
 | dataset | E-norm~A | E-norm~B | E-raw~A | E-raw~B | A~B |
 |---|---|---|---|---|---|
 | Instruments | 0.542 | 0.515 | 0.687 | 0.344 | 0.326 |
-| Arts | 0.526 | 0.400 | queued | queued | 0.270 |
-| Games | 0.465 | 0.535 | queued | queued | 0.283 |
+| Arts | 0.526 | 0.400 | 0.675 | 0.287 | 0.270 |
+| Games | 0.465 | 0.535 | 0.624 | 0.390 | 0.283 |
 
 E-norm's first level mixes both modalities, leaning to text on Instruments and Arts and to image on
-Games. E-raw's first level is mostly text (0.69 vs 0.34), as its raw norms predict.
+Games. E-raw's first level is mostly text on all three datasets (AMI with A 0.69 / 0.67 / 0.62 vs with B
+0.34 / 0.29 / 0.39), as its raw norms predict. First-level codes used by E-raw: Arts 81, Games 98.
 
 **Failed or stopped E runs.** Unscaled E-norm collapse (above, not trained); the ×53 variant
 superseded; job 20981380 cancelled; eval jobs 21047067 / 21047068 reported FAILED only in their
