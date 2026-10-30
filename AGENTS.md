@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-28 (Instruments chain decoder on the official MD SID done; report docs/MDRQVAE_REPORT.md).
+Last updated: 2026-10-29 (Arts/Games MD evals moved off H200-only; cost of those runs not comparable).
 
 ---
 
@@ -50,8 +50,8 @@ are reference-only, not part of the main line.
   official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
   passes), 1+3+3 0.1161 / 0.0916; E-norm 0.1055 / 0.0822; E-raw 0.1132 / 0.0870. Token vs
   reassignment: within seed noise, one decoder pass fewer.
-- **In flight:** MD chain decoder on Arts and Games, 1+2+2 and 1+3+3 (seed 42; trained, evals 21335753 /
-  21335755 on H200); E-raw on Arts/Games (tokenizer 21335767 → T5 21335768), triggered by the agreed rule
+- **In flight:** MD chain decoder on Arts and Games, 1+2+2 and 1+3+3 (seed 42; trained, evals 21382066–21382069,
+  one run per job, any GPU: ms/user of these runs is NOT comparable to the H200 cost files); E-raw on Arts/Games (tokenizer 21335767 → T5 21335768), triggered by the agreed rule
   (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
