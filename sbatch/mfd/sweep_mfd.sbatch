@@ -3,6 +3,7 @@
 # real-path timing per K_f, ONE setting chosen by valid HR@10 / NDCG@10 -> chosen.json); (2) --mode apply on
 # TEST with that single setting (+ the stage-1 reference K_f=20, w=1). Frozen snapshot of macrec/*.py.
 # Submit: sbatch --export=ALL,D=Instruments,RUN=mfd122_stage1 sbatch/mfd/sweep_mfd.sbatch
+# CONFIG=<chosen.json from another run>: no sweep; apply that fixed setting on valid and test (-> sweep_applied/).
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=h200_tandon
 #SBATCH --nodes=1
@@ -25,7 +26,7 @@ export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR"
 D=${D:-Instruments}; RUN=${RUN:-mfd122_stage1}; SEED=${SEED:-42}
 case $RUN in mfd122*) IDX=.index_md122_a05_ep500_reassign.json; V1=$RUNS/md/sids/v1/$D/1+2+2 ;;
              mfd133*) IDX=.index_md133_a06_ep500_reassign.json; V1=$RUNS/md/sids/v1/$D/1+3+3 ;; esac
-CK=$RUNS/mfd/$D/$RUN/seed$SEED; OUT=$CK/sweep
+CK=$RUNS/mfd/$D/$RUN/seed$SEED; OUT=$CK/sweep; [ -n "${CONFIG:-}" ] && OUT=$CK/sweep_applied
 [ "$(sha256sum < $RUNS/data/$D/$D$IDX | cut -d' ' -f1)" = "$(cut -d' ' -f1 $V1/index.sha256)" ] || { echo "index != v1"; exit 1; }
 M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/
 echo "job $SLURM_JOB_ID on $(hostname) $CK commit $(cd $REPO && git rev-parse --short HEAD)"
@@ -35,7 +36,12 @@ set -euo pipefail
 source /ext3/env.sh && conda activate py310
 cd $M
 A='--ckpt_path $CK --data_path $RUNS/data --dataset $D --index_file $IDX --image_index_file $IDX --max_his_len 20 --test_batch_size 64 --out_dir $OUT'
-[ -f $OUT/chosen.json ] || python -u mfd_sweep.py --mode sweep \$A > $CK/sweep_valid.log 2>&1
-python -u mfd_sweep.py --mode apply --split test --config $OUT/chosen.json \$A > $CK/sweep_apply_test.log 2>&1
+if [ -n \"${CONFIG:-}\" ]; then
+  mkdir -p $OUT; cp ${CONFIG:-none} $OUT/applied_config.json
+  for SP in valid test; do python -u mfd_sweep.py --mode apply --split \$SP --config $OUT/applied_config.json \$A > $CK/sweep_applied_\$SP.log 2>&1; done
+else
+  [ -f $OUT/chosen.json ] || python -u mfd_sweep.py --mode sweep \$A > $CK/sweep_valid.log 2>&1
+  python -u mfd_sweep.py --mode apply --split test --config $OUT/chosen.json \$A > $CK/sweep_apply_test.log 2>&1
+fi
 "
 echo done

@@ -2,7 +2,9 @@
 # MFD stage 1 evaluation on an H200 (cost comparable with the chain decoder / baselines): sanity checks on
 # the TRAINED model (stop on failure), then valid + test: modes text / image / merge / joint, coverage,
 # ranking given coverage, f accuracy (MFD and chain decoder), cost. Frozen snapshot of macrec/*.py.
-# Submit: sbatch --export=ALL,D=Instruments,CFG=122,SEED=42[,K_F=20] sbatch/mfd/eval_mfd.sbatch
+# Submit: sbatch --export=ALL,D=Instruments,RUN=mfd122_stage1,SEED=42[,K_F=20][,CHAIN=<chain run name>] sbatch/mfd/eval_mfd.sbatch
+# RUN: mfd122_stage1 | mfd133_stage1 | mfd122_mv ...; CHAIN (f-accuracy comparison) defaults to the same-SID chain control.
+# CHAIN_ONLY=1: only the chain decoder's f accuracy (writes into the chain run's eval dir).
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=h200_tandon
 #SBATCH --nodes=1
@@ -22,10 +24,12 @@ SIF=/share/apps/images/cuda12.1.1-cudnn8.9.0-devel-ubuntu22.04.2.sif
 OVERLAY=/scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3   # always :ro in jobs
 export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR"
-D=${D:-Instruments}; CFG=${CFG:-122}; SEED=${SEED:-42}; K_F=${K_F:-20}
-IDX=.index_md122_a05_ep500_reassign.json
-OUT=$RUNS/mfd/$D/mfd${CFG}_stage1/seed$SEED
-CHAIN=$RUNS/baselines/$D/md${CFG}_a05_ep500_reassign/seed$SEED
+D=${D:-Instruments}; RUN=${RUN:-mfd122_stage1}; SEED=${SEED:-42}; K_F=${K_F:-20}
+case $RUN in mfd122*) IDX=.index_md122_a05_ep500_reassign.json; V1=$RUNS/md/sids/v1/$D/1+2+2; CH=md122_a05_ep500_reassign ;;
+             mfd133*) IDX=.index_md133_a06_ep500_reassign.json; V1=$RUNS/md/sids/v1/$D/1+3+3; CH=md133_a06_ep500_reassign ;; esac
+OUT=$RUNS/mfd/$D/$RUN/seed$SEED
+CHAIN=$RUNS/baselines/$D/${CHAIN:-$CH}/seed$SEED
+[ "$(sha256sum < $RUNS/data/$D/$D$IDX | cut -d' ' -f1)" = "$(cut -d' ' -f1 $V1/index.sha256)" ] || { echo "index != v1"; exit 1; }
 M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/
 echo "job $SLURM_JOB_ID on $(hostname) D=$D K_F=$K_F commit $(cd $REPO && git rev-parse --short HEAD)"
 nvidia-smi --query-gpu=name,memory.used,utilization.gpu --format=csv
@@ -33,8 +37,11 @@ singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
 cd $M
-python -u mfd_eval.py --ckpt_path $OUT --sanity --chain_ckpt $CHAIN --data_path $RUNS/data --dataset $D \
-  --index_file $IDX --image_index_file $IDX --max_his_len 20 --test_batch_size 64 --k_f $K_F \
-  --out_dir $OUT/eval_kf$K_F > $OUT/eval_kf$K_F.log 2>&1
+A=\"--data_path $RUNS/data --dataset $D --index_file $IDX --image_index_file $IDX --max_his_len 20 --test_batch_size 64 --k_f $K_F\"
+if [ \"${CHAIN_ONLY:-0}\" = 1 ]; then
+  python -u mfd_eval.py --chain_only --chain_ckpt $CHAIN \$A --out_dir $CHAIN/eval > $CHAIN/eval/chain_f.log 2>&1
+else
+  python -u mfd_eval.py --ckpt_path $OUT --sanity --chain_ckpt $CHAIN \$A --out_dir $OUT/eval_kf$K_F > $OUT/eval_kf$K_F.log 2>&1
+fi
 "
 echo done
