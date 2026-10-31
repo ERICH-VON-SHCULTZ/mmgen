@@ -166,6 +166,8 @@ mmgen/
     ├── md/tok_attempt.sbatch      MD-RQ-VAE tokenizer attempt: train -> SIDs -> diagnostics
     ├── md/reassign.sbatch         reassignment + diagnostics on the new index
     ├── mfd/train_mfd.sbatch, mfd/eval_mfd.sbatch   MFD stage 1 train (sanity on untrained model first) / eval on H200
+    ├── mfd/pack_mfd_train.sbatch + run_mfd_train.sh   MFD (any CFG, AUG) / chain (mdmv122) trainings packed on one GPU, frozen code
+    ├── mfd/sweep_mfd.sbatch       Part B: sweep on valid -> chosen.json -> that one setting on test (H200)
     ├── mfd/paired_mfd.sbatch      MFD vs chain per user (tools/mfd_paired.py: paired bootstrap, same-user coverage/ranking); tools/mfd_table.py = comparison table
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
@@ -277,7 +279,9 @@ sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch
   and `training_args.bin`.
 - Baselines: `tiger_text` (A), `tiger_image` (B), `tiger_fnorm` / `tiger_fraw` (E early fusion),
   `mql` (C), `macrecpaper` (D, official), `macrec` (D as shipped, deviation). Controls: `mqltext` /
-  `mqlimage` (C's SIDs, seqrec only), `mdmt122` (MD 1+2+2 + C-style multi-task).
+  `mqlimage` (C's SIDs, seqrec only), `mdmt122` (MD 1+2+2 + C-style multi-task), `mdmv122` (MD 1+2+2 +
+  multi-view history augmentation). `run_baseline.sh` uses `MACREC_DIR` (frozen code copy) when set;
+  `pack_eval.sbatch` and `pack_mfd_train.sbatch` set it.
 - Effective batch = per-device × 2 GPUs × grad-accum 2, as in both repos' launchers, emulated on
   1 GPU with grad-accum 4.
 

@@ -1,10 +1,10 @@
 #!/bin/bash
-# One baseline run (inside the container). Env: D (Instruments|Arts|Games), B (tiger_text|tiger_image|tiger_fnorm|tiger_fnormj|tiger_fnormj_ep500|tiger_fraw|mql|mqltext|mqlimage|mdmt122|md*|
+# One baseline run (inside the container). Env: D (Instruments|Arts|Games), B (tiger_text|tiger_image|tiger_fnorm|tiger_fnormj|tiger_fnormj_ep500|tiger_fraw|mql|mqltext|mqlimage|mdmt122|mdmv122|md*|
 # macrec|macrecpaper), SEED, STAGE (train|eval|all; default all), NW (dataloader workers; default 2). Fine-tune with MACRec's trainer, then evaluate valid+test with trie beam
 # search (20 beams), single lists and (C/D) the MQL4GRec/MACRec merge (ensemble.py).
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
-REPO=/scratch/yw8866/mmgen; M=$REPO/macrec
+REPO=/scratch/yw8866/mmgen; M=${MACREC_DIR:-$REPO/macrec}   # MACREC_DIR: a frozen copy of macrec/ made at job start
 DATA=/scratch/yw8866/mmgen_runs/data/
 OUT=/scratch/yw8866/mmgen_runs/baselines/$D/$B/seed$SEED; mkdir -p $OUT/eval/valid $OUT/eval/test
 PORT=$((20000 + RANDOM % 20000))
@@ -23,6 +23,8 @@ case $B in
   # MD 1+2+2 v1 SID with C-style multi-task training (macrec/md_mt_data.py), one SID sequence, C's settings
   mdmt122)     IDX=.index_md122_a05_ep500_reassign.json; IIDX=$IDX
                TASKS=seqrec,mdshared,mdtext,mdimage,mdtrans; TESTS=seqrec; MC=plain; BS=256; LR=5e-4 ;;
+  # MD 1+2+2 v1 SID + multi-view history augmentation (macrec/mv_aug_data.py; MFD report Part C), chain decoder
+  mdmv122)     IDX=.index_md122_a05_ep500_reassign.json; IIDX=$IDX; TASKS=seqrec_mv; TESTS=seqrec; MC=plain; BS=256; LR=5e-4 ;;
   # MD-RQ-VAE + chain decoder (Part 3): SID [shared, text chain, image chain] as one sequence, TIGER settings
   md*)         IDX=.index_$B.json;          IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   tiger_fnormj) IDX=.index_fnormj_tiger.json; IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256; LR=5e-4 ;;

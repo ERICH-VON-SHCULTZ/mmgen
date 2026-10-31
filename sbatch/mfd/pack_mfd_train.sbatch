@@ -1,0 +1,59 @@
+#!/bin/bash
+# Several MFD / chain trainings CONCURRENTLY on one GPU (one run alone keeps a GPU ~30% busy, below the cluster's
+# utilisation threshold; see pack_train.sbatch). Training math is unchanged; wall-clock is contended.
+# Every run uses ONE frozen copy of macrec/ and of the run scripts, made at job start.
+# RUNS entries:  mfd:<D>:<CFG 122|133>:<AUG 0|1>   (sbatch/mfd/run_mfd_train.sh)
+#                chain:<D>:<baseline, e.g. mdmv122> (sbatch/baselines/run_baseline.sh STAGE=train)
+# Submit: sbatch --export=ALL,RUNS="mfd:Instruments:133:0 chain:Arts:mdmv122" sbatch/mfd/pack_mfd_train.sbatch
+#SBATCH --account=torch_pr_69_tandon_advanced
+#SBATCH --partition=a100_tandon,h100_tandon
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH -c 24
+#SBATCH --mem=160GB
+#SBATCH --time=48:00:00
+#SBATCH --gres=gpu:1
+#SBATCH --job-name=mmgen_mfd_pack
+#SBATCH --output=/scratch/yw8866/mmgen_runs/logs/%x_%j.out
+
+set -euo pipefail
+module purge
+REPO=/scratch/yw8866/mmgen
+RUNS_DIR=/scratch/yw8866/mmgen_runs
+SIF=/share/apps/images/cuda12.1.1-cudnn8.9.0-devel-ubuntu22.04.2.sif
+OVERLAY=/scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3   # always :ro in jobs
+SECRETS=$HOME/.config/mmgen/secrets.sh
+if [ -f "$SECRETS" ]; then source "$SECRETS"; fi
+if [ -z "${WANDB_API_KEY:-}" ] && [ ! -f "$HOME/.netrc" ]; then export WANDB_MODE=offline; fi
+export WANDB_PROJECT=mmgen-mfd WANDB_DIR=$RUNS_DIR/wandb
+export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR" $WANDB_DIR
+M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/
+RB=$TMPDIR/run_baseline.sh; cp $REPO/sbatch/baselines/run_baseline.sh $RB
+RM=$TMPDIR/run_mfd_train.sh; cp $REPO/sbatch/mfd/run_mfd_train.sh $RM
+LOGD=$RUNS_DIR/logs/pack_$SLURM_JOB_ID; mkdir -p $LOGD
+echo "job $SLURM_JOB_ID on $(hostname)  RUNS=$RUNS  commit $(cd $REPO && git rev-parse --short HEAD)"
+nvidia-smi --query-gpu=name,utilization.gpu,memory.used --format=csv,noheader,nounits -l 10 > $LOGD/gpu_util.csv &
+# chain runs: check their index against v1 here (run_baseline.sh does not)
+for R in $RUNS; do
+  IFS=: read K D X Y <<< "$R"
+  if [ $K = chain ]; then
+    case $X in mdmv122) I=$RUNS_DIR/data/$D/$D.index_md122_a05_ep500_reassign.json; V=$RUNS_DIR/md/sids/v1/$D/1+2+2 ;; *) echo "unknown chain run $X"; exit 1 ;; esac
+    [ "$(sha256sum < $I | cut -d' ' -f1)" = "$(cut -d' ' -f1 $V/index.sha256)" ] || { echo "$I != v1"; exit 1; }
+  fi
+done
+START=$(date +%s); PIDS=()
+for R in $RUNS; do
+  IFS=: read K D X Y <<< "$R"
+  if [ $K = mfd ]; then
+    CMD="M=$M D=$D CFG=$X AUG=$Y SEED=42 bash $RM"
+  else
+    CMD="MACREC_DIR=$M D=$D B=$X SEED=42 STAGE=train NW=2 bash $RB"
+  fi
+  singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin/bash -c "$CMD" > $LOGD/${R//:/_}.log 2>&1 &
+  PIDS+=($!); sleep 20
+done
+FAIL=0; for P in "${PIDS[@]}"; do wait $P || FAIL=1; done
+awk -F', ' '{u+=$2; n++} END {printf "mean GPU util over job: %.1f%% (%d samples)\n", u/n, n}' $LOGD/gpu_util.csv
+echo "job wall time: $(( $(date +%s) - START )) s  fail=$FAIL"
+exit $FAIL
