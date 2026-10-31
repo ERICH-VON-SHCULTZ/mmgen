@@ -50,6 +50,7 @@ Code and jobs (all new files; MACRec's own files are untouched):
 | `macrec/cross_index/main_mdrqvae.py` | trainer: writes `run_config.json` first, then `train_log.jsonl` (every 10 epochs: utilization, full-SID collision, reconstruction cos), `best.pth` (lowest collision; superseded rule), `final.pth` (official), `train_summary.json` |
 | `macrec/cross_index/generate_indices_md.py` | codes from a checkpoint (`codes.npy`, `sid_stats.json`); its index file adds the old `<x_k>` token (superseded) |
 | `macrec/cross_index/reassign_md.py` | **official index**: distance-based reassignment, no extra token (rule in A2) |
+| `macrec/md_mt_data.py` | control only: C-style multi-task datasets on one MD SID (`mdshared`, `mdtext`, `mdimage`, `mdtrans`); run name `mdmt122`; result: no gain (`docs/MDRQVAE_REPORT.md` §5.2) |
 | `macrec/cross_index/md_diagnostics.py` | diagnostics 1–7 (reconstruction vs A/B, utilization, collision, CMI with permutation null, AMI with A/B, separation, additivity, shared balance) |
 | `sbatch/md/tok_attempt.sbatch` | one tokenizer attempt: train → codes → diagnostics (on `best.pth`, as in the attempt log) |
 | `sbatch/md/reassign.sbatch` | reassignment + diagnostics on the new index (`CKPT=final`, official) |

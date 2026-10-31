@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-30 (E-raw done on all datasets; C/D-gap controls running).
+Last updated: 2026-10-31 (all queued runs done: E-raw, C/D-gap controls; report §5.2).
 
 ---
 
@@ -57,13 +57,15 @@ are reference-only, not part of the main line.
   C/D single lists stay above MD. Evals 21382066–21382069 all ran on H200 (cost comparable).
 - **E-raw done on Arts/Games (2026-10-30):** 0.0902 / 0.0565 and 0.0859 / 0.0448; MD beats E-raw and
   E-norm on every dataset (report §5.1).
-- **C/D-gap controls (queued 2026-10-30, seed 42, Instruments + Arts):** (1) C's MQL4GRec SIDs
+- **C/D-gap controls (done 2026-10-31, seed 42, Instruments + Arts; report §5.2):** (1) C's MQL4GRec SIDs
   trained seqrec-only with TIGER settings, one run per modality (`mqltext`, `mqlimage`; train
   21422951, evals 21422953–56); (2) MD 1+2+2 v1 SID with C-style multi-task training, one SID
   sequence (`mdmt122`, `macrec/md_mt_data.py`: seqrec + mdshared/mdtext/mdimage + mdtrans; train
   21422952, evals 21422957–58). Report optimizer steps and training examples next to metrics
   (`sbatch/tools/train_examples.py`). Why: C/D's single lists come from multi-task models, so they
-  are not single-modality controls; decoding is identical for all runs.
+  are not single-modality controls; decoding is identical for all runs. **Result:** C's SIDs alone
+  are 0.003–0.010 HR@10 below TIGER's; C's multi-task recipe adds +0.019 to +0.031 (the whole C/D
+  lead); copied onto MD's single sequence it does not help (−0.005 HR@10 on both datasets).
 - **Next:** MFD on the v1 sets (`docs/MFD.md`, design not final), after discussion with the user.
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
@@ -338,6 +340,8 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | MD 1+3+3 (official SID) | 8 | 0.1161 / 0.0916 | 0.1027 / 0.0726 | 0.0899 / 0.0475 |
 | E-norm (rescaled) | 5 | 0.1055 / 0.0822 | 0.0825 / 0.0520 | 0.0843 / 0.0454 |
 | E-raw | 5 | 0.1132 / 0.0870 | 0.0902 / 0.0565 | 0.0859 / 0.0448 |
+| C's SIDs, seqrec only (text / image) | 5 | 0.1036 / 0.0832, 0.1081 / 0.0853 | 0.0880 / 0.0603, 0.0921 / 0.0625 | — |
+| MD 1+2+2, C-style multi-task | 6 | 0.1126 / 0.0894 | 0.1007 / 0.0726 | — |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
 
 Earlier per-seed notes:
@@ -421,7 +425,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `f6e5b9d`…`714968b` | official SID (reassigned), final-epoch checkpoint rule, v1 sets, CMI without shared images, E final-epoch tokenizer, TIGER A/B 3-seed report |
 | `69b23fd`…`a7e6801` | Instruments chain decoder results, controls, `docs/MDRQVAE_REPORT.md`, v1 lock, docs restructure |
 | `a6f8637` | Arts/Games chain decoder results (report §5.1) |
-| `5f782e1`…(next) | C/D-gap controls: `mqltext`/`mqlimage`, `mdmt122` + `md_mt_data.py`, `train_examples.py` |
+| `5f782e1`…`856de37` | C/D-gap controls code, E-raw Arts/Games results |
+| (next) | C/D-gap control results (report §5.2, BASELINE_REPORT §11) |
 
 ---
 

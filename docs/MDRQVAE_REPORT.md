@@ -1,12 +1,12 @@
 # MD-RQ-VAE on Amazon: report
 
-Date: 2026-10-28, Arts/Games chain decoder added 2026-10-30. Seed 42 for every new run. All test numbers are full ranking, trie-constrained
+Date: 2026-10-28, Arts/Games chain decoder added 2026-10-30, C/D-gap controls 2026-10-31. Seed 42 for every new run. All test numbers are full ranking, trie-constrained
 beam search with 20 beams, and a checkpoint chosen on validation loss. Raw numbers:
 `mmgen_runs/baselines/baselines_all.json` (`sbatch/tools/collect_baselines.py`). Attempt-level
 detail: `docs/MDRQVAE_LOG.md`. Official SID and the current implementation: `docs/MDRQVAE.md` Part A.
 
 Status: v1 locked (2026-10-28). Chain decoder done on all three datasets for 1+2+2 and 1+3+3 (§5,
-§5.1). E-raw done on all three datasets. C/D-gap controls running (`docs/MDRQVAE_LOG.md`, last section).
+§5.1). E-raw done on all three datasets. C/D-gap controls done (§5.2).
 
 ---
 
@@ -179,6 +179,61 @@ Best T5 epochs: Arts 1+2+2 176 of 186, 1+3+3 198 of 198.1 (cap; 21,000 steps); G
 - **One seed.** The Arts gap to A is the size of A's own seed spread (0.0931–0.1061); MD 1+2+2's
   0.1059 sits at A's best seed. 3 seeds are needed before claiming MD > A on Arts.
 
+### 5.2 Controls for the C/D gap (seed 42, TEST; Instruments and Arts; 2026-10-31)
+
+**Question.** C/D's single lists beat MD although decoding is identical (same `eval_split.py`, trie
+beam search, 20 beams, one list). Is that their tokenizer or their training recipe (both SIDs, 5–6
+tasks)? Two controls:
+
+1. **C's SIDs, seqrec only** (`mqltext`, `mqlimage`): MQL4GRec's text or image SID, trained exactly
+   like A/B/E/MD (plain T5, batch 256, LR 5e-4, seqrec). Train 21422951, evals 21422953–56.
+2. **MD 1+2+2 + C-style multi-task** (`mdmt122`, `macrec/md_mt_data.py`): v1 SID as one sequence;
+   seqrec + shared (history → `[s]`) + text view (→ `[s;t]`) + image view (→ `[s;v]`), each with its
+   own soft prompt, + translation (`[s;t]` → `[v]` and `[s;v]` → `[t]`, per item). C's batch / LR,
+   plain T5; validation and test on seqrec only, so decoding (6 passes) is unchanged. Train 21422952,
+   evals 21422957–58.
+
+Examples seen = optimizer steps × effective batch (1024; D 4096). Counts: `train_stats.json`
+(`train_examples_per_task`) or `sbatch/tools/train_examples.py`.
+
+| dataset | run | SIDs in training | HR@1 | HR@10 | NDCG@10 | ex/epoch | steps | ex seen | best / run epochs |
+|---|---|---|---|---|---|---|---|---|---|
+| Instruments | A TIGER-text | text | 0.0655 | 0.1131 | 0.0859 | 84,890 | 9,711 | 9.9M | 107 / 117 |
+| Instruments | B TIGER-image | image | 0.0689 | 0.1120 | 0.0867 | 84,890 | 10,209 | 10.5M | 113 / 123 |
+| Instruments | **C's text SID, seqrec only** | text | 0.0677 | 0.1036 | 0.0832 | 84,890 | 10,375 | 10.6M | 115 / 125 |
+| Instruments | **C's image SID, seqrec only** | image | 0.0688 | 0.1081 | 0.0853 | 84,890 | 10,790 | 11.0M | 120 / 130 |
+| Instruments | C multi-task, text / image list | both | 0.0771 / 0.0781 | 0.1271 / 0.1271 | 0.0978 / 0.0984 | 267,170 | 26,622 | 27.3M | 92 / 102 |
+| Instruments | MD 1+2+2, seqrec | one MD SID | 0.0751 | 0.1181 | 0.0932 | 84,890 | 16,019 | 16.4M | 183 / 193 |
+| Instruments | **MD 1+2+2, C-style multi-task** | one MD SID | 0.0719 | 0.1126 | 0.0894 | 352,060 | 19,264 | 19.7M | 46 / 56 |
+| Arts | A TIGER-text | text | 0.0382 | 0.0931 | 0.0622 | 107,566 | 11,342 | 11.6M | 97 / 107 |
+| Arts | B TIGER-image | image | 0.0404 | 0.0949 | 0.0643 | 107,566 | 12,720 | 13.0M | 110 / 120 |
+| Arts | **C's text SID, seqrec only** | text | 0.0398 | 0.0880 | 0.0603 | 107,566 | 12,720 | 13.0M | 110 / 120 |
+| Arts | **C's image SID, seqrec only** | image | 0.0380 | 0.0921 | 0.0625 | 107,566 | 12,508 | 12.8M | 108 / 118 |
+| Arts | C multi-task, text / image list | both | 0.0589 / 0.0617 | 0.1189 / 0.1235 | 0.0846 / 0.0882 | 341,530 | 39,960 | 40.9M | 110 / 120 |
+| Arts | MD 1+2+2, seqrec | one MD SID | 0.0488 | 0.1059 | 0.0739 | 107,566 | 19,716 | 20.2M | 176 / 186 |
+| Arts | **MD 1+2+2, C-style multi-task** | one MD SID | 0.0515 | 0.1007 | 0.0726 | 449,096 | 24,584 | 25.2M | 46 / 56 |
+
+All rows seed 42 (A/B/C seed 42, not the 3-seed means). MD multi-task per-epoch tasks: seqrec,
+shared, text, image 84,890 each + translation 12,500 (Instruments); 107,566 each + 18,832 (Arts).
+ms/user: the MD multi-task Instruments eval ran on an H200 (25.1, same as MD seqrec); the other
+control evals ran on H100/A100 and their ms/user is not comparable. Decoder passes: C SIDs 5, MD 6.
+
+- **C's tokenizer alone gives no gain.** Trained like A/B, C's SIDs are 0.003–0.010 HR@10 *below*
+  TIGER's on both datasets and both modalities.
+- **C's lead is the training recipe.** Same C SIDs, seqrec-only → C multi-task: HR@10 +0.019 to
+  +0.024 on Instruments, +0.031 on Arts (+18% to +35%); NDCG@10 +0.013 to +0.026. C trains on 2.5–3.2×
+  the examples, and every task pairs two *different* SIDs of the item (text history vs image
+  history, text SID ↔ image SID).
+- **The same recipe does not transfer to MD's single sequence.** MD multi-task is below MD seqrec:
+  HR@10 −0.0055 (Instruments, ≈2.5× A's seed std) and −0.0052 (Arts, within A's Arts seed spread);
+  NDCG@10 −0.0038 / −0.0013. Arts HR@1 is higher (+0.0027). It early-stopped at epoch 56 (best 46) on
+  seqrec validation loss, after 1.2× the steps of MD seqrec. Valid HR@10 is also lower (Instruments
+  0.1426 vs 0.1476, Arts 0.1225 vs 0.1244).
+- **Likely reason (not tested):** our MD tasks only vary the *target* (sub-sequences of the full SID,
+  which seqrec already trains). The input history is always the full SID. C's tasks also vary the
+  *input* (text-only vs image-only histories), which acts as two views of the user. A test is listed
+  in §6.
+
 ---
 
 ## 6. Blockers and open items
@@ -186,8 +241,9 @@ Best T5 epochs: Arts 1+2+2 176 of 186, 1+3+3 198 of 198.1 (cap; 21,000 steps); G
 - **Next step: MFD** (`docs/MFD.md`, design not final), on the same v1 sets as the chain decoder.
 - **One seed:** several gaps are near seed noise. Final paper comparisons need seeds 42/43/44, at
   least on Arts, where TIGER-text's HR@10 ranges from 0.0931 to 0.1061 across seeds.
-- **Optional:** a C/D control trained on seqrec only, to separate their tokenizer gain from their
-  training-task gain.
+- **Done (§5.2):** C's SIDs with seqrec only (no tokenizer gain) and MD with C-style multi-task (no gain).
+- **Optional, not queued:** MD multi-task with view-only histories (`[s;t]` history → full SID,
+  `[s;v]` history → full SID), the part of C's recipe that §5.2's control did not copy.
 - **Optional:** 1+3+3 with a larger epoch cap (best epoch at the cap on Instruments and Arts).
 
 ---

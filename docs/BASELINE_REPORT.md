@@ -386,3 +386,23 @@ superseded; job 20981380 cancelled; eval jobs 21047067 / 21047068 reported FAILE
 summary step (run_baseline.sh was edited while they ran; all results files exist; jobs now run a
 snapshot of the script).
 
+---
+
+## 11. Control: C's tokenizer with seqrec only (added 2026-10-31)
+
+Purpose: split C's lead over A/B into tokenizer vs training recipe (C trains one T5 on both SIDs with
+5 tasks). `mqltext` / `mqlimage` = MQL4GRec's text / image SID files (`<D>.index_{lemb,vitemb}_mql.json`)
+trained exactly like A/B (plain T5, batch 256, LR 5e-4, seqrec only, 20-beam eval). Seed 42; train
+21422951, evals 21422953–56 (H100: ms/user not comparable).
+
+| dataset | run | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | steps | best / run epochs |
+|---|---|---|---|---|---|---|---|---|
+| Instruments | C text SID, seqrec only | 0.0677 | 0.0883 | 0.1036 | 0.0783 | 0.0832 | 10,375 | 115 / 125 |
+| Instruments | C image SID, seqrec only | 0.0688 | 0.0895 | 0.1081 | 0.0794 | 0.0853 | 10,790 | 120 / 130 |
+| Arts | C text SID, seqrec only | 0.0398 | 0.0671 | 0.0880 | 0.0536 | 0.0603 | 12,720 | 110 / 120 |
+| Arts | C image SID, seqrec only | 0.0380 | 0.0740 | 0.0921 | 0.0567 | 0.0625 | 12,508 | 108 / 118 |
+
+Against A / B at seed 42 (Instruments 0.1131 / 0.1120, Arts 0.0931 / 0.0949 HR@10) C's SIDs are
+0.003–0.010 lower, and against C's own multi-task single lists (Instruments 0.1271 / 0.1271, Arts
+0.1189 / 0.1235) they are 0.019–0.031 lower. C's lead over TIGER comes from the multi-task training,
+not its tokenizer. The MD side of this question is in `docs/MDRQVAE_REPORT.md` §5.2.

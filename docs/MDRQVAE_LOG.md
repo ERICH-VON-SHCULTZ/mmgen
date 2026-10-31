@@ -269,7 +269,7 @@ Official v1 sets, same settings as Instruments. Test HR@1 / HR@10 / NDCG@10, dec
 - Side note: the superseded E-norm ×53 (`tiger_fnorm`) on Arts scores 0.0925 / 0.0578, above the
   official E-norm (`tiger_fnormj`, 0.0825 / 0.0520). Not pursued; the official E rule is unchanged.
 
-## Controls for the C/D gap (queued 2026-10-30; seed 42; Instruments + Arts)
+## Controls for the C/D gap (queued 2026-10-30, done 2026-10-31; seed 42; Instruments + Arts)
 
 C/D's "best single list" is decoded exactly like A/B/E/MD (same `eval_split.py`, trie beam search,
 20 beams, one list), but it comes from a model trained on both SIDs with 5–6 tasks. Two controls
@@ -291,6 +291,22 @@ Training volume (`sbatch/tools/train_examples.py`; examples seen = steps × 1024
 | MD 1+2+2 (seqrec) | 84,890 | 16,019 | 16.4M | 107,566 | 19,716 | 20.2M |
 | C MQL4GRec | 267,170 | 26,622 | 27.3M | 341,530 | 39,960 | 40.9M |
 | D MACRec (batch 4096) | 352,060 | 9,116 | 37.3M | 449,096 | 12,210 | 50.0M |
-| MD multi-task (`mdmt122`) | 352,060 | pending | | pending | | |
+| MD multi-task (`mdmt122`) | 352,060 | 19,264 | 19.7M | 449,096 | 24,584 | 25.2M |
 
 Seqrec-only runs stop by early stopping at different epochs: MD already trains ~1.7× the steps of A.
+
+Results (test HR@1 / HR@10 / NDCG@10; full table with steps and examples: report §5.2):
+
+| run | Instruments | Arts |
+|---|---|---|
+| C's text SID, seqrec only | 0.0677 / 0.1036 / 0.0832 | 0.0398 / 0.0880 / 0.0603 |
+| C's image SID, seqrec only | 0.0688 / 0.1081 / 0.0853 | 0.0380 / 0.0921 / 0.0625 |
+| A / B (seed 42) | 0.1131 / 0.1120 HR@10 | 0.0931 / 0.0949 HR@10 |
+| C multi-task text / image list (seed 42) | 0.1271 / 0.1271 HR@10 | 0.1189 / 0.1235 HR@10 |
+| MD 1+2+2 seqrec | 0.0751 / 0.1181 / 0.0932 | 0.0488 / 0.1059 / 0.0739 |
+| MD 1+2+2 C-style multi-task | 0.0719 / 0.1126 / 0.0894 | 0.0515 / 0.1007 / 0.0726 |
+
+- C's SIDs alone are slightly worse than TIGER's (−0.003 to −0.010 HR@10): no tokenizer gain.
+- C's multi-task recipe on the same SIDs: +0.019 to +0.031 HR@10. That is the whole C/D lead.
+- MD multi-task: −0.005 HR@10 on both datasets; early-stopped at epoch 56 (best 46). Our tasks vary only
+  the target; C's also vary the input history (text-only vs image-only). Not tested further.
