@@ -310,3 +310,12 @@ Results (test HR@1 / HR@10 / NDCG@10; full table with steps and examples: report
 - C's multi-task recipe on the same SIDs: +0.019 to +0.031 HR@10. That is the whole C/D lead.
 - MD multi-task: −0.005 HR@10 on both datasets; early-stopped at epoch 56 (best 46). Our tasks vary only
   the target; C's also vary the input history (text-only vs image-only). Not tested further.
+
+## Reproducibility of the v1 sets (2026-10-31; `sbatch/md/repro_v1.sbatch`, details `docs/MDRQVAE.md` A3.7)
+
+- Stage 2 only (reassignment on the locked `tokenizer.pth`), job 21508421: all six sets reproduce
+  v1 exactly (same sha256).
+- Full retrain with the identical recipe and seed, job 21507767: all six differ in every item's SID.
+  Training is not bit-deterministic (differs from epoch 1; GPU kernels and the k-means init are
+  uncontrolled). Quality is equivalent (reconstruction ±0.005, collision and reassignment counts
+  similar) but the partition is not (shared-level AMI 0.20–0.38). v1 = the locked files.

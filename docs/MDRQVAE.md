@@ -5,7 +5,7 @@ base): what was built, the official SIDs, and where everything lives. **Part B i
 implementation** in `legacy/grid/`, kept as the design reference (cited file:line). Part B's
 section numbers (§1–§7) are stable; other docs link to them.
 
-Reading order for a new member: Part A here → `docs/MDRQVAE_REPORT.md` (results and decisions) →
+Reading order for a new member: Part A here (A3 = exact recipe to rebuild the locked SIDs) → `docs/MDRQVAE_REPORT.md` (results and decisions) →
 `docs/MDRQVAE_LOG.md` (every attempt and control, in order) → `docs/BASELINE_REPORT.md` (the
 baselines MD-RQ-VAE is compared against) → `docs/MFD.md` (the planned decoder; design not final).
 
@@ -106,6 +106,170 @@ set: corrected first-level CMI after excluding items with byte-identical images 
 Superseded (kept): `mmgen_runs/md/sids/superseded/v1_20261028/<D>/<cfg>/`, the best-collision sets
 of Instruments 1+2+2 (sha256 `aa514208…`), Instruments 1+3+3, Arts 1+2+2, Arts 1+3+3
 (`73d5b133…`), Games 1+2+2 (`f5a30990…`), Games 1+3+3 (`1c1f4220…`).
+
+## A3. Appendix: how the v1 SIDs were produced, and how to reproduce them exactly
+
+**Read A3.7 first: retraining does NOT reproduce v1** (training is not bit-deterministic); stage 2
+on the locked `tokenizer.pth` does, exactly. The recipe below documents how v1 was made and how to
+make an equivalent set. Two stages per set:
+**(1) train the tokenizer** (`main_mdrqvae.py`, 500 epochs, keep `final.pth`), **(2) reassign
+collisions** (`reassign_md.py` on `final.pth`). Then `freeze_md_sids.py` copied the results into
+`sids/v1/` and `--lock` made them read-only. No step uses interaction data; the tokenizer sees
+only the item features of the whole catalog.
+
+### A3.1 Environment
+
+| item | value |
+|---|---|
+| container | Singularity image `/share/apps/images/cuda12.1.1-cudnn8.9.0-devel-ubuntu22.04.2.sif` |
+| Python env | overlay `/scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3` mounted `:ro`, `source /ext3/env.sh && conda activate py310` (Python 3.10.20, torch 2.6.0+cu124; full list `envs/requirements.lock`, rebuild `envs/SETUP.md`) |
+| env vars | `USE_TF=0`, `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` |
+| hardware | one GPU; the original runs used A100 / H100 / H200 (per set below); training takes ~40–60 s |
+| working dir | `macrec/cross_index/` (the trainer imports `models.mdrqvae`; `reassign_md.py` imports `generate_indices_md`) |
+
+### A3.2 Inputs (frozen; produced by `sbatch/features.sbatch`)
+
+Rows are in item-id order (`<D>.item2id`); 6,250 / 9,416 / 13,839 items.
+- Text: `mmgen_runs/data/<D>/<D>.emb-llama-td.npy` (4096-d): LLaMA-7B (`huggyllama/llama-7b`),
+  title + description, mean pooling (`macrec/data_process/amazon_text_emb.py`). On Instruments it
+  equals MQL4GRec's shipped file (max abs diff 4e-5).
+- Image: `mmgen_runs/data/<D>/<D>.emb-ViT-L-14.npy` (768-d): CLIP ViT-L/14 image branch on the main
+  product image (`macrec/data_process/clip_feature_ext.py`, MACRec's `clip_feature.py` logic,
+  tolerant to missing images).
+
+| dataset | text sha256 | image sha256 |
+|---|---|---|
+| Instruments | `925f5151a7b276e4d44a85ab70f78e5e33566c1e33ca6f38b9cf43ace449d787` | `6e74c71e12d037687fc38f434a40716de3e727ddd65cbe97aa27c77439e41b64` |
+| Arts | `f961fee57e7f403143707212b244f108ba66900f19c0469a352da808dead0369` | `32562b1defd6cafc075000340562f2a76a2f500ff8591e41399fe7f07a66ea99` |
+| Games | `acdbd3aa224b1f498fa8134364bd606c25d5d2610f5c78244851739233728899` | `dddf6c2f9b3380478a0eef859440a419abe4ad77c67f9d4cc449599fce5c874b` |
+
+### A3.3 Stage 1: tokenizer training
+
+Full resolved settings (identical for all six sets except `n_modal`; also in each set's
+`sids/v1/<D>/<cfg>/run_config.json`):
+
+| setting | value | setting | value |
+|---|---|---|---|
+| `n_shared` | 1 | `n_modal` | **2** (1+2+2, attempt a05) or **3** (1+3+3, a06) |
+| `codebook_size` | 256 per level | `e_dim` | 32 |
+| `layers` (encoder MLP) | 2048 1024 512 256 128 64 | `input_mode` | `l2_sqrtd` (per-modality L2 norm × √dim) |
+| `fusion` | `xattn` (cross-attention, 4 heads) | `info_nce_weight` | 1.0 |
+| `quant_loss_weight` | 1.0 | `dead_code_reset` / `dead_code_until` | every 10 epochs / until epoch 400 |
+| optimizer | AdamW, `lr` 1e-3, `weight_decay` 1e-4 | `batch_size` | 2048 |
+| `epochs` | 500 | `eval_every` | 10 |
+| `seed` | 42 (`random`, `numpy`, `torch`, `torch.cuda` seeded; cuDNN determinism not forced) | checkpoint used | **`final.pth`** (epoch 500, no selection) |
+
+Non-default flags (everything else is the trainer's default): `--n_shared 1 --n_modal {2|3}
+--dead_code_reset 10 --dead_code_until 400 --fusion xattn`.
+
+Command, as run (job script `sbatch/md/tok_attempt.sbatch`; it also writes the superseded
+best-collision index and diagnostics, which v1 does not use):
+
+```bash
+sbatch --export=ALL,D=<D>,NAME=a05_122,TAG=md122_a05,ARGS="--n_shared 1 --n_modal 2 --dead_code_reset 10 --dead_code_until 400 --fusion xattn" sbatch/md/tok_attempt.sbatch
+sbatch --export=ALL,D=<D>,NAME=a06_133,TAG=md133_a06,ARGS="--n_shared 1 --n_modal 3 --dead_code_reset 10 --dead_code_until 400 --fusion xattn" sbatch/md/tok_attempt.sbatch
+```
+
+Equivalent direct call inside the container (what the job runs):
+
+```bash
+cd /scratch/yw8866/mmgen/macrec/cross_index
+python -u main_mdrqvae.py --dataset <D> --out_dir /scratch/yw8866/mmgen_runs/md/<D>/tok/a05_122 \
+    --n_shared 1 --n_modal 2 --dead_code_reset 10 --dead_code_until 400 --fusion xattn
+# 1+3+3: --out_dir .../a06_133 and --n_modal 3
+```
+
+Outputs in `--out_dir`: `run_config.json`, `train_log.jsonl`, `best.pth` (superseded rule),
+**`final.pth`**, `train_summary.json`.
+
+### A3.4 Stage 2: reassignment (official index, no extra token)
+
+```bash
+sbatch --export=ALL,D=<D>,NAME=a05_122,TAG=md122_a05_ep500_reassign,CKPT=final sbatch/md/reassign.sbatch
+sbatch --export=ALL,D=<D>,NAME=a06_133,TAG=md133_a06_ep500_reassign,CKPT=final sbatch/md/reassign.sbatch
+# direct: cd macrec/cross_index && python -u reassign_md.py --ckpt <out_dir>/final.pth --tag md122_a05_ep500_reassign
+```
+
+Writes `mmgen_runs/data/<D>/<D>.index_<tag>.json` (the index the T5 jobs read) and, in the
+checkpoint dir, `codes_<tag>.npy` and `reassign_<tag>.json` (every changed item). The rule is in
+A2; it has no randomness. `reassign.sbatch` then runs `md_diagnostics.py` on the new codes
+(`diagnostics_<tag>.json`).
+
+### A3.5 Stage 3: freeze and lock
+
+```bash
+python3 sbatch/tools/freeze_md_sids.py --dataset <D> --cfg 122 --version v1   # and --cfg 133
+python3 sbatch/tools/freeze_md_sids.py --dataset <D> --cfg 122 --version v1 --lock
+```
+
+Copies `final.pth` → `tokenizer.pth`, the index → `index.json` (+ `index.sha256`), the reassignment
+summary and diagnostics into `sids/v1/<D>/<cfg>/`; `--lock` writes `STATUS = v1 locked` and makes
+every file read-only. Locked on 2026-10-28.
+
+### A3.6 Provenance of each locked set
+
+| set | training job / commit / GPU | reassign job / commit | items changed | index sha256 |
+|---|---|---|---|---|
+| Instruments 1+2+2 | 21101478 / `796d07f` / A100 | 21164545 / `29a038b` | 24 | `512221a1…` |
+| Instruments 1+3+3 | 21103580 / `796d07f` / H200 | 21164547 / `29a038b` | 16 | `1fe4df38…` |
+| Arts 1+2+2 | 21149486 / `3928840` / H200 | 21164549 / `29a038b` | 54 | `cbc70c4e…` |
+| Arts 1+3+3 | 21149487 / `3928840` / H100 | 21164553 / `fc5e4f7` | 44 | `8612e3cb…` |
+| Games 1+2+2 | 21149488 / `3928840` / H200 | 21164554 / `fc5e4f7` | 141 | `48851182…` |
+| Games 1+3+3 | 21149489 / `3e026d1` / H100 | 21164561 / `fc5e4f7` | 80 | `15c68e21…` |
+
+Full hashes are in A2. Logs: `mmgen_runs/logs/mmgen_md_tok_<job>.out`,
+`mmgen_runs/logs/mmgen_md_reassign_<job>.out`. Code changes since those commits do not affect
+results: `main_mdrqvae.py` changed only in its docstring, and `reassign_md.py` gained a `.detach()`
+on the codebook weights (`3e026d1`), which changes no value. `models/mdrqvae.py` and
+`generate_indices_md.py` are unchanged since `9fe6fc3`; `models/{rq,vq,layers}.py` are MACRec's own, unmodified.
+
+### A3.7 Reproduction check
+
+`sbatch/md/repro_v1.sbatch` reruns stages 1 and 2 for all six sets from scratch into
+`mmgen_runs/md/repro/<MODE>/<D>/<name>/` (v1 is never touched) and compares each new `index.json`
+with the locked one (sha256 and number of items whose SID differs); summary in
+`mmgen_runs/md/repro/repro_v1_<MODE>_<job>.tsv`. `MODE=reassign` reruns only stage 2 on a copy of
+the locked `tokenizer.pth`.
+
+Result (2026-10-31; all on H200):
+
+| check | job | result |
+|---|---|---|
+| **stage 2 only** on the locked `tokenizer.pth` (`MODE=reassign`) | 21508421 | **all six MATCH** (identical sha256, 0 items differ), including the sets first built on A100 / H100 |
+| stages 1 + 2 from scratch (`MODE=full`) | 21507767 | all six DIFF: every item's SID differs |
+
+**Training is not bit-reproducible.** The rerun already differs at epoch 1 (Instruments 1+3+3
+`rec_t` 0.90598 vs 0.90523) although the seed is fixed and the original ran on the same GPU type.
+Uncontrolled sources: non-deterministic GPU kernels (deterministic algorithms are not forced) and the
+first-batch k-means codebook init (scikit-learn `KMeans`, multithreaded, on GPU-computed latents).
+A rerun is an equally good but *different* tokenizer (`mmgen_runs/md/repro/repro_v1_compare.json`):
+
+| set | AMI v1 vs rerun, per SID position | rec cos text / image, v1 → rerun | collision before reassignment | items reassigned |
+|---|---|---|---|---|
+| Instruments 1+2+2 | 0.26 0.08 0.01 / 0.10 0.01 | 0.9600 → 0.9606 / 0.9150 → 0.9148 | 0.38% → 0.43% | 24 → 27 |
+| Instruments 1+3+3 | 0.20 0.09 0.01 0.00 / 0.13 0.02 0.01 | 0.9659 → 0.9664 / 0.9265 → 0.9266 | 0.26% → 0.26% | 16 → 16 |
+| Arts 1+2+2 | 0.31 0.06 0.00 / 0.15 0.02 | 0.9677 → 0.9675 / 0.9136 → 0.9131 | 0.57% → 0.61% | 54 → 57 |
+| Arts 1+3+3 | 0.23 0.05 0.00 0.00 / 0.16 0.03 0.01 | 0.9676 → 0.9714 / 0.9160 → 0.9209 | 0.47% → 0.45% | 44 → 42 |
+| Games 1+2+2 | 0.38 0.21 0.02 / 0.34 0.09 | 0.9560 → 0.9538 / 0.9176 → 0.9156 | 1.02% → 1.12% | 141 → 155 |
+| Games 1+3+3 | 0.35 0.28 0.03 0.01 / 0.40 0.11 0.07 | 0.9601 → 0.9604 / 0.9223 → 0.9217 | 0.58% → 0.49% | 80 → 68 |
+
+(positions: shared, text levels / image levels; codebook use 253–256 per level in both). Quality
+matches; the item partition does not: the shared level agrees only at AMI 0.20–0.38, about as much
+as the text and image TIGER tokenizers agree with each other (0.27–0.33).
+
+**Rules that follow:**
+1. **v1 is defined by its locked files**, not by the recipe: use `sids/v1/<D>/<cfg>/index.json`
+   (check `index.sha256`) or regenerate it with stage 2 from the locked `tokenizer.pth`. Never
+   retrain a tokenizer to "recover" v1.
+2. A retrained tokenizer is a new set (v2 or a variance run), even with identical settings.
+3. Tokenizer retraining is a source of variance that the current results do not measure (they vary
+   only the T5 seed). See `docs/MDRQVAE_REPORT.md` §6.
+
+Regenerate v1 exactly (stage 2 only; writes under `mmgen_runs/md/repro/reassign/`):
+
+```bash
+sbatch --export=ALL,MODE=reassign sbatch/md/repro_v1.sbatch            # all six; or SETS="Arts:122"
+```
 
 # Part B. The old Tmall implementation (design reference, `legacy/grid/`)
 

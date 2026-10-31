@@ -240,6 +240,10 @@ control evals ran on H100/A100 and their ms/user is not comparable. Decoder pass
 ## 6. Blockers and open items
 
 - **Next step: MFD** (`docs/MFD.md`, design not final), on the same v1 sets as the chain decoder.
+- **Tokenizer variance is unmeasured.** Retraining a v1 tokenizer with identical settings and seed
+  gives an equally good but different SID set (shared-level AMI to v1 only 0.20–0.38;
+  `docs/MDRQVAE.md` A3.7). All results so far vary only the T5 seed. Decide whether the 3-seed paper
+  runs also retrain the tokenizer.
 - **One seed:** several gaps are near seed noise. Final paper comparisons need seeds 42/43/44, at
   least on Arts, where TIGER-text's HR@10 ranges from 0.0931 to 0.1061 across seeds.
 - **Done (§5.2):** C's SIDs with seqrec only (no tokenizer gain) and MD with C-style multi-task (no gain).

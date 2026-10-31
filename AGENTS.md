@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-31 (all queued runs done: E-raw, C/D-gap controls; report §5.2).
+Last updated: 2026-10-31 (v1 reproduction recipe + check, `docs/MDRQVAE.md` A3).
 
 ---
 
@@ -44,7 +44,9 @@ are reference-only, not part of the main line.
   `*_a0X_reassign.json` files (no `ep500`) are the superseded best-collision sets, kept as controls.
   Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §A2; all six are
   final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is LOCKED (2026-10-28)**:
-  never overwrite; changes become v2. Check the data-dir index against `index.sha256` before runs. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
+  never overwrite; changes become v2. Check the data-dir index against `index.sha256` before runs.
+  **Retraining does not reproduce v1** (tokenizer training is not bit-deterministic: same quality,
+  different SIDs); stage 2 on the locked `tokenizer.pth` does, exactly. Exact recipe: `docs/MDRQVAE.md` A3. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
 - **Instruments Step 3 done (2026-10-28), report `docs/MDRQVAE_REPORT.md`:** chain decoder on the
   official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
@@ -148,6 +150,7 @@ mmgen/
                                    train_examples.py (examples per epoch/task, optimizer steps, examples seen)
     ├── md/tok_attempt.sbatch      MD-RQ-VAE tokenizer attempt: train -> SIDs -> diagnostics
     ├── md/reassign.sbatch         reassignment + diagnostics on the new index
+    ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
 Where to look for what:
@@ -299,6 +302,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `scontrol update` / `hold` / `nice` on our pending jobs fails with "Unspecified error" | job order can only be set at submit time (`--dependency=after:<job>`); otherwise cancel and resubmit |
 | `tokenizers.sbatch` asks for `gpu:a100` only; job 21251957 waited 17 h for an A100 | submit with `--partition=a100_tandon,h100_tandon,h200_tandon --gres=gpu:1` |
 | HF schedules `epochs × floor(batches / grad_accum)` steps, so runs can end at a fractional epoch (Arts 1+3+3: 21,000 steps = epoch 198.1) | normal; the cosine schedule has finished |
+| MD-RQ-VAE tokenizer training is not bit-deterministic (seed 42 set, but GPU kernels and sklearn k-means init are not): a rerun gives different SIDs of equal quality | never retrain to recover v1; use the locked files or `repro_v1.sbatch MODE=reassign` |
 | `pack_train.sbatch` (24 CPUs, long time limit) is rejected on h200_tandon ("partition not valid for this job") | train with `--partition=a100_tandon,h100_tandon --gres=gpu:1`; H200 only for evals |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
@@ -426,7 +430,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `69b23fd`…`a7e6801` | Instruments chain decoder results, controls, `docs/MDRQVAE_REPORT.md`, v1 lock, docs restructure |
 | `a6f8637` | Arts/Games chain decoder results (report §5.1) |
 | `5f782e1`…`856de37` | C/D-gap controls code, E-raw Arts/Games results |
-| `0ec4749`…(next) | C/D-gap control results (report §5.2, BASELINE_REPORT §11), stale-status cleanup |
+| `0ec4749`…`b0b54b4` | C/D-gap control results (report §5.2, BASELINE_REPORT §11), stale-status cleanup |
+| (next) | v1 reproduction recipe (`docs/MDRQVAE.md` A3), `repro_v1.sbatch`, reproducibility check |
 
 ---
 
