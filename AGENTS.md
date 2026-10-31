@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-31 (v1 reproduction recipe + check, `docs/MDRQVAE.md` A3).
+Last updated: 2026-10-31 (MFD stage 1 on Instruments, `docs/MFD_REPORT.md`).
 
 ---
 
@@ -69,12 +69,18 @@ are reference-only, not part of the main line.
   are not single-modality controls; decoding is identical for all runs. **Result:** C's SIDs alone
   are 0.003–0.010 HR@10 below TIGER's; C's multi-task recipe adds +0.019 to +0.031 (the whole C/D
   lead); copied onto MD's single sequence it does not help (−0.005 HR@10 on both datasets).
-- **MFD stage 1 in progress (2026-10-31):** two-branch decoder on Instruments 1+2+2 v1, seed 42, vs the MD
-  chain-decoder control (train 21513722 → `mmgen_runs/mfd/Instruments/mfd122_stage1/seed42/`).
+- **MFD stage 1 done (2026-10-31), report `docs/MFD_REPORT.md`:** two-branch decoder on Instruments 1+2+2 v1,
+  seed 42, same recipe as the MD chain-decoder control (train 21515330, eval 21515331, paired 21528838 →
+  `mmgen_runs/mfd/Instruments/mfd122_stage1/seed42/`). All sanity checks pass. Test HR@10 / NDCG@10:
+  joint 0.1177 / 0.0923, C-style merge 0.1183 / 0.0926, chain 0.1181 / 0.0932; paired 95% CI of
+  joint − chain HR@10 [−0.0036, +0.0026]: a tie, with 3 passes and 6.7 ms/user vs 6 passes and 25.3 ms/user
+  (H200). Limit = coverage via f prediction: the target f is outside the top 20 for 65% of users in both
+  models (f top-20 0.346 vs 0.352); on the same covered users MFD ranks 0.013 HR@10 below the chain but
+  covers more users.
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
   (HR@10 0.0931–0.1061) is larger than the differences we expect to measure.
-- **MFD stage 1** lives in `macrec/mfd_*.py` (new files); report `docs/MFD_REPORT.md` (when done).
+- **MFD stage 1** lives in `macrec/mfd_*.py` (new files); report `docs/MFD_REPORT.md`.
 
 ---
 
@@ -126,6 +132,7 @@ mmgen/
 │   ├── BASELINE_REPORT.md ★ baseline reproduction: results, diagnostics, deviations, open questions
 │   ├── MDRQVAE_REPORT.md  ★ MD-RQ-VAE on Amazon: implementation, diagnostics, chain decoder vs baselines, official SID
 │   ├── MDRQVAE_LOG.md     every MD-RQ-VAE attempt and control, in order (Part 2 log)
+│   ├── MFD_REPORT.md      ★ MFD stage 1 (two-branch decoder) vs the chain decoder on Instruments
 │   ├── PORTING.md         ★ MACRec component map + how/where to port MD-RQ-VAE + MFD + OPEN DECISIONS
 │   └── LEGACY_MAP.md      every legacy path with status KEEP-AS-REFERENCE / SUPPORT / OBSOLETE
 ├── envs/
@@ -154,6 +161,7 @@ mmgen/
     ├── md/tok_attempt.sbatch      MD-RQ-VAE tokenizer attempt: train -> SIDs -> diagnostics
     ├── md/reassign.sbatch         reassignment + diagnostics on the new index
     ├── mfd/train_mfd.sbatch, mfd/eval_mfd.sbatch   MFD stage 1 train (sanity on untrained model first) / eval on H200
+    ├── mfd/paired_mfd.sbatch      MFD vs chain per user (tools/mfd_paired.py: paired bootstrap, same-user coverage/ranking); tools/mfd_table.py = comparison table
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -307,6 +315,8 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `tokenizers.sbatch` asks for `gpu:a100` only; job 21251957 waited 17 h for an A100 | submit with `--partition=a100_tandon,h100_tandon,h200_tandon --gres=gpu:1` |
 | HF schedules `epochs × floor(batches / grad_accum)` steps, so runs can end at a fractional epoch (Arts 1+3+3: 21,000 steps = epoch 198.1) | normal; the cosine schedule has finished |
 | MD-RQ-VAE tokenizer training is not bit-deterministic (GPU kernels, sklearn k-means init): a rerun gives SIDs of the same quality but different codes | expected; check it with `docs/MDRQVAE.md` A3.7; use your own NAME/TAG so the official files are not overwritten; for exact v1 use the locked files |
+| HF `resize_token_embeddings` (mean-resizing) gives every added token (all SID codes) the SAME embedding row, so an untrained model cannot distinguish codes | sanity checks on untrained models must re-init the added rows randomly (`mfd_eval.py --random_init`); trained models are unaffected |
+| the chain eval's `save_seqrec_20.json` stores users in sampler order, not dataset order | align by `all_users` (= dataset index), as `sbatch/tools/mfd_paired.py` does |
 | `pack_train.sbatch` (24 CPUs, long time limit) is rejected on h200_tandon ("partition not valid for this job") | train with `--partition=a100_tandon,h100_tandon --gres=gpu:1`; H200 only for evals |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
@@ -350,6 +360,7 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | E-raw | 5 | 0.1132 / 0.0870 | 0.0902 / 0.0565 | 0.0859 / 0.0448 |
 | C's SIDs, seqrec only (text / image) | 5 | 0.1036 / 0.0832, 0.1081 / 0.0853 | 0.0880 / 0.0603, 0.0921 / 0.0625 | — |
 | MD 1+2+2, C-style multi-task | 6 | 0.1126 / 0.0894 | 0.1007 / 0.0726 | — |
+| MFD stage 1, joint / C-style merge (3 passes, 6.7 ms/user) | 3 | 0.1177 / 0.0923, 0.1183 / 0.0926 | — | — |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
 
 Earlier per-seed notes:
@@ -436,7 +447,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `5f782e1`…`856de37` | C/D-gap controls code, E-raw Arts/Games results |
 | `0ec4749`…`b0b54b4` | C/D-gap control results (report §5.2, BASELINE_REPORT §11), stale-status cleanup |
 | `d4cf286`…`6171446` | v1 reproduction recipe (`docs/MDRQVAE.md` A3), `repro_v1.sbatch`, reproducibility check, newcomer wording |
-| (next) | MFD stage 1 code (`macrec/mfd_*.py`, `sbatch/mfd/`) |
+| `15b6002`, `4c30cb2` | MFD stage 1 code (`macrec/mfd_*.py`, `sbatch/mfd/`); untrained-sanity embedding fix, `mfd_table.py` |
+| (next) | MFD stage 1 results: `docs/MFD_REPORT.md`, `mfd_paired.py`, `paired_mfd.sbatch` |
 
 ---
 
