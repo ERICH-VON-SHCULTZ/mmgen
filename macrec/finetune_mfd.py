@@ -7,6 +7,8 @@ and the collator (two decoder sequences per example).
 One evaluation-only setting: prediction_loss_only=True, so evaluation keeps the loss and does not
 accumulate (B, 2, 4, V) logits; training and model selection are unaffected.
 After training, the stats file also gets decoder_sequences_per_epoch (= 2 x examples).
+--tasks seqrec_mv: multi-view history augmentation (mfd_data.MVMFDDataset, 3 views per example).
+Works for any v1 MD SID width (1+2+2, 1+3+3): the decoder sequences have length L + 2.
 Run with the same arguments as finetune_ext.py plus --model_class plain.
 """
 import json
@@ -22,6 +24,7 @@ from mfd_model import MFDT5
 
 finetune_ext.PlainT5 = MFDT5            # finetune_ext's --model_class plain builds PlainT5(config)
 fc.load_datasets = load_mfd_datasets    # finetune_ext wraps fc.load_datasets (examples per task)
+finetune_ext.mv_aug_data.MV_TASKS = ()  # --tasks seqrec_mv is handled by load_mfd_datasets (MVMFDDataset), not the chain wrapper
 fc.Collator = MFDCollator
 
 _TA = transformers.TrainingArguments

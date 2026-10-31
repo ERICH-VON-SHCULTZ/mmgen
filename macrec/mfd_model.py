@@ -1,4 +1,5 @@
-"""mmgen addition: MFD stage 1, a two-branch T5 decoder for MD-RQ-VAE SIDs [f; t1 t2; i1 i2].
+"""mmgen addition: MFD, a two-branch T5 decoder for MD-RQ-VAE SIDs [f; t1 t2; i1 i2] (1+2+2 shown; for 1+3+3
+each branch has one more code: [start, f, <T>, t1, t2] -> [f, -, t1, t2, t3]).
 
 Per example the encoder runs once; its output is reused by two decoder sequences:
     text branch   decoder input [start, f, <T>, t1]   targets [f,    -,  t1, t2]
@@ -22,7 +23,7 @@ class MFDT5(T5ForConditionalGeneration):
     # Explicit argument names: HF Trainer keeps only batch keys that appear in forward()'s signature.
     def forward(self, input_ids=None, attention_mask=None, decoder_input_ids=None, labels=None,
                 encoder_outputs=None, **kwargs):
-        """decoder_input_ids, labels: (B, n_branch=2, L). Returns logits (B, 2, L, V)."""
+        """decoder_input_ids, labels: (B, n_branch=2, L). Returns logits (B, 2, L, V). (L = SID branch depth + 2.)"""
         B, nb, L = decoder_input_ids.shape
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)

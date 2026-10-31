@@ -7,6 +7,8 @@
                              checkpoint, its epoch and validation loss.
   MD tasks                   --tasks may include mdshared, mdtext, mdimage, mdtrans (md_mt_data.py:
                              C-style multi-task training on one MD SID sequence).
+  MV task                    --tasks seqrec_mv (mv_aug_data.py): seqrec examples x 3 history views
+                             (full / text / image), full-SID target.
   The stats file also records the training examples per epoch, per task.
   --run_config_file PATH     BEFORE training, add every parsed argument and the T5 config to this JSON
                              (keeps keys already there). HF saves its model config.json into the output
@@ -24,6 +26,7 @@ from transformers import T5ForConditionalGeneration
 
 import finetune_contrastive as fc
 import md_mt_data
+import mv_aug_data
 from utils import parse_global_args, parse_train_args, parse_dataset_args
 
 
@@ -96,6 +99,8 @@ def main():
     _load = fc.load_datasets
     if any(t.lower() in md_mt_data.MD_TASKS for t in args.tasks.split(",")):
         _load = md_mt_data.make_load_datasets(_load)
+    if any(t.lower() in mv_aug_data.MV_TASKS for t in args.tasks.split(",")):
+        _load = mv_aug_data.make_load_datasets(_load)
 
     def _counted_load(a):
         train_data, valid_data = _load(a)

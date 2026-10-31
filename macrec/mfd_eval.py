@@ -1,13 +1,14 @@
 """mmgen addition: MFD stage-1 inference, evaluation, diagnostics and sanity checks.
 
-Per user, three batched decoder passes (no KV cache; each pass re-runs its short sequences):
-  pass 1  [start]                 -> log P(f)            ; keep the top K_f catalog shared codes
-  pass 2  [start, f, <T>] / <I>   -> log P(t1|f), log P(i1|f)        for each kept f (2 K_f sequences)
-  pass 3  [start, f, <T>, t1] / [start, f, <I>, i1] -> log P(t2|f,t1), log P(i2|f,i1)
-          for every (f, t1) / (f, i1) prefix that exists in the catalog under a kept f
+Per user, 1 + L batched decoder passes for SIDs [f; t_1..t_L; i_1..i_L] (3 for 1+2+2, 4 for 1+3+3;
+no KV cache, each pass re-runs its short sequences):
+  pass 1      [start]                  -> log P(f)            ; keep the top K_f catalog shared codes
+  pass 2      [start, f, <T>] / <I>    -> log P(t_1|f), log P(i_1|f)        for each kept f (2 K_f sequences)
+  pass d + 2  [start, f, <T>, t_1..t_d] / image -> log P(t_{d+1}|f, t_1..t_d), ...  (d = 1..L-1)
+              for every catalog prefix (f, t_1..t_d) / (f, i_1..i_d) under a kept f
 All log-probabilities are full-vocabulary log-softmax values (as in the chain decoder's beam scores).
 Every catalog item whose f is kept is scored exactly:
-  (d) joint  : log P(f) + [log P(t1|f) + log P(t2|f,t1)] + [log P(i1|f) + log P(i2|f,i1)]   (w_t = w_i = 1)
+  (d) joint  : log P(f) + [sum of text-chain terms] + [sum of image-chain terms]   (w_t = w_i = 1)
   (a) text   : log P(f) + text terms        (b) image : log P(f) + image terms
   (c) merge  : top-20 lists of (a) and (b) merged with MQL4GRec's rule (ensemble.get_topk_results_ensemble)
 Ties (equal scores) are broken by item id. Metrics: evaluate.get_metrics_results on the ranked lists.
@@ -17,6 +18,7 @@ Usage:
       --image_index_file <same> --data_path <data> --out_dir <run>/mfd_eval [--k_f 20] [--sanity]
   python mfd_eval.py --random_init ... --sanity_only      (sanity checks on an untrained model)
   python mfd_eval.py --chain_ckpt <chain run> ...           (also: f accuracy of the chain decoder)
+  python mfd_eval.py --chain_ckpt <chain run> --chain_only ... (only that; writes chain_f_<split>.json)
 """
 import argparse
 import json
@@ -44,9 +46,11 @@ def excl_cumsum(x):
 
 @torch.no_grad()
 def score_batch(model, cat, ids, mask, K, T, I):
-    """Exact MFD scores for one user batch. Returns per-candidate tensors (flat over users)."""
+    """Exact MFD scores for one user batch, 1 + L decoder passes. Returns per-candidate tensors (flat over users).
+    Candidates are ordered by user, then kept-f rank (slot = user * K + f rank), then item id within f."""
     dev = ids.device
     B = ids.shape[0]
+    L = cat.L
     enc = model.encoder(input_ids=ids, attention_mask=mask, return_dict=True).last_hidden_state
     start = model.config.decoder_start_token_id
     ar = torch.arange(B, device=dev)
@@ -58,40 +62,48 @@ def score_batch(model, cat, ids, mask, K, T, I):
     rows = ar.repeat_interleave(K)
     ftok = cat.tok[0][fflat]
     z = torch.full_like(ftok, start)
-    # pass 2: <T> and <I> after each kept f
+    # pass 2: <T> and <I> after each kept f -> level-1 codes of both branches
+    lv_t, lv_i = cat.levels["t"], cat.levels["i"]
     dec2 = torch.cat([torch.stack([z, ftok, torch.full_like(ftok, T)], 1),
                       torch.stack([z, ftok, torch.full_like(ftok, I)], 1)])
-    lp2t, lp2i = model.last_logprobs(enc, mask, torch.cat([rows, rows]), dec2, cols=[cat.tok[1], cat.tok[3]])
-    lpt1, lpi1 = lp2t[:BK], lp2i[BK:]                                       # (BK, n_t1), (BK, n_i1)
-    # pass 3: every catalog prefix (f, t1) / (f, i1) under the kept f
-    seqs, meta = [], {}
-    for name, branch_tok, lvl in (("t", T, 1), ("i", I, 3)):
-        P = cat.pref[name]
-        cnt = P["cnt"][fflat]
-        slot = torch.arange(BK, device=dev).repeat_interleave(cnt)
-        st = excl_cumsum(cnt)
-        local = torch.arange(len(slot), device=dev) - st[slot]
-        code1 = P["code"][P["ptr"][fflat[slot]] + local]
-        dec3 = torch.stack([torch.full_like(slot, start), ftok[slot], torch.full_like(slot, branch_tok),
-                            cat.tok[lvl][code1]], 1)
-        seqs.append((rows[slot], dec3))
-        meta[name] = dict(start=st, n=len(slot))
-    lp3t = model.last_logprobs(enc, mask, seqs[0][0], seqs[0][1], cols=[cat.tok[2]])[0]
-    lp3i = model.last_logprobs(enc, mask, seqs[1][0], seqs[1][1], cols=[cat.tok[4]])[0]
+    lp2t, lp2i = model.last_logprobs(enc, mask, torch.cat([rows, rows]), dec2, cols=[cat.tok[lv_t[0]], cat.tok[lv_i[0]]])
+    lp = {("t", 0): lp2t[:BK], ("i", 0): lp2i[BK:]}                          # (BK, n codes at level 1)
+    meta = {}
+    n_pref = {"t": 0, "i": 0}
+    # passes 3 .. L+1: every catalog prefix (f, c_1..c_d) under the kept f -> level d+1 codes
+    for d in range(1, L):
+        for name, branch_tok in (("t", T), ("i", I)):
+            lv = cat.levels[name]
+            P = cat.pref[(name, d)]
+            cnt = P["cnt"][fflat]
+            slot = torch.arange(BK, device=dev).repeat_interleave(cnt)
+            st = excl_cumsum(cnt)
+            local = torch.arange(len(slot), device=dev) - st[slot]
+            codes = P["code"][P["ptr"][fflat[slot]] + local]                  # (n, d) local codes
+            toks = torch.stack([cat.tok[lv[j]][codes[:, j]] for j in range(d)], 1)
+            dec = torch.cat([torch.full_like(slot, start)[:, None], ftok[slot][:, None],
+                             torch.full_like(slot, branch_tok)[:, None], toks], 1)
+            lp[(name, d)] = model.last_logprobs(enc, mask, rows[slot], dec, cols=[cat.tok[lv[d]]])[0]
+            meta[(name, d)] = st
+            n_pref[name] += len(slot)
     # candidates: every item whose f is kept
     cnt_c = cat.f_item_cnt[fflat]
     slot_c = torch.arange(BK, device=dev).repeat_interleave(cnt_c)
     local_c = torch.arange(len(slot_c), device=dev) - excl_cumsum(cnt_c)[slot_c]
     item = cat.items_by_f[cat.f_item_ptr[fflat[slot_c]] + local_c]
     c = cat.code[item]
-    row_t = meta["t"]["start"][slot_c] + cat.pref["t"]["item_local"][item]
-    row_i = meta["i"]["start"][slot_c] + cat.pref["i"]["item_local"][item]
     s_f = lpf_top.reshape(-1)[slot_c]
-    s_t = lpt1[slot_c, c[:, 1]] + lp3t[row_t, c[:, 2]]
-    s_i = lpi1[slot_c, c[:, 3]] + lp3i[row_i, c[:, 4]]
-    return dict(user=slot_c // K, item=item, s_f=s_f, s_t=s_t, s_i=s_i, fsel=fsel, lpf_all=lpf_all,
-                n_seq=B * (1 + 2 * K) + meta["t"]["n"] + meta["i"]["n"],
-                n_pref=(meta["t"]["n"], meta["i"]["n"]))
+    s = {}
+    for name in ("t", "i"):
+        lv = cat.levels[name]
+        v = lp[(name, 0)][slot_c, c[:, lv[0]]]
+        for d in range(1, L):
+            row = meta[(name, d)][slot_c] + cat.pref[(name, d)]["item_local"][item]
+            v = v + lp[(name, d)][row, c[:, lv[d]]]
+        s[name] = v
+    return dict(user=slot_c // K, item=item, frank=slot_c % K, s_f=s_f, s_t=s["t"], s_i=s["i"], fsel=fsel,
+                lpf_all=lpf_all, n_seq=B * (1 + 2 * K) + n_pref["t"] + n_pref["i"],
+                n_pref=(n_pref["t"], n_pref["i"]), passes=1 + L)
 
 
 def rank_lists(user, item, score, B, N):
@@ -154,8 +166,8 @@ def run_split(args, model, tokenizer, cat, split, T, I):
            "coverage": covered.float().mean().item(),
            "f_top1_acc": (frank == 0).float().mean().item(),
            f"f_top{args.k_f}_acc": (frank < args.k_f).float().mean().item(),
-           "cost": {"decoder_passes_per_user": 3, "decoder_sequences_per_user": n_seq / U,
-                    "pass3_text_prefixes_per_user": n_pref[0] / U, "pass3_image_prefixes_per_user": n_pref[1] / U,
+           "cost": {"decoder_passes_per_user": 1 + cat.L, "decoder_sequences_per_user": n_seq / U,
+                    "later_pass_text_prefixes_per_user": n_pref[0] / U, "later_pass_image_prefixes_per_user": n_pref[1] / U,
                     "ms_per_user": 1000 * t_gpu / U, "peak_gpu_mem_gb": torch.cuda.max_memory_allocated() / 1e9,
                     "gpu": torch.cuda.get_device_name(0), "batch_size": args.test_batch_size},
            "modes": {}}
@@ -242,7 +254,7 @@ def sanity(args, model, tokenizer, cat, T, I):
     base = model(**inp).logits
     for b_mod, b_chk, pos in ((0, 1, 3), (1, 0, 3)):
         x = {k: v.clone() for k, v in inp.items()}
-        lvl = 1 if b_mod == 0 else 3
+        lvl = cat.levels["t" if b_mod == 0 else "i"][0]
         other = cat.tok[lvl][torch.randint(len(cat.tok[lvl]), (8,), generator=torch.Generator().manual_seed(1)).to(dev)]
         x["decoder_input_ids"][:, b_mod, pos] = other                 # t1 (text) or i1 (image) input
         x["labels"][:, b_mod, 2] = other
@@ -252,18 +264,18 @@ def sanity(args, model, tokenizer, cat, T, I):
             "other_branch_identical": bool(torch.equal(base[:, b_chk], new[:, b_chk])),
             "other_branch_max_abs_diff": float((base[:, b_chk] - new[:, b_chk]).abs().max()),
             "modified_branch_changed": bool(not torch.equal(base[:, b_mod], new[:, b_mod]))}
-    # 3) f counted once: model loss == mean CE over exactly 5 targets per example (f, t1, t2, i1, i2)
+    # 3) f counted once: model loss == mean CE over exactly 1 + 2L targets per example (f, t_1..t_L, i_1..i_L)
     out = model(**inp)
     lab = inp["labels"]
     lp = out.logits.float().log_softmax(-1)
     tok_ce = []
     for bi in range(lab.shape[0]):
         for br in range(2):
-            for p in range(4):
+            for p in range(lab.shape[2]):
                 if lab[bi, br, p] != -100:
                     tok_ce.append(-lp[bi, br, p, lab[bi, br, p]])
     manual = torch.stack(tok_ce).mean()
-    rep["f_loss_once"] = {"targets_per_example": len(tok_ce) / lab.shape[0],
+    rep["f_loss_once"] = {"targets_per_example": len(tok_ce) / lab.shape[0], "expected_targets": 1 + 2 * cat.L,
                           "image_branch_f_is_ignored": bool((lab[:, 1, 0] == -100).all()),
                           "text_branch_f_target_equals_image_f_input": bool((lab[:, 0, 0] == inp["decoder_input_ids"][:, 1, 1]).all()),
                           "model_loss": float(out.loss), "manual_loss": float(manual),
@@ -281,15 +293,17 @@ def sanity(args, model, tokenizer, cat, T, I):
             it = int(sb["item"][j])
             dec, _ = branch_tensors(cat.item_tok.cpu(), torch.tensor([it]), T, I)
             lo = model(input_ids=ids[u:u + 1], attention_mask=mask[u:u + 1], decoder_input_ids=dec.to(dev)).logits[0].float().log_softmax(-1)
-            f, t1, t2, i1, i2 = cat.item_tok[it].tolist()
-            man = lo[0, 0, f] + lo[0, 2, t1] + lo[0, 3, t2] + lo[1, 2, i1] + lo[1, 3, i2]
+            tk = cat.item_tok[it].tolist()
+            man = lo[0, 0, tk[0]]                                        # f, text branch position 0
+            for lv in range(cat.L):                                      # level lv+1 predicted at position 2 + lv
+                man = man + lo[0, 2 + lv, tk[cat.levels["t"][lv]]] + lo[1, 2 + lv, tk[cat.levels["i"][lv]]]
             vec = sb["s_f"][j] + sb["s_t"][j] + sb["s_i"][j]
             diffs.append(float((man - vec).abs()))
     rep["exact_scoring"] = {"pairs_checked": len(diffs), "max_abs_diff": max(diffs), "tolerance": 1e-4,
                             "pass": max(diffs) < 1e-4}
     rep["all_pass"] = (all(v["other_branch_identical"] and v["modified_branch_changed"]
                            for k, v in rep.items() if k.startswith("independence"))
-                       and rep["f_loss_once"]["targets_per_example"] == 5
+                       and rep["f_loss_once"]["targets_per_example"] == 1 + 2 * cat.L
                        and rep["f_loss_once"]["image_branch_f_is_ignored"]
                        and rep["f_loss_once"]["abs_diff"] < 1e-4 and rep["exact_scoring"]["pass"])
     return rep
@@ -305,9 +319,16 @@ def main():
     p.add_argument("--sanity_only", action="store_true")
     p.add_argument("--random_init", action="store_true", help="untrained MFDT5 (sanity checks before training)")
     p.add_argument("--chain_ckpt", default=None)
+    p.add_argument("--chain_only", action="store_true", help="only the chain decoder's f accuracy (--chain_ckpt)")
     args = p.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     torch.manual_seed(args.seed); random.seed(args.seed); np.random.seed(args.seed)
+    if args.chain_only:
+        for split in args.splits.split(","):
+            res = chain_f_accuracy(args, split, args.k_f)
+            json.dump(res, open(os.path.join(args.out_dir, f"chain_f_{split}.json"), "w"), indent=1)
+            print(f"[chain_f {split}]", json.dumps(res))
+        return
     if args.random_init:
         tokenizer = T5Tokenizer.from_pretrained(args.base_model, model_max_length=512)
         tokenizer.add_tokens(MFDDataset(args, "valid").get_new_tokens())

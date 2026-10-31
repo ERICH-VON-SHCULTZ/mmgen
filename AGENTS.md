@@ -81,6 +81,9 @@ are reference-only, not part of the main line.
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
   (HR@10 0.0931–0.1061) is larger than the differences we expect to measure.
 - **MFD stage 1** lives in `macrec/mfd_*.py` (new files); report `docs/MFD_REPORT.md`.
+- **MFD Parts A–C in progress (2026-10-31, seed 42):** A = MFD on 1+3+3 Instruments; B = K_f x weight sweep
+  (inference only, chosen on valid); C = multi-view history augmentation (chain + MFD, Instruments + Arts) and
+  MFD on Arts. Results go to `docs/MFD_REPORT.md` Parts A–C.
 
 ---
 
@@ -106,7 +109,9 @@ mmgen/
 │   │   ── mmgen additions (new files only; upstream files untouched, see git diff f3c9707 -- macrec) ──
 │   ├── finetune_ext.py    finetune_contrastive.train + --model_class plain|contrastive + train stats (+ examples per task)
 │   ├── md_mt_data.py      C-style multi-task datasets on one MD SID (mdshared, mdtext, mdimage, mdtrans)
-│   ├── mfd_model.py, mfd_data.py, finetune_mfd.py, mfd_eval.py   MFD stage 1: two-branch decoder, data/catalog, training entry, exact-scoring eval + sanity checks
+│   ├── mfd_model.py, mfd_data.py, finetune_mfd.py, mfd_eval.py   MFD: two-branch decoder, data/catalog (any 1+L+L SID), training entry, exact-scoring eval (1+L passes) + sanity checks
+│   ├── mfd_sweep.py       MFD wider search: K_f x score-weight sweep on VALID, chosen setting applied to test
+│   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── eval_split.py      test_ddp_save on --split valid|test + inference cost (decoder steps, ms/user)
 │   ├── cross_index/main_single.py, generate_indices_single.py   MQL4GRec single-modality tokenizer (verbatim @5ad9c27)
 │   ├── cross_index/generate_indices_tiger.py   TIGER SIDs: 3 RQ levels + appended collision index
@@ -448,7 +453,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `0ec4749`…`b0b54b4` | C/D-gap control results (report §5.2, BASELINE_REPORT §11), stale-status cleanup |
 | `d4cf286`…`6171446` | v1 reproduction recipe (`docs/MDRQVAE.md` A3), `repro_v1.sbatch`, reproducibility check, newcomer wording |
 | `15b6002`, `4c30cb2` | MFD stage 1 code (`macrec/mfd_*.py`, `sbatch/mfd/`); untrained-sanity embedding fix, `mfd_table.py` |
-| (next) | MFD stage 1 results: `docs/MFD_REPORT.md`, `mfd_paired.py`, `paired_mfd.sbatch` |
+| `93b32d9` | MFD stage 1 results: `docs/MFD_REPORT.md`, `mfd_paired.py`, `paired_mfd.sbatch` |
+| (next) | MFD Parts A–C: L-level MFD, sweep, multi-view augmentation, pack training |
 
 ---
 
