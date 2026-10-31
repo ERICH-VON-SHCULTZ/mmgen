@@ -170,21 +170,24 @@ Full resolved settings (identical for all six sets except `n_modal`; also in eac
 Non-default flags (everything else is the trainer's default): `--n_shared 1 --n_modal {2|3}
 --dead_code_reset 10 --dead_code_until 400 --fusion xattn`.
 
-Command, as run (job script `sbatch/md/tok_attempt.sbatch`; it also writes the superseded
-best-collision index and diagnostics, which v1 does not use):
+Command (job script `sbatch/md/tok_attempt.sbatch`; it also writes a best-collision index and
+diagnostics, which v1 does not use). Replace `<you>` with your own suffix: the official runs used
+`NAME=a05_122 TAG=md122_a05` / `NAME=a06_133 TAG=md133_a06`, and the job skips training when
+`final.pth` already exists in `md/<D>/tok/<NAME>/`, so reusing those names would not train anything
+and would overwrite the official control index files.
 
 ```bash
-sbatch --export=ALL,D=<D>,NAME=a05_122,TAG=md122_a05,ARGS="--n_shared 1 --n_modal 2 --dead_code_reset 10 --dead_code_until 400 --fusion xattn" sbatch/md/tok_attempt.sbatch
-sbatch --export=ALL,D=<D>,NAME=a06_133,TAG=md133_a06,ARGS="--n_shared 1 --n_modal 3 --dead_code_reset 10 --dead_code_until 400 --fusion xattn" sbatch/md/tok_attempt.sbatch
+sbatch --export=ALL,D=<D>,NAME=a05_122_<you>,TAG=md122_a05_<you>,ARGS="--n_shared 1 --n_modal 2 --dead_code_reset 10 --dead_code_until 400 --fusion xattn" sbatch/md/tok_attempt.sbatch
+sbatch --export=ALL,D=<D>,NAME=a06_133_<you>,TAG=md133_a06_<you>,ARGS="--n_shared 1 --n_modal 3 --dead_code_reset 10 --dead_code_until 400 --fusion xattn" sbatch/md/tok_attempt.sbatch
 ```
 
 Equivalent direct call inside the container (what the job runs):
 
 ```bash
 cd /scratch/yw8866/mmgen/macrec/cross_index
-python -u main_mdrqvae.py --dataset <D> --out_dir /scratch/yw8866/mmgen_runs/md/<D>/tok/a05_122 \
+python -u main_mdrqvae.py --dataset <D> --out_dir /scratch/yw8866/mmgen_runs/md/<D>/tok/a05_122_<you> \
     --n_shared 1 --n_modal 2 --dead_code_reset 10 --dead_code_until 400 --fusion xattn
-# 1+3+3: --out_dir .../a06_133 and --n_modal 3
+# 1+3+3: --out_dir .../a06_133_<you> and --n_modal 3
 ```
 
 Outputs in `--out_dir`: `run_config.json`, `train_log.jsonl`, `best.pth` (superseded rule),
@@ -193,9 +196,10 @@ Outputs in `--out_dir`: `run_config.json`, `train_log.jsonl`, `best.pth` (supers
 ### A3.4 Stage 2: reassignment (official index, no extra token)
 
 ```bash
-sbatch --export=ALL,D=<D>,NAME=a05_122,TAG=md122_a05_ep500_reassign,CKPT=final sbatch/md/reassign.sbatch
-sbatch --export=ALL,D=<D>,NAME=a06_133,TAG=md133_a06_ep500_reassign,CKPT=final sbatch/md/reassign.sbatch
-# direct: cd macrec/cross_index && python -u reassign_md.py --ckpt <out_dir>/final.pth --tag md122_a05_ep500_reassign
+sbatch --export=ALL,D=<D>,NAME=a05_122_<you>,TAG=md122_a05_ep500_reassign_<you>,CKPT=final sbatch/md/reassign.sbatch
+sbatch --export=ALL,D=<D>,NAME=a06_133_<you>,TAG=md133_a06_ep500_reassign_<you>,CKPT=final sbatch/md/reassign.sbatch
+# direct: cd macrec/cross_index && python -u reassign_md.py --ckpt <out_dir>/final.pth --tag md122_a05_ep500_reassign_<you>
+# (official v1 used NAME=a05_122 / a06_133 and TAG=md122_a05_ep500_reassign / md133_a06_ep500_reassign)
 ```
 
 Writes `mmgen_runs/data/<D>/<D>.index_<tag>.json` (the index the T5 jobs read) and, in the
@@ -206,9 +210,12 @@ A2; it has no randomness. `reassign.sbatch` then runs `md_diagnostics.py` on the
 ### A3.5 Stage 3: freeze and lock
 
 ```bash
+# how v1 was frozen (done; v1 is locked and the tool refuses to touch it again)
 python3 sbatch/tools/freeze_md_sids.py --dataset <D> --cfg 122 --version v1   # and --cfg 133
 python3 sbatch/tools/freeze_md_sids.py --dataset <D> --cfg 122 --version v1 --lock
 ```
+Your own sets do not need freezing; to propose one as a new official version, discuss it first
+(it would become v2).
 
 Copies `final.pth` → `tokenizer.pth`, the index → `index.json` (+ `index.sha256`), the reassignment
 summary and diagnostics into `sids/v1/<D>/<cfg>/`; `--lock` writes `STATUS = v1 locked` and makes
