@@ -38,7 +38,7 @@ No cross-domain pre-training was used. No hyperparameter was tuned after seeing 
 | A TIGER-text | **miss**, 3 seeds (−5.5% / −7.8%) | **miss**, 3 seeds (−15.5% / −18.0%) | **match**, 3 seeds (+3.3% / +4.1%) |
 | B TIGER-image | 3 seeds, no published target | 3 seeds, no published target | 3 seeds, no published target |
 | E-norm early fusion (rescaled, official) | seed 42, no published target | seed 42 | seed 42 |
-| E-raw early fusion | seed 42 | seed 42 trained (21335768), eval 21450640 queued | seed 42 trained, eval 21450641 queued |
+| E-raw early fusion | seed 42 | seed 42 | seed 42 |
 | C MQL4GRec (no pre-training) | **match**, 3 seeds | **match**, 3 seeds | **match**, 3 seeds |
 | D MACRec, spec / paper setting (`macrecpaper`) | **match**, 3 seeds | **miss**, 3 seeds (−5.6% / −6.3%) | **miss**, 3 seeds (−5.4% / −4.5%) |
 | D MACRec, repo as shipped (`macrec`) | **miss**, 1 seed (−10.4% / −9.3%) | not run | not run |
@@ -344,7 +344,7 @@ tokenizer input differs from A/B (`macrec/data_process/fuse_features.py`; job ca
 | variant | input | status |
 |---|---|---|
 | **E-norm (official, `fnormj`)** | L2-normalize text and image separately, concatenate, multiply the joint vector by c, so the joint mean length equals A's mean text length (each half ≈ c). c = mean train-item text norm / √2, computed once from training items (items[:-2]) and not tuned: Instruments 37.868 (6,240 items), Arts 37.359, Games 36.744 | done, seed 42 |
-| E-raw (`fraw`) | raw concat (text norm ≈ 53.5 vs image ≈ 17.7 on Instruments: text-dominated) | Instruments seed 42; Arts/Games trained (tokenizer 21335767, T5 21335768), evals queued |
+| E-raw (`fraw`) | raw concat (text norm ≈ 53.5 vs image ≈ 17.7 on Instruments: text-dominated) | Instruments seed 42; Arts/Games seed 42 (tokenizer 21335767, T5 21335768, evals 21450640/41 on H100) |
 | E-norm unscaled (`fnormunscaled`) | L2-normalized halves, no scale | **failed**: codebook collapse on Instruments (levels used [49, 30, 14], collision 42.86%); not trained |
 | E-norm ×53 (`fnorm`) | each half × mean text norm (joint length ≈ √2 × A's) | superseded by `fnormj` (user decision); kept as a record: test HR@10 / NDCG@10 Instruments 0.1044 / 0.0811, Arts 0.0925 / 0.0578. Job 20981380 (its seeds 43/44) was cancelled |
 
@@ -353,12 +353,16 @@ tokenizer input differs from A/B (`macrec/data_process/fuse_features.py`; job ca
 | dataset | E-norm HR@1 / HR@5 / HR@10 / NDCG@5 / NDCG@10 | E-raw HR@10 / NDCG@10 | A (3-seed) | B (3-seed) |
 |---|---|---|---|---|
 | Instruments | 0.0651 / 0.0877 / 0.1055 / 0.0765 / 0.0822 | 0.1132 / 0.0870 | 0.1154 / 0.0876 | 0.1139 / 0.0883 |
-| Arts | 0.0275 / 0.0628 / 0.0825 / 0.0457 / 0.0520 | queued | 0.0986 / 0.0661 | 0.0957 / 0.0657 |
-| Games | 0.0180 / 0.0530 / 0.0843 / 0.0354 / 0.0454 | queued | 0.0885 / 0.0471 | 0.0782 / 0.0415 |
+| Arts | 0.0275 / 0.0628 / 0.0825 / 0.0457 / 0.0520 | 0.0902 / 0.0565 | 0.0986 / 0.0661 | 0.0957 / 0.0657 |
+| Games | 0.0180 / 0.0530 / 0.0843 / 0.0354 / 0.0454 | 0.0859 / 0.0448 | 0.0885 / 0.0471 | 0.0782 / 0.0415 |
 
 E-norm is below the better of A/B on every dataset (Instruments −8.6%, Arts −16.3%, Games −4.7%
 HR@10) and far below C/D. It beats B only on Games. E-raw beats E-norm on Instruments by +0.0077
-HR@10, more than the seed spread, so E-raw was extended to Arts and Games (agreed rule).
+HR@10, more than the seed spread, so E-raw was extended to Arts and Games (agreed rule). There E-raw
+beats E-norm on Arts (+0.0077 HR@10) and ties it on Games (+0.0016 HR@10, −0.0006 NDCG@10); it stays
+below A on both (Arts −0.0084, Games −0.0026 HR@10). Full E-raw metrics (HR@1 / HR@5 / HR@10 / NDCG@5 /
+NDCG@10): Arts 0.0283 / 0.0692 / 0.0902 / 0.0498 / 0.0565, Games 0.0153 / 0.0529 / 0.0859 / 0.0342 / 0.0448
+(5 passes; evaluated on an H100, 17.5 ms/user, not comparable to the H200 cost files).
 Under the final-epoch checkpoint rule (used by MD-RQ-VAE) the E-norm Instruments index is
 byte-identical to the best-collision one, and a T5 rerun gives the same numbers
 (`tiger_fnormj_ep500`, 0.1055 / 0.0822).

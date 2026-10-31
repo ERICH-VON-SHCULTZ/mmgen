@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-30 (C/D-gap controls queued: MQL4GRec SIDs seqrec-only, MD multi-task).
+Last updated: 2026-10-30 (E-raw done on all datasets; C/D-gap controls running).
 
 ---
 
@@ -55,8 +55,8 @@ are reference-only, not part of the main line.
   0.0825 / 0.0520; Games MD 1+3+3 0.0899 / 0.0475 (1+2+2 0.0885 / 0.0468) vs A 0.0885 / 0.0471,
   E-norm 0.0843 / 0.0454. MD > E-norm everywhere; MD ≥ A (Arts within A's seed spread, Games tie);
   C/D single lists stay above MD. Evals 21382066–21382069 all ran on H200 (cost comparable).
-- **In flight:** E-raw on Arts/Games (tokenizer 21335767 done → T5 21335768 queued; then eval),
-  triggered by the agreed rule (E-raw − E-norm on Instruments = +0.0077 HR@10 > seed spread).
+- **E-raw done on Arts/Games (2026-10-30):** 0.0902 / 0.0565 and 0.0859 / 0.0448; MD beats E-raw and
+  E-norm on every dataset (report §5.1).
 - **C/D-gap controls (queued 2026-10-30, seed 42, Instruments + Arts):** (1) C's MQL4GRec SIDs
   trained seqrec-only with TIGER settings, one run per modality (`mqltext`, `mqlimage`; train
   21422951, evals 21422953–56); (2) MD 1+2+2 v1 SID with C-style multi-task training, one SID
@@ -337,7 +337,7 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | MD 1+2+2 (official SID) | 6 | 0.1181 / 0.0932 | 0.1059 / 0.0739 | 0.0885 / 0.0468 |
 | MD 1+3+3 (official SID) | 8 | 0.1161 / 0.0916 | 0.1027 / 0.0726 | 0.0899 / 0.0475 |
 | E-norm (rescaled) | 5 | 0.1055 / 0.0822 | 0.0825 / 0.0520 | 0.0843 / 0.0454 |
-| E-raw | 5 | 0.1132 / 0.0870 | pending | pending |
+| E-raw | 5 | 0.1132 / 0.0870 | 0.0902 / 0.0565 | 0.0859 / 0.0448 |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
 
 Earlier per-seed notes:

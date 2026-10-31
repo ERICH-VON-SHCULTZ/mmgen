@@ -260,6 +260,8 @@ Official v1 sets, same settings as Instruments. Test HR@1 / HR@10 / NDCG@10, dec
 | Games | 1+3+3 | 0.0174 / 0.0899 / 0.0475 | 8 | 32.3 | 173 of 183 |
 
 - MD beats E-norm on both datasets (Arts by a wide margin, +28% HR@10; Games +5–7%).
+- E-raw (evals 21450640/41, H100): Arts 0.0902 / 0.0565, Games 0.0859 / 0.0448 test HR@10 / NDCG@10;
+  MD beats it on both (Arts +17% HR@10, Games +3–5%).
 - Arts: MD 1+2+2 is above A's 3-seed mean (+0.0073 HR@10, ≈1.1 std). Games: MD ties A, beats B.
 - 1+3+3 wins only on Games, by less than one A std.
 - The eval jobs were first pinned to H200 (21335753/55), waited on the tandon H200 group cap, and were

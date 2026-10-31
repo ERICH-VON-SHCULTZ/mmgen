@@ -6,7 +6,7 @@ beam search with 20 beams, and a checkpoint chosen on validation loss. Raw numbe
 detail: `docs/MDRQVAE_LOG.md`. Official SID and the current implementation: `docs/MDRQVAE.md` Part A.
 
 Status: v1 locked (2026-10-28). Chain decoder done on all three datasets for 1+2+2 and 1+3+3 (§5,
-§5.1). Pending: E-raw on Arts/Games (tokenizer done, T5 job 21335768 queued).
+§5.1). E-raw done on all three datasets. C/D-gap controls running (`docs/MDRQVAE_LOG.md`, last section).
 
 ---
 
@@ -129,7 +129,8 @@ Cost is measured on an H200 with no other job on the GPU.
 ### 5.1 Arts and Games (seed 42, TEST; train 21258335 / 21260038, eval 21382066–21382069 on H200)
 
 Same decoder settings as Instruments. A and B are 3-seed means ± std; C/D are the better single
-list by 3-seed mean (C = image list, D = text list on both datasets); E-raw is pending.
+list by 3-seed mean (C = image list, D = text list on both datasets). E-raw was evaluated on an H100
+(eval 21450640/41), so its ms/user is not comparable.
 
 **Arts**
 
@@ -141,7 +142,7 @@ list by 3-seed mean (C = image list, D = text list on both datasets); E-raw is p
 | A TIGER-text, 3 seeds | 4 | — | — | 0.0986 ± 0.0068 | — | 0.0661 ± 0.0052 | 5 | — |
 | B TIGER-image, 3 seeds | 4 | — | — | 0.0957 ± 0.0015 | — | 0.0657 ± 0.0019 | 5 | — |
 | E-norm | 4 | 0.0275 | 0.0628 | 0.0825 | 0.0457 | 0.0520 | 5 | 21.4 |
-| E-raw | 4 | pending | | | | | 5 | |
+| E-raw | 4 | 0.0283 | 0.0692 | 0.0902 | 0.0498 | 0.0565 | 5 | (17.5, H100) |
 | C MQL4GRec, best single list | 4 | — | — | 0.1217 | — | 0.0871 | 5 | — |
 | D MACRec, best single list | 4 | — | — | 0.1218 | — | 0.0861 | 5 | — |
 
@@ -155,7 +156,7 @@ list by 3-seed mean (C = image list, D = text list on both datasets); E-raw is p
 | A TIGER-text, 3 seeds | 4 | — | — | 0.0885 ± 0.0018 | — | 0.0471 ± 0.0011 | 5 | — |
 | B TIGER-image, 3 seeds | 4 | — | — | 0.0782 ± 0.0030 | — | 0.0415 ± 0.0018 | 5 | — |
 | E-norm | 4 | 0.0180 | 0.0530 | 0.0843 | 0.0354 | 0.0454 | 5 | 21.7 |
-| E-raw | 4 | pending | | | | | 5 | |
+| E-raw | 4 | 0.0153 | 0.0529 | 0.0859 | 0.0342 | 0.0448 | 5 | (17.5, H100) |
 | C MQL4GRec, best single list | 4 | — | — | 0.0970 | — | 0.0514 | 5 | — |
 | D MACRec, best single list | 4 | — | — | 0.0976 | — | 0.0513 | 5 | — |
 
@@ -164,6 +165,9 @@ Best T5 epochs: Arts 1+2+2 176 of 186, 1+3+3 198 of 198.1 (cap; 21,000 steps); G
 
 - **MD vs E-norm:** MD wins on both datasets. Arts 1+2+2 HR@10 +28% (0.1059 vs 0.0825), NDCG@10 +42%.
   Games: 1+2+2 +5% / +3%, 1+3+3 +7% / +5%. On Games E-norm's HR@1 (0.0180) is above both MD configs.
+- **MD vs E-raw:** MD wins on both datasets. Arts 1+2+2 +0.0157 HR@10 (+17%) / +0.0174 NDCG@10 (+31%);
+  Games 1+2+2 +0.0026 / +0.0020 (+3% / +4%), 1+3+3 +0.0040 / +0.0027. E-raw beats E-norm on Arts
+  (+0.0077 HR@10, as on Instruments) and ties it on Games; it stays below A on both.
 - **MD vs A/B:** Arts: MD 1+2+2 is above A's 3-seed mean by +0.0073 HR@10 (≈1.1 std) and +0.0078
   NDCG@10 (≈1.5 std), and above B by more. Against A at the same seed (42) the gap is +0.0128 /
   +0.0117. Games: MD ties A (1+2+2 equals A's mean on HR@10; 1+3+3 is +0.0014 ≈ 0.8 std) and clearly
@@ -179,8 +183,6 @@ Best T5 epochs: Arts 1+2+2 176 of 186, 1+3+3 198 of 198.1 (cap; 21,000 steps); G
 
 ## 6. Blockers and open items
 
-- **E-raw on Arts/Games:** tokenizer done (21335767), T5 job 21335768 queued; then H200 eval and the
-  E-raw rows of §5.1.
 - **Next step: MFD** (`docs/MFD.md`, design not final), on the same v1 sets as the chain decoder.
 - **One seed:** several gaps are near seed noise. Final paper comparisons need seeds 42/43/44, at
   least on Arts, where TIGER-text's HR@10 ranges from 0.0931 to 0.1061 across seeds.
