@@ -69,11 +69,12 @@ are reference-only, not part of the main line.
   are not single-modality controls; decoding is identical for all runs. **Result:** C's SIDs alone
   are 0.003–0.010 HR@10 below TIGER's; C's multi-task recipe adds +0.019 to +0.031 (the whole C/D
   lead); copied onto MD's single sequence it does not help (−0.005 HR@10 on both datasets).
-- **Next:** MFD on the v1 sets (`docs/MFD.md`, design not final), after discussion with the user.
+- **MFD stage 1 in progress (2026-10-31):** two-branch decoder on Instruments 1+2+2 v1, seed 42, vs the MD
+  chain-decoder control (train 21513722 → `mmgen_runs/mfd/Instruments/mfd122_stage1/seed42/`).
 - **Seed policy:** seed 42 only while iterating. The final paper comparisons (MD-RQ-VAE vs E, MFD
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
   (HR@10 0.0931–0.1061) is larger than the differences we expect to measure.
-- **MFD is NOT yet ported into MACRec.** The plan and the open decisions are in `docs/PORTING.md`.
+- **MFD stage 1** lives in `macrec/mfd_*.py` (new files); report `docs/MFD_REPORT.md` (when done).
 
 ---
 
@@ -99,6 +100,7 @@ mmgen/
 │   │   ── mmgen additions (new files only; upstream files untouched, see git diff f3c9707 -- macrec) ──
 │   ├── finetune_ext.py    finetune_contrastive.train + --model_class plain|contrastive + train stats (+ examples per task)
 │   ├── md_mt_data.py      C-style multi-task datasets on one MD SID (mdshared, mdtext, mdimage, mdtrans)
+│   ├── mfd_model.py, mfd_data.py, finetune_mfd.py, mfd_eval.py   MFD stage 1: two-branch decoder, data/catalog, training entry, exact-scoring eval + sanity checks
 │   ├── eval_split.py      test_ddp_save on --split valid|test + inference cost (decoder steps, ms/user)
 │   ├── cross_index/main_single.py, generate_indices_single.py   MQL4GRec single-modality tokenizer (verbatim @5ad9c27)
 │   ├── cross_index/generate_indices_tiger.py   TIGER SIDs: 3 RQ levels + appended collision index
@@ -151,6 +153,7 @@ mmgen/
                                    train_examples.py (examples per epoch/task, optimizer steps, examples seen)
     ├── md/tok_attempt.sbatch      MD-RQ-VAE tokenizer attempt: train -> SIDs -> diagnostics
     ├── md/reassign.sbatch         reassignment + diagnostics on the new index
+    ├── mfd/train_mfd.sbatch, mfd/eval_mfd.sbatch   MFD stage 1 train (sanity on untrained model first) / eval on H200
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -432,7 +435,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `a6f8637` | Arts/Games chain decoder results (report §5.1) |
 | `5f782e1`…`856de37` | C/D-gap controls code, E-raw Arts/Games results |
 | `0ec4749`…`b0b54b4` | C/D-gap control results (report §5.2, BASELINE_REPORT §11), stale-status cleanup |
-| (next) | v1 reproduction recipe (`docs/MDRQVAE.md` A3), `repro_v1.sbatch`, reproducibility check |
+| `d4cf286`…`6171446` | v1 reproduction recipe (`docs/MDRQVAE.md` A3), `repro_v1.sbatch`, reproducibility check, newcomer wording |
+| (next) | MFD stage 1 code (`macrec/mfd_*.py`, `sbatch/mfd/`) |
 
 ---
 
