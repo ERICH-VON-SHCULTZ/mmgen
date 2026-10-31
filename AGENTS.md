@@ -25,7 +25,7 @@ Baselines to compare against: **TIGER**, **MQL4GRec**, **MACRec**. The working c
 reference. Behavior modeling, rerankers, history forcing and Tmall pipelines from the old project
 are reference-only, not part of the main line.
 
-**Current status (2026-10-26):**
+**Current status (2026-10-31):**
 - Repo, docs and environment are done.
 - The TIGER smoke test on Instruments passes.
 - **Baseline reproduction done** (report: `docs/BASELINE_REPORT.md`, numbers in §7).
@@ -35,7 +35,7 @@ are reference-only, not part of the main line.
 - **Baseline decisions (2026-10-26, report §0):** our reproduced numbers are the reference
   (published ones listed alongside); `macrecpaper` is the official MACRec; TIGER is accepted as our
   reading of the paper; data and features are frozen (Games banner images kept).
-- **Done:** TIGER A/B on Arts/Games (seeds 42–44) and Instruments seeds 43/44 (evaluated; report update pending).
+- **Done:** TIGER A/B on Arts/Games (seeds 42–44) and Instruments seeds 43/44 (in `docs/BASELINE_REPORT.md`).
 - **MD-RQ-VAE built (2026-10-27)**: `macrec/cross_index/models/mdrqvae.py`; final configs a05
   (1+2+2) and a06 (1+3+3), attempt log `docs/MDRQVAE_LOG.md`.
 - **Official MD-RQ-VAE SID (2026-10-27):** the distance-reassigned index with no trailing token
@@ -426,7 +426,7 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `69b23fd`…`a7e6801` | Instruments chain decoder results, controls, `docs/MDRQVAE_REPORT.md`, v1 lock, docs restructure |
 | `a6f8637` | Arts/Games chain decoder results (report §5.1) |
 | `5f782e1`…`856de37` | C/D-gap controls code, E-raw Arts/Games results |
-| (next) | C/D-gap control results (report §5.2, BASELINE_REPORT §11) |
+| `0ec4749`…(next) | C/D-gap control results (report §5.2, BASELINE_REPORT §11), stale-status cleanup |
 
 ---
 

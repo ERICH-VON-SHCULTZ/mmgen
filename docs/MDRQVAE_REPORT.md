@@ -21,7 +21,7 @@ single list, with the merged list in its own column.
 | A TIGER-text, 3 seeds | 0.1154 / 0.0876 | 0.0986 / 0.0661 | 0.0885 / 0.0471 |
 | B TIGER-image, 3 seeds | 0.1139 / 0.0883 | 0.0957 / 0.0657 | 0.0782 / 0.0415 |
 | E-norm (rescaled, c = mean train-item text norm / √2), seed 42 | 0.1055 / 0.0822 | 0.0825 / 0.0520 | 0.0843 / 0.0454 |
-| E-raw, seed 42 | 0.1132 / 0.0870 | queued | queued |
+| E-raw, seed 42 | 0.1132 / 0.0870 | 0.0902 / 0.0565 | 0.0859 / 0.0448 |
 | C MQL4GRec, best single list, 3 seeds | 0.1287 / 0.0988 | 0.1217 / 0.0871 | 0.0970 / 0.0514 |
 | D MACRec (paper setting), best single list, 3 seeds | 0.1302 / 0.0997 | 0.1218 / 0.0861 | 0.0976 / 0.0513 |
 | C / D merged (2 beam searches), 3 seeds | 0.1310 / 0.1006, 0.1310 / 0.1011 | 0.1262 / 0.0898, 0.1255 / 0.0893 | 0.1007 / 0.0537, 0.1020 / 0.0539 |
@@ -29,8 +29,9 @@ single list, with the merged list in its own column.
 The E-norm constant c was computed once from training items and not tuned: Instruments 37.868,
 Arts 37.359, Games 36.744. The E-norm tokenizer uses few first-level codes (Instruments 67, Arts
 42, Games 38 of 256). Its full-SID collision is high before the index token: 5.33%, 7.33% and 12.59%.
-E-raw beats E-norm on Instruments by more than the seed spread (+0.0077 HR@10), so E-raw is being
-extended to Arts and Games (jobs 21251957 tokenizer, 21251971 T5). Under the final-epoch checkpoint
+E-raw beats E-norm on Instruments by more than the seed spread (+0.0077 HR@10), so E-raw was
+extended to Arts and Games (tokenizer 21335767, T5 21335768, evals 21450640/41): it beats E-norm on
+Arts (+0.0077) and ties it on Games. Under the final-epoch checkpoint
 rule, the E-norm index on Instruments is byte-identical to the best-collision index. Its lowest
 collision falls at the last evaluation, so MD and E use the same rule there.
 
