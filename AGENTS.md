@@ -45,8 +45,9 @@ are reference-only, not part of the main line.
   Rule and the six frozen v1 sets (path + SHA-256) in `docs/MDRQVAE.md` §A2; all six are
   final-epoch sets (Games 1+3+3 accepted at 2.02% excl. CMI). **v1 is LOCKED (2026-10-28)**:
   never overwrite; changes become v2. Check the data-dir index against `index.sha256` before runs.
-  **Retraining does not reproduce v1** (tokenizer training is not bit-deterministic: same quality,
-  different SIDs); stage 2 on the locked `tokenizer.pth` does, exactly. Exact recipe: `docs/MDRQVAE.md` A3. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
+  Recipe to train the SIDs yourself: `docs/MDRQVAE.md` A3. A retrained set has the same quality but
+  not identical codes (expected and acceptable; acceptance list in A3.7). Reported numbers used the
+  locked v1 files. Chain and MFD runs must use the same set. The `index_md122_a05.json` /
   `index_md133_a06.json` files (extra `<x_k>` token) are kept only as the comparison point.
 - **Instruments Step 3 done (2026-10-28), report `docs/MDRQVAE_REPORT.md`:** chain decoder on the
   official SID, seed 42, test HR@10 / NDCG@10: MD 1+2+2 0.1181 / 0.0932 (better config; 6 decoder
@@ -302,7 +303,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `scontrol update` / `hold` / `nice` on our pending jobs fails with "Unspecified error" | job order can only be set at submit time (`--dependency=after:<job>`); otherwise cancel and resubmit |
 | `tokenizers.sbatch` asks for `gpu:a100` only; job 21251957 waited 17 h for an A100 | submit with `--partition=a100_tandon,h100_tandon,h200_tandon --gres=gpu:1` |
 | HF schedules `epochs × floor(batches / grad_accum)` steps, so runs can end at a fractional epoch (Arts 1+3+3: 21,000 steps = epoch 198.1) | normal; the cosine schedule has finished |
-| MD-RQ-VAE tokenizer training is not bit-deterministic (seed 42 set, but GPU kernels and sklearn k-means init are not): a rerun gives different SIDs of equal quality | never retrain to recover v1; use the locked files or `repro_v1.sbatch MODE=reassign` |
+| MD-RQ-VAE tokenizer training is not bit-deterministic (GPU kernels, sklearn k-means init): a rerun gives SIDs of the same quality but different codes | expected; check it with `docs/MDRQVAE.md` A3.7; use your own NAME/TAG so the official files are not overwritten; for exact v1 use the locked files |
 | `pack_train.sbatch` (24 CPUs, long time limit) is rejected on h200_tandon ("partition not valid for this job") | train with `--partition=a100_tandon,h100_tandon --gres=gpu:1`; H200 only for evals |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |

@@ -5,7 +5,7 @@ base): what was built, the official SIDs, and where everything lives. **Part B i
 implementation** in `legacy/grid/`, kept as the design reference (cited file:line). Part B's
 section numbers (§1–§7) are stable; other docs link to them.
 
-Reading order for a new member: Part A here (A3 = exact recipe to rebuild the locked SIDs) → `docs/MDRQVAE_REPORT.md` (results and decisions) →
+Reading order for a new member: Part A here (A3 = exact recipe to train the SIDs yourself) → `docs/MDRQVAE_REPORT.md` (results and decisions) →
 `docs/MDRQVAE_LOG.md` (every attempt and control, in order) → `docs/BASELINE_REPORT.md` (the
 baselines MD-RQ-VAE is compared against) → `docs/MFD.md` (the planned decoder; design not final).
 
@@ -107,15 +107,23 @@ Superseded (kept): `mmgen_runs/md/sids/superseded/v1_20261028/<D>/<cfg>/`, the b
 of Instruments 1+2+2 (sha256 `aa514208…`), Instruments 1+3+3, Arts 1+2+2, Arts 1+3+3
 (`73d5b133…`), Games 1+2+2 (`f5a30990…`), Games 1+3+3 (`1c1f4220…`).
 
-## A3. Appendix: how the v1 SIDs were produced, and how to reproduce them exactly
+## A3. Appendix: how the v1 SIDs were produced, and how to train them yourself
 
-**Read A3.7 first: retraining does NOT reproduce v1** (training is not bit-deterministic); stage 2
-on the locked `tokenizer.pth` does, exactly. The recipe below documents how v1 was made and how to
-make an equivalent set. Two stages per set:
-**(1) train the tokenizer** (`main_mdrqvae.py`, 500 epochs, keep `final.pth`), **(2) reassign
-collisions** (`reassign_md.py` on `final.pth`). Then `freeze_md_sids.py` copied the results into
-`sids/v1/` and `--lock` made them read-only. No step uses interaction data; the tokenizer sees
-only the item features of the whole catalog.
+This is the exact recipe behind the six v1 sets. Two stages per set: **(1) train the tokenizer**
+(`main_mdrqvae.py`, 500 epochs, keep `final.pth`), **(2) reassign collisions** (`reassign_md.py`
+on `final.pth`). Then `freeze_md_sids.py` copied the results into `sids/v1/` and `--lock` made them
+read-only. No step uses interaction data; the tokenizer sees only the item features of the whole
+catalog.
+
+**What to expect when you train it yourself.** Following this recipe gives a tokenizer of the same
+quality as v1, but the individual codes will not be identical: GPU training is not bit-for-bit
+deterministic, so each run assigns somewhat different codes. **That is expected and acceptable.**
+Check your set against the acceptance list in A3.7; if it passes, it is a valid MD-RQ-VAE SID set.
+Two practical points:
+- Give your run its own `NAME` / `--out_dir` and its own index `TAG` (e.g. `md122_a05_ep500_reassign_<you>`),
+  so you never overwrite the official files in `mmgen_runs/data/<D>/`.
+- To compare against the numbers in our reports exactly, use the locked v1 files
+  (`sids/v1/<D>/<cfg>/index.json`), which every reported MD run used.
 
 ### A3.1 Environment
 
@@ -223,49 +231,48 @@ results: `main_mdrqvae.py` changed only in its docstring, and `reassign_md.py` g
 on the codebook weights (`3e026d1`), which changes no value. `models/mdrqvae.py` and
 `generate_indices_md.py` are unchanged since `9fe6fc3`; `models/{rq,vq,layers}.py` are MACRec's own, unmodified.
 
-### A3.7 Reproduction check
+### A3.7 Checking your set (and what we measured)
 
-`sbatch/md/repro_v1.sbatch` reruns stages 1 and 2 for all six sets from scratch into
-`mmgen_runs/md/repro/<MODE>/<D>/<name>/` (v1 is never touched) and compares each new `index.json`
-with the locked one (sha256 and number of items whose SID differs); summary in
-`mmgen_runs/md/repro/repro_v1_<MODE>_<job>.tsv`. `MODE=reassign` reruns only stage 2 on a copy of
-the locked `tokenizer.pth`.
+**Acceptance list for a self-trained set** (tolerances from a full rerun of all six v1 recipes,
+below). After stage 2, read `train_log.jsonl` (last line), `reassign_<tag>.json` and
+`diagnostics_<tag>.json` (written by `sbatch/md/reassign.sbatch`):
 
-Result (2026-10-31; all on H200):
+| check | expected |
+|---|---|
+| reconstruction cosine text / image at epoch 500 | within ~0.005 of v1 (v1 values in the table below) |
+| codebook use | ≥ ~250 of 256 codes on every level |
+| full-SID collision before reassignment | ≤ ~1.2% (Games highest) |
+| after reassignment | `all_unique: true`, `shared_unchanged: true` |
+| corrected first-level CMI, items with shared images excluded | ≤ ~2% of H(t₁|f) (the v1 acceptance bar, A2) |
+
+The code numbers themselves will differ from v1; do not compare SIDs item by item.
+
+**What we measured** (2026-10-31, `sbatch/md/repro_v1.sbatch`, all on H200; outputs in
+`mmgen_runs/md/repro/`):
 
 | check | job | result |
 |---|---|---|
-| **stage 2 only** on the locked `tokenizer.pth` (`MODE=reassign`) | 21508421 | **all six MATCH** (identical sha256, 0 items differ), including the sets first built on A100 / H100 |
-| stages 1 + 2 from scratch (`MODE=full`) | 21507767 | all six DIFF: every item's SID differs |
+| full retrain + reassignment (`MODE=full`) | 21507767 | same quality as v1 on every check above; different codes |
+| reassignment only, on the locked `tokenizer.pth` (`MODE=reassign`) | 21508421 | identical to v1 for all six sets (same sha256) |
 
-**Training is not bit-reproducible.** The rerun already differs at epoch 1 (Instruments 1+3+3
-`rec_t` 0.90598 vs 0.90523) although the seed is fixed and the original ran on the same GPU type.
-Uncontrolled sources: non-deterministic GPU kernels (deterministic algorithms are not forced) and the
-first-batch k-means codebook init (scikit-learn `KMeans`, multithreaded, on GPU-computed latents).
-A rerun is an equally good but *different* tokenizer (`mmgen_runs/md/repro/repro_v1_compare.json`):
+| set | rec cos text / image, v1 → rerun | collision before reassignment | items reassigned |
+|---|---|---|---|
+| Instruments 1+2+2 | 0.9600 → 0.9606 / 0.9150 → 0.9148 | 0.38% → 0.43% | 24 → 27 |
+| Instruments 1+3+3 | 0.9659 → 0.9664 / 0.9265 → 0.9266 | 0.26% → 0.26% | 16 → 16 |
+| Arts 1+2+2 | 0.9677 → 0.9675 / 0.9136 → 0.9131 | 0.57% → 0.61% | 54 → 57 |
+| Arts 1+3+3 | 0.9676 → 0.9714 / 0.9160 → 0.9209 | 0.47% → 0.45% | 44 → 42 |
+| Games 1+2+2 | 0.9560 → 0.9538 / 0.9176 → 0.9156 | 1.02% → 1.12% | 141 → 155 |
+| Games 1+3+3 | 0.9601 → 0.9604 / 0.9223 → 0.9217 | 0.58% → 0.49% | 80 → 68 |
 
-| set | AMI v1 vs rerun, per SID position | rec cos text / image, v1 → rerun | collision before reassignment | items reassigned |
-|---|---|---|---|---|
-| Instruments 1+2+2 | 0.26 0.08 0.01 / 0.10 0.01 | 0.9600 → 0.9606 / 0.9150 → 0.9148 | 0.38% → 0.43% | 24 → 27 |
-| Instruments 1+3+3 | 0.20 0.09 0.01 0.00 / 0.13 0.02 0.01 | 0.9659 → 0.9664 / 0.9265 → 0.9266 | 0.26% → 0.26% | 16 → 16 |
-| Arts 1+2+2 | 0.31 0.06 0.00 / 0.15 0.02 | 0.9677 → 0.9675 / 0.9136 → 0.9131 | 0.57% → 0.61% | 54 → 57 |
-| Arts 1+3+3 | 0.23 0.05 0.00 0.00 / 0.16 0.03 0.01 | 0.9676 → 0.9714 / 0.9160 → 0.9209 | 0.47% → 0.45% | 44 → 42 |
-| Games 1+2+2 | 0.38 0.21 0.02 / 0.34 0.09 | 0.9560 → 0.9538 / 0.9176 → 0.9156 | 1.02% → 1.12% | 141 → 155 |
-| Games 1+3+3 | 0.35 0.28 0.03 0.01 / 0.40 0.11 0.07 | 0.9601 → 0.9604 / 0.9223 → 0.9217 | 0.58% → 0.49% | 80 → 68 |
+Codebook use was 253–256 per level in both. How much the codes differ: the item grouping on the
+shared level agrees with v1 at AMI 0.20–0.38, deeper levels near 0
+(`mmgen_runs/md/repro/repro_v1_compare.json`). The run-to-run differences come from GPU kernels
+and the first-batch k-means codebook initialization, which are not forced to be deterministic.
+Whether a retrained set changes the downstream T5 numbers by more than seed noise has not been
+measured yet (`docs/MDRQVAE_REPORT.md` §6).
 
-(positions: shared, text levels / image levels; codebook use 253–256 per level in both). Quality
-matches; the item partition does not: the shared level agrees only at AMI 0.20–0.38, about as much
-as the text and image TIGER tokenizers agree with each other (0.27–0.33).
-
-**Rules that follow:**
-1. **v1 is defined by its locked files**, not by the recipe: use `sids/v1/<D>/<cfg>/index.json`
-   (check `index.sha256`) or regenerate it with stage 2 from the locked `tokenizer.pth`. Never
-   retrain a tokenizer to "recover" v1.
-2. A retrained tokenizer is a new set (v2 or a variance run), even with identical settings.
-3. Tokenizer retraining is a source of variance that the current results do not measure (they vary
-   only the T5 seed). See `docs/MDRQVAE_REPORT.md` §6.
-
-Regenerate v1 exactly (stage 2 only; writes under `mmgen_runs/md/repro/reassign/`):
+Rebuild the exact v1 index from the locked tokenizer (stage 2 only; writes under
+`mmgen_runs/md/repro/reassign/`, never into v1 or the data dir):
 
 ```bash
 sbatch --export=ALL,MODE=reassign sbatch/md/repro_v1.sbatch            # all six; or SETS="Arts:122"

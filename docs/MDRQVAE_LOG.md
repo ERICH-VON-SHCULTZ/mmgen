@@ -316,6 +316,7 @@ Results (test HR@1 / HR@10 / NDCG@10; full table with steps and examples: report
 - Stage 2 only (reassignment on the locked `tokenizer.pth`), job 21508421: all six sets reproduce
   v1 exactly (same sha256).
 - Full retrain with the identical recipe and seed, job 21507767: all six differ in every item's SID.
-  Training is not bit-deterministic (differs from epoch 1; GPU kernels and the k-means init are
-  uncontrolled). Quality is equivalent (reconstruction ±0.005, collision and reassignment counts
-  similar) but the partition is not (shared-level AMI 0.20–0.38). v1 = the locked files.
+  Training is not bit-deterministic (GPU kernels, k-means init). Quality is equivalent
+  (reconstruction ±0.005, collision and reassignment counts similar); codes differ (shared-level AMI
+  0.20–0.38). Accepted: a self-trained set that passes `docs/MDRQVAE.md` A3.7 is valid; reported
+  numbers use the locked v1 files.
