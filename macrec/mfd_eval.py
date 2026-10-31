@@ -312,7 +312,16 @@ def main():
         tokenizer = T5Tokenizer.from_pretrained(args.base_model, model_max_length=512)
         tokenizer.add_tokens(MFDDataset(args, "valid").get_new_tokens())
         config = T5Config.from_pretrained(args.base_model)
-        model = MFDT5(config); model.resize_token_embeddings(len(tokenizer))
+        model = MFDT5(config); n_old = model.shared.weight.shape[0]
+        model.resize_token_embeddings(len(tokenizer))
+        # HF mean-resizing gives every added token (all SID codes, <T>, <I>) the SAME embedding row, so an
+        # untrained model cannot tell one code from another and the independence check would be vacuous.
+        # For this sanity copy only, give the added rows distinct random values (training is unaffected).
+        with torch.no_grad():
+            w = model.shared.weight
+            w[n_old:] = torch.randn_like(w[n_old:]) * w[:n_old].std()
+            if model.lm_head.weight.data_ptr() != w.data_ptr():
+                model.lm_head.weight[n_old:] = torch.randn_like(model.lm_head.weight[n_old:]) * model.lm_head.weight[:n_old].std()
     else:
         tokenizer = T5Tokenizer.from_pretrained(args.ckpt_path)
         model = MFDT5.from_pretrained(args.ckpt_path)
