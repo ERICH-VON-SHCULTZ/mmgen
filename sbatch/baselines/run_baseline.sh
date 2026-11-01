@@ -6,7 +6,12 @@ set -euo pipefail
 source /ext3/env.sh && conda activate py310
 REPO=/scratch/yw8866/mmgen; M=${MACREC_DIR:-$REPO/macrec}   # MACREC_DIR: a frozen copy of macrec/ made at job start
 DATA=/scratch/yw8866/mmgen_runs/data/
-OUT=/scratch/yw8866/mmgen_runs/baselines/$D/$B/seed$SEED; mkdir -p $OUT/eval/valid $OUT/eval/test
+# DRYRUN=1: the exact training command through macrec/config_dryrun.py, which stops before trainer.train() and dumps
+# the resolved args, TrainingArguments and model config to $OUT/dryrun.json; $OUT is a scratch dir (the real run dir
+# is never touched). Used for the config diff against C (docs/PLUGIN_REPORT.md §2).
+DRYRUN=${DRYRUN:-0}
+if [ "$DRYRUN" = 1 ]; then OUT=/scratch/yw8866/mmgen_runs/plugin/dryrun/$D/$B/seed$SEED; rm -rf $OUT; mkdir -p $OUT
+else OUT=/scratch/yw8866/mmgen_runs/baselines/$D/$B/seed$SEED; mkdir -p $OUT/eval/valid $OUT/eval/test; fi
 PORT=$((20000 + RANDOM % 20000))
 STAGE=${STAGE:-all}; NW=${NW:-2}
 
@@ -32,6 +37,11 @@ case $B in
   tiger_fraw)  IDX=.index_fraw_tiger.json;   IIDX=$IDX; TASKS=seqrec; TESTS=seqrec; MC=plain; BS=256;  LR=5e-4 ;;
   mql)         IDX=.index_lemb_mql.json; IIDX=.index_vitemb_mql.json
                TASKS=seqrec,seqimage,item2image,image2item,fusionseqrec; TESTS="seqrec seqimage"; MC=plain; BS=256; LR=5e-4 ;;
+  # Plug-in (docs/PLUGIN_REPORT.md): MD v1 SID split into a text view [f t..] and an image view [f i..] used as C's two
+  # modality SIDs (macrec/cross_index/plugin_views.py); everything else = mql. plug122/plug133 = main (f is <a_k> /
+  # <A_k>), plug122s/plug133s = shared-f (<s_k> in both views).
+  plug122|plug122s|plug133|plug133s) IDX=.index_${B}_text.json; IIDX=.index_${B}_image.json
+               TASKS=seqrec,seqimage,item2image,image2item,fusionseqrec; TESTS="seqrec seqimage"; MC=plain; BS=256; LR=5e-4 ;;
   macrec|macrecpaper) IDX=.index_lemb_$B.json; IIDX=.index_vitemb_$B.json
                TASKS=seqrec,seqimage,item2image,image2item,seqimage2item,seqitem2image; TESTS="seqrec seqimage"
                MC=contrastive; BS=1024; LR=1e-3 ;;
@@ -50,14 +60,15 @@ EOF
 cd $M
 if [ "$STAGE" != eval ] && [ ! -f $OUT/train_stats.json ]; then
   echo "== train $D $B seed $SEED"; date
-  torchrun --nproc_per_node=1 --master_port=$PORT finetune_ext.py --model_class $MC --stats_file $OUT/train_stats.json --dataloader_num_workers $NW \
+  ENTRY="finetune_ext.py"; [ "$DRYRUN" = 1 ] && ENTRY="config_dryrun.py --dump_file $OUT/dryrun.json"
+  torchrun --nproc_per_node=1 --master_port=$PORT $ENTRY --model_class $MC --stats_file $OUT/train_stats.json --dataloader_num_workers $NW \
     --run_config_file $CFG \
     --seed $SEED --data_path $DATA --dataset $D --output_dir $OUT --base_model ./config/ckpt \
     --per_device_batch_size $BS --gradient_accumulation_steps 4 --learning_rate $LR --epochs 200 --weight_decay 0.01 \
     --save_and_eval_strategy epoch --logging_step 50 --max_his_len 20 --prompt_num 4 --patient 10 \
     --index_file $IDX --image_index_file $IIDX --tasks $TASKS --valid_task seqrec > $OUT/train.log 2>&1
 fi
-[ "$STAGE" = train ] && exit 0
+[ "$STAGE" = train ] || [ "$DRYRUN" = 1 ] && exit 0
 for SPLIT in valid test; do
   for T in $TESTS; do
     if [ ! -f $OUT/eval/$SPLIT/results_${T}_20.json ]; then
