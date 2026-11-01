@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-31 (MFD stage 1 on Instruments, `docs/MFD_REPORT.md`).
+Last updated: 2026-10-31 (MFD Parts A–C: 1+3+3, K_f × weight sweep, multi-view augmentation, Arts; `docs/MFD_REPORT.md` §7–§12).
 
 ---
 
@@ -81,9 +81,16 @@ are reference-only, not part of the main line.
   vs chain decoding) need 3 seeds (42/43/44), at least on Arts: TIGER-text's Arts seed spread
   (HR@10 0.0931–0.1061) is larger than the differences we expect to measure.
 - **MFD stage 1** lives in `macrec/mfd_*.py` (new files); report `docs/MFD_REPORT.md`.
-- **MFD Parts A–C in progress (2026-10-31, seed 42):** A = MFD on 1+3+3 Instruments; B = K_f x weight sweep
-  (inference only, chosen on valid); C = multi-view history augmentation (chain + MFD, Instruments + Arts) and
-  MFD on Arts. Results go to `docs/MFD_REPORT.md` Parts A–C.
+- **MFD Parts A–C done (2026-10-31, seed 42), `docs/MFD_REPORT.md` §7–§12** (paired CIs: `mmgen_runs/mfd/paired_parts.json`).
+  Test HR@10 / NDCG@10:
+  - A: MFD 1+3+3 0.1196 / 0.0931 (4 passes, 21.4 ms/user) vs 1+3+3 chain 0.1161 / 0.0916 (8, 32.0).
+  - B (chosen on valid): 1+2+2 K_f=100, w=1/0.5/0.5 → 0.1210 / 0.0936 (29 ms/user); 1+3+3 K_f=256, w=1/1/0.5 →
+    0.1221 / 0.0938 (169 ms/user). The gain is mostly the weights (trust f more), not K_f.
+  - C: multi-view history augmentation helps MFD (+0.003 HR@10) not the chain (+0.0007 / +0.0001). Best MFD (aug +
+    Part B setting) vs chain: Instruments 0.1237 vs 0.1181, +0.0056 [+0.0025, +0.0088]; Arts 0.1066 vs 0.1059, tie.
+    Plain Arts MFD (K_f=20) is below the chain: 0.0990 vs 0.1059.
+  - Limit: f prediction (top-1 ≈ 0.10, top-20 0.35–0.41 for every model, ±0.01 with augmentation); still −0.007
+    (Instruments) / −0.017 (Arts) HR@10 below D's best single list. Next: seeds 43/44, cost-capped K_f rule.
 
 ---
 
@@ -169,6 +176,7 @@ mmgen/
     ├── mfd/pack_mfd_train.sbatch + run_mfd_train.sh   MFD (any CFG, AUG) / chain (mdmv122) trainings packed on one GPU, frozen code
     ├── mfd/sweep_mfd.sbatch       Part B: sweep on valid -> chosen.json -> that one setting on test (H200)
     ├── mfd/paired_mfd.sbatch      MFD vs chain per user (tools/mfd_paired.py: paired bootstrap, same-user coverage/ranking); tools/mfd_table.py = comparison table
+    ├── mfd/paired_parts.sbatch    Parts A–C paired bootstrap from saved per-user ranks, CPU (tools/mfd_paired_parts.py); tools/mfd_parts_table.py = Parts A–C tables
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -369,7 +377,11 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | E-raw | 5 | 0.1132 / 0.0870 | 0.0902 / 0.0565 | 0.0859 / 0.0448 |
 | C's SIDs, seqrec only (text / image) | 5 | 0.1036 / 0.0832, 0.1081 / 0.0853 | 0.0880 / 0.0603, 0.0921 / 0.0625 | — |
 | MD 1+2+2, C-style multi-task | 6 | 0.1126 / 0.0894 | 0.1007 / 0.0726 | — |
-| MFD stage 1, joint / C-style merge (3 passes, 6.7 ms/user) | 3 | 0.1177 / 0.0923, 0.1183 / 0.0926 | — | — |
+| MFD stage 1, joint / C-style merge (3 passes, 6.7 ms/user) | 3 | 0.1177 / 0.0923, 0.1183 / 0.0926 | 0.0990 / 0.0685, 0.0980 / 0.0678 | — |
+| MFD 1+2+2, Part B setting (K_f=100, w=1/0.5/0.5) | 3 | 0.1210 / 0.0936 | 0.1044 / 0.0705 | — |
+| MD 1+2+2 chain + multi-view aug | 6 | 0.1188 / 0.0940 | 0.1061 / 0.0736 | — |
+| MFD 1+2+2 + multi-view aug, K_f=20 / Part B setting | 3 | 0.1208 / 0.0948, 0.1237 / 0.0959 | 0.1023 / 0.0710, 0.1066 / 0.0729 | — |
+| MFD 1+3+3, K_f=20 / own Part B setting (K_f=256) | 4 | 0.1196 / 0.0931, 0.1221 / 0.0938 | — | — |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
 
 Earlier per-seed notes:
@@ -458,7 +470,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `d4cf286`…`6171446` | v1 reproduction recipe (`docs/MDRQVAE.md` A3), `repro_v1.sbatch`, reproducibility check, newcomer wording |
 | `15b6002`, `4c30cb2` | MFD stage 1 code (`macrec/mfd_*.py`, `sbatch/mfd/`); untrained-sanity embedding fix, `mfd_table.py` |
 | `93b32d9` | MFD stage 1 results: `docs/MFD_REPORT.md`, `mfd_paired.py`, `paired_mfd.sbatch` |
-| (next) | MFD Parts A–C: L-level MFD, sweep, multi-view augmentation, pack training |
+| `4a6adca`…`5e29eca` | MFD Parts A–C code: L-level MFD, sweep, multi-view augmentation, pack training, eval jobs |
+| (next) | MFD Parts A–C results: `docs/MFD_REPORT.md` §7–§12, `mfd_parts_table.py`, `mfd_paired_parts.py` |
 
 ---
 
