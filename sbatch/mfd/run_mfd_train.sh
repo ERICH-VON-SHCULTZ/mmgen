@@ -4,8 +4,8 @@
 # AUG=1: multi-view history augmentation (--tasks seqrec_mv, mfd_data.MVMFDDataset). Steps: v1 hash check ->
 # sanity checks on an UNTRAINED model (stop on failure) -> run_config.json -> training.
 # Run dirs: mmgen_runs/mfd/<D>/mfd<CFG>_stage1/seed<S> (AUG=0) | mfd<CFG>_mv/seed<S> (AUG=1).
-# MT=A|B (docs/MFD_REPORT.md §13): C's task mix on MFD (macrec/mfd_mt_data.py), run dir mfd<CFG>_mt<MT>; A = seqrec,
-#   seqimage, fusionseqrec; B = + item2image, image2item (C's task order). Extra gate before training: the task
+# MT=A|B|C (docs/MFD_REPORT.md §13): C's task mix on MFD (macrec/mfd_mt_data.py), run dir mfd<CFG>_mt<MT>; A = seqrec,
+#   seqimage, fusionseqrec; B = + item2image, image2item (C's task order); C = A + crossseqrec (C's cross-modal task). Extra gate before training: the task
 #   check (mfd_mt_check.py) and the dry-run config diff against mfd122_mv (mmgen_runs/mfd/mt_gate/<D>/config_diff.json,
 #   runs.<run>.ok). The dry run does not reproduce real finetune_mfd runs in two TrainingArguments (see
 #   tools/mfd_mt_real_diff.py), so the real runs are also checked against mfd122_mv's real training_args.bin.
@@ -24,7 +24,8 @@ case $MT in
   "") ;;
   A) NAME=mfd${CFG}_mtA; TASKS=mt_seqrec,mt_seqimage,mt_fusionseqrec ;;
   B) NAME=mfd${CFG}_mtB; TASKS=mt_seqrec,mt_seqimage,mt_item2image,mt_image2item,mt_fusionseqrec ;;
-  *) echo "MT must be A or B"; exit 1 ;;
+  C) NAME=mfd${CFG}_mtC; TASKS=mt_seqrec,mt_seqimage,mt_fusionseqrec,mt_crossseqrec ;;   # A + C's cross-modal task (A's prompts kept)
+  *) echo "MT must be A, B or C"; exit 1 ;;
 esac
 OUT=$RUNS/mfd/$D/$NAME/seed$SEED
 [ "$DRYRUN" = 1 ] && { OUT=$RUNS/mfd/mt_gate/dryrun/$D/$NAME; rm -rf $OUT; }

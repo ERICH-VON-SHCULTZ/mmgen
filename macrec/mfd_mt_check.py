@@ -47,9 +47,11 @@ def main():
 
     for ds in list(train.datasets) + [valid.datasets[0]]:
         name = ds.task if ds in train.datasets else f"valid:{ds.task}"
-        is_seq = ds.task in mt.SEQ
-        view, branch = (mt.SEQ[ds.task][:2] if is_seq else mt.ITEM[ds.task])
-        prompt = args.soft_prompts[ds.task] if (not is_seq or mt.SEQ[ds.task][2]) else ""
+        is_cross = ds.task in mt.CROSS
+        is_seq = ds.task in mt.SEQ or is_cross
+        view, branch = (mt.SEQ[ds.task][:2] if ds.task in mt.SEQ else ("?", "?") if is_cross else mt.ITEM[ds.task])
+        prompt = args.soft_prompts[ds.task] if (not is_seq or is_cross or mt.SEQ[ds.task][2]) else ""
+        n_dir = {"text": 0, "image": 0}
         if ds in train.datasets:
             rep["examples_per_task"][ds.task] = len(ds)
             rep["expected"][ds.task] = n_seq if is_seq else len(idx)
@@ -60,6 +62,9 @@ def main():
             ex = ds[j]
             lab = ex["labels"]
             item, br = (lab, "both") if not isinstance(lab, (tuple, list)) else lab
+            if is_cross:                       # coin flip: text history -> image branch, image history -> text branch
+                view, branch = dict((b, v) for v, b in mt.CROSS[ds.task])[br], br
+                n_dir[br] += 1
             if br != branch:
                 fail(f"{name}[{j}]: branch {br} != {branch}"); break
             if not ex["input_ids"].startswith(prompt):
@@ -76,8 +81,15 @@ def main():
             if not all(x.startswith(allowed) for x in toks):
                 fail(f"{name}[{j}]: tokens outside the {view} view"); break
         rep["checked"][name] = len(picks)
+        if is_cross:
+            share = n_dir["image"] / max(len(picks), 1)
+            rep.setdefault("cross_direction_share", {})[name] = {"text_history_to_image": share, "n": len(picks)}
+            if abs(share - 0.5) > 0.05:
+                fail(f"{name}: coin flip share {share:.3f}")
         # one printed sample + its collated decoder rows
         ex = ds[picks[0]]
+        if is_cross:
+            branch = ex["labels"][1]
         b = coll([ex])
         conv = lambda row: [("-" if x == -100 else tok.convert_ids_to_tokens(int(x))) for x in row]
         lab = b["labels"][0]

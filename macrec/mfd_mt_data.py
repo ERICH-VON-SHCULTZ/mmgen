@@ -21,7 +21,13 @@ Soft prompts: C's own (finetune_contrastive.train: prompt_num T5 vocabulary toke
 i-th entry of --tasks; c_soft_prompts below rebuilds them for evaluation). Like C, seqrec / seqimage get no prompt.
 Labels: an int item id (both branches) or (item id, "text" | "image") for single-branch tasks; MFDCollator masks the
 other branch.
+
+Version C (prepared 2026-11-01) adds C's cross-modal sequential task as mt_crossseqrec, mirroring FusionSeqRecDataset:
+one example per training (history, next item) pair, and at each __getitem__ a coin flip (random.random() > 0.5, as
+in data.py) picks text-view history -> next item's image branch, or image-view history -> next item's text branch;
+one soft prompt of its own (the fusionseqrec prompt stays with the full-view inference task).
 """
+import random
 import json
 import os
 
@@ -31,7 +37,8 @@ from mfd_model import BRANCH_TOKENS
 SEQ = {"mt_seqrec": ("text", "text", False), "mt_seqimage": ("image", "image", False),
        "mt_fusionseqrec": ("full", "both", True)}                          # task: (history view, branches, prompt)
 ITEM = {"mt_item2image": ("text", "image"), "mt_image2item": ("image", "text")}   # task: (input view, branch)
-MT_TASKS = tuple(SEQ) + tuple(ITEM)
+CROSS = {"mt_crossseqrec": (("text", "image"), ("image", "text"))}               # task: coin flip of (history view, branch)
+MT_TASKS = tuple(SEQ) + tuple(ITEM) + tuple(CROSS)
 EVAL_TASK = "mt_fusionseqrec"
 
 
@@ -67,6 +74,22 @@ class MTSeqDataset(MFDDataset):
                     labels=item if self.branches == "both" else (item, self.branches))
 
 
+class MTCrossDataset(MFDDataset):
+    """mt_crossseqrec: C's fusionseqrec (cross-modal) on MFD's branches; the direction is drawn per __getitem__."""
+
+    def __init__(self, args, task, mode="train"):
+        super().__init__(args, mode)
+        self.task = task
+        self.prompt = args.soft_prompts[task]
+        self.vmap = view_maps(self.indices)
+
+    def __getitem__(self, index):
+        d = self.inter_data[index]
+        view, branch = CROSS[self.task][0] if random.random() > 0.5 else CROSS[self.task][1]
+        return dict(input_ids=self.prompt + "".join(self.vmap[view][h] for h in d["inters"]),
+                    labels=(self.sid2item[d["item"]], branch))
+
+
 class MTItemDataset:
     """mt_item2image / mt_image2item: one example per catalog item (C's ItemImageDataset), item ids in index order."""
 
@@ -90,4 +113,6 @@ class MTItemDataset:
 
 
 def build(args, task, mode="train"):
+    if task in CROSS:
+        return MTCrossDataset(args, task, mode)
     return MTSeqDataset(args, task, mode) if task in SEQ else MTItemDataset(args, task)
