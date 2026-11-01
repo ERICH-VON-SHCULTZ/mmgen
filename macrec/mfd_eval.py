@@ -11,6 +11,8 @@ Every catalog item whose f is kept is scored exactly:
   (d) joint  : log P(f) + [sum of text-chain terms] + [sum of image-chain terms]   (w_t = w_i = 1)
   (a) text   : log P(f) + text terms        (b) image : log P(f) + image terms
   (c) merge  : top-20 lists of (a) and (b) merged with MQL4GRec's rule (ensemble.get_topk_results_ensemble)
+  --w_f/--w_t/--w_i (default 1) weight the three terms in every mode (Part B settings; §13 setting (ii)).
+  --tasks mt_* (C's task mix, mfd_mt_data.py): inputs are the full-view history with the fusionseqrec prompt.
 Ties (equal scores) are broken by item id. Metrics: evaluate.get_metrics_results on the ranked lists.
 
 Usage:
@@ -124,7 +126,12 @@ def rank_lists(user, item, score, B, N):
 
 
 def load_split(args, split, tokenizer):
-    ds = MFDDataset(args, split)
+    import mfd_mt_data
+    if mfd_mt_data.is_mt(args.tasks):     # C's task mix: full-view history with the fusionseqrec prompt (as in training)
+        args.soft_prompts = mfd_mt_data.c_soft_prompts(args.tasks, tokenizer, args.prompt_num)
+        ds = mfd_mt_data.MTSeqDataset(args, mfd_mt_data.EVAL_TASK, split)
+    else:
+        ds = MFDDataset(args, split)
     coll = MFDCollator(args, tokenizer)
     return ds, coll
 
@@ -144,10 +151,11 @@ def run_split(args, model, tokenizer, cat, split, T, I):
         B = ids.shape[0]
         torch.cuda.synchronize(); t0 = time.time()
         out = score_batch(model, cat, ids, mask, args.k_f, T, I)
-        res = {"joint": rank_lists(out["user"], out["item"], out["s_f"] + out["s_t"] + out["s_i"], B, cat.N)}
+        sf, st, si = args.w_f * out["s_f"], args.w_t * out["s_t"], args.w_i * out["s_i"]
+        res = {"joint": rank_lists(out["user"], out["item"], sf + st + si, B, cat.N)}
         torch.cuda.synchronize(); t_gpu += time.time() - t0      # cost = MFD (joint) inference only
-        res["text"] = rank_lists(out["user"], out["item"], out["s_f"] + out["s_t"], B, cat.N)
-        res["image"] = rank_lists(out["user"], out["item"], out["s_f"] + out["s_i"], B, cat.N)
+        res["text"] = rank_lists(out["user"], out["item"], sf + st, B, cat.N)
+        res["image"] = rank_lists(out["user"], out["item"], sf + si, B, cat.N)
         for m, (i_, s_) in res.items():
             lists[m][0].append(i_.cpu()); lists[m][1].append(s_.cpu())
         tgt = torch.tensor([d["labels"] for d in batch], device=dev)
@@ -162,7 +170,7 @@ def run_split(args, model, tokenizer, cat, split, T, I):
     fsel = torch.cat(fsel_all)
     covered = (fsel == tf[:, None]).any(1)
     frank = torch.cat(lpf_rank)
-    out = {"users": U, "k_f": args.k_f,
+    out = {"users": U, "k_f": args.k_f, "weights": {"w_f": args.w_f, "w_t": args.w_t, "w_i": args.w_i},
            "coverage": covered.float().mean().item(),
            "f_top1_acc": (frank == 0).float().mean().item(),
            f"f_top{args.k_f}_acc": (frank < args.k_f).float().mean().item(),
@@ -313,6 +321,9 @@ def main():
     p = argparse.ArgumentParser()
     p = parse_global_args(p); p = parse_dataset_args(p); p = parse_test_args(p)
     p.add_argument("--k_f", type=int, default=20)
+    p.add_argument("--w_f", type=float, default=1.0, help="score weights; text = w_f f + w_t t, image = w_f f + w_i i,")
+    p.add_argument("--w_t", type=float, default=1.0, help="joint = all three, merge = C's rule on text / image lists")
+    p.add_argument("--w_i", type=float, default=1.0)
     p.add_argument("--out_dir", required=True)
     p.add_argument("--splits", default="valid,test")
     p.add_argument("--sanity", action="store_true")

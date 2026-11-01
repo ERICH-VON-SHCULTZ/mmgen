@@ -10,6 +10,8 @@ Multi-view history augmentation (MFD Part C, `--tasks seqrec_mv`): MVMFDDataset 
 decoder, mv_aug_data.MVSeqRecDataset) holds every training example three times, with the whole history
 shown as the full view [f t i], the text view [f t] or the image view [f i]. The target is always the
 next item's full SID. Validation/test use the full view only.
+C's task mix (`--tasks mt_*`, mfd_mt_data.py): load_mfd_datasets builds those datasets; labels may then be
+(item id, "text" | "image"), and MFDCollator masks the loss of the other branch.
 """
 import json
 import os
@@ -84,6 +86,10 @@ class MVMFDDataset(MFDDataset):
 
 
 def load_mfd_datasets(args):
+    import mfd_mt_data                                                   # (imports this module)
+    if mfd_mt_data.is_mt(args.tasks):                                    # C's task mix (mfd_mt_data.py)
+        train = [mfd_mt_data.build(args, t) for t in args.tasks.split(",")]
+        return ConcatDataset(train), ConcatDataset([mfd_mt_data.MTSeqDataset(args, mfd_mt_data.EVAL_TASK, "valid")])
     train = MVMFDDataset(args, "train") if "seqrec_mv" in args.tasks.split(",") else MFDDataset(args, "train")
     return ConcatDataset([train]), ConcatDataset([MFDDataset(args, "valid")])
 
@@ -128,7 +134,16 @@ class MFDCollator:
         inputs = self.tokenizer([d["input_ids"] for d in batch], return_tensors="pt", padding="longest",
                                 max_length=self.tokenizer.model_max_length, truncation=True,
                                 return_attention_mask=True)
-        dec, lab = branch_tensors(self.tab, torch.tensor([d["labels"] for d in batch]), self.T, self.I)
+        lb = [d["labels"] for d in batch]
+        items = [x[0] if isinstance(x, (tuple, list)) else x for x in lb]
+        dec, lab = branch_tensors(self.tab, torch.tensor(items), self.T, self.I)
+        for n, x in enumerate(lb):           # single-branch task (mfd_mt_data.py): no loss on the other branch's codes
+            if isinstance(x, (tuple, list)):
+                if x[1] == "text":
+                    lab[n, 1] = -100
+                else:
+                    assert x[1] == "image", x
+                    lab[n, 0, 1:] = -100                                 # keep f (position 0) as the one f target
         inputs["decoder_input_ids"] = dec
         inputs["labels"] = lab
         return inputs
