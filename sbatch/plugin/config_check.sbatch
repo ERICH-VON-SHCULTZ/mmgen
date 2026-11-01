@@ -19,7 +19,7 @@ module purge
 REPO=/scratch/yw8866/mmgen
 SIF=/share/apps/images/cuda12.1.1-cudnn8.9.0-devel-ubuntu22.04.2.sif
 OVERLAY=/scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3   # always :ro in jobs
-export WANDB_MODE=disabled                                   # dry runs only: nothing is trained or logged
+export WANDB_MODE=offline                                    # dry runs stop before training; W&B stays enabled (AGENTS.md §9)
 export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR"
 M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/

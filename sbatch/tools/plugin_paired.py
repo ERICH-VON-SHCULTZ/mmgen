@@ -8,6 +8,8 @@ and checked against results_{seqrec,seqimage,ensemble}_20.json (assert). Users a
 HR@10 and NDCG@10. Lists compared: merged vs merged, best single list vs best single list (each run's best chosen
 on VALIDATION HR@10, tie NDCG@10), text vs text, image vs image.
 Usage: python plugin_paired.py [D:B ...]  (run inside the env with MACREC=<macrec dir>) -> mmgen_runs/plugin/paired.json
+REF=<B> pairs against run B of the same dataset instead of C (e.g. REF=plug122 Instruments:plug122s for shared-f
+vs main) -> mmgen_runs/plugin/paired_vs_<B>.json; the key names ("C", "C_best_single_valid") then mean that run.
 """
 import json
 import os
@@ -24,6 +26,7 @@ RD = "/scratch/yw8866/mmgen_runs"
 IDX = {"mql": (".index_lemb_mql.json", ".index_vitemb_mql.json")}
 METRICS = ["hit@1", "hit@5", "hit@10", "ndcg@5", "ndcg@10"]
 NB = 2000
+REF = os.environ.get("REF", "mql")
 
 
 def index_files(B):
@@ -104,18 +107,18 @@ def main():
                     "min": float(min(seeds[s][t][k] for s in seeds)), "max": float(max(seeds[s][t][k] for s in seeds))}
                 for k in ("hit@10", "ndcg@10")} for t in ("seqrec", "seqimage", "merged")}}
     cache = {}
-    for r in runs + [f"{D}:mql" for D in sorted({x.split(':')[0] for x in runs})]:
+    for r in runs + [f"{D}:{REF}" for D in sorted({x.split(':')[0] for x in runs})]:
         D, B = r.split(":")
         for split in ("valid", "test"):
             cache[(D, B, split)] = per_user(D, B, split)
     for r in runs:
         D, B = r.split(":")
         res["runs"][r] = {"metrics": {}, "paired": {}}
-        bp, bc = best_single(cache[(D, B, "valid")][1]), best_single(cache[(D, "mql", "valid")][1])
+        bp, bc = best_single(cache[(D, B, "valid")][1]), best_single(cache[(D, REF, "valid")][1])
         res["runs"][r]["best_single_valid"], res["runs"][r]["C_best_single_valid"] = bp, bc
         for split in ("test", "valid"):
             up, mp = cache[(D, B, split)]
-            uc, _ = cache[(D, "mql", split)]
+            uc, _ = cache[(D, REF, split)]
             boot = np.random.default_rng(0).integers(0, len(up["merged"]), size=(NB, len(up["merged"])))
             res["runs"][r]["metrics"][split] = mp
             res["runs"][r]["paired"][split] = {
@@ -128,7 +131,7 @@ def main():
                       f"diff {v['hr10']['diff']:+.4f} [{v['hr10']['ci95'][0]:+.4f}, {v['hr10']['ci95'][1]:+.4f}]  "
                       f"NDCG@10 diff {v['ndcg10']['diff']:+.4f} [{v['ndcg10']['ci95'][0]:+.4f}, {v['ndcg10']['ci95'][1]:+.4f}]  "
                       f"won/lost {v['won']}/{v['lost']}", flush=True)
-    json.dump(res, open(f"{RD}/plugin/paired.json", "w"), indent=1)
+    json.dump(res, open(f"{RD}/plugin/paired.json" if REF == "mql" else f"{RD}/plugin/paired_vs_{REF}.json", "w"), indent=1)
 
 
 if __name__ == "__main__":
