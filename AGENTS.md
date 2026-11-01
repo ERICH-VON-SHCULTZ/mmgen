@@ -91,6 +91,12 @@ are reference-only, not part of the main line.
     Plain Arts MFD (K_f=20) is below the chain: 0.0990 vs 0.1059.
   - Limit: f prediction (top-1 ≈ 0.10, top-20 0.35–0.41 for every model, ±0.01 with augmentation); still −0.007
     (Instruments) / −0.017 (Arts) HR@10 below D's best single list. Next: seeds 43/44, cost-capped K_f rule.
+- **MFD paused (2026-10-31).** **Plug-in in progress (seed 42), report `docs/PLUGIN_REPORT.md`:** the v1 MD SID split
+  into a text view [f t..] and an image view [f i..] used as C's two modality SIDs, trained with C's exact recipe
+  (`run_baseline.sh` B=plug122|plug122s|plug133|plug133s; `s` = shared-f token). Views made unique with MQL4GRec's
+  distance reassignment (`macrec/cross_index/plugin_views.py`; provenance + v1 hash in `mmgen_runs/plugin/<D>/<cfg>/views.json`).
+  Config gate before training: `sbatch/plugin/config_check.sbatch` (dry runs, `tools/plugin_config_diff.py`) → only
+  index files + vocabulary differ from C seed 42 (`mmgen_runs/plugin/config_diff.json`).
 
 ---
 
@@ -119,6 +125,9 @@ mmgen/
 │   ├── mfd_model.py, mfd_data.py, finetune_mfd.py, mfd_eval.py   MFD: two-branch decoder, data/catalog (any 1+L+L SID), training entry, exact-scoring eval (1+L passes) + sanity checks
 │   ├── mfd_sweep.py       MFD wider search: K_f x score-weight sweep on VALID, chosen setting applied to test
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
+│   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
+│   ├── first_token_acc.py first-decoding-step accuracy (target's first token top-1 / top-20) for seqrec + seqimage lists
+│   ├── cross_index/plugin_views.py   plug-in: MD v1 SID -> text/image views, MQL4GRec reassignment per view, main + shared-f index files
 │   ├── eval_split.py      test_ddp_save on --split valid|test + inference cost (decoder steps, ms/user)
 │   ├── cross_index/main_single.py, generate_indices_single.py   MQL4GRec single-modality tokenizer (verbatim @5ad9c27)
 │   ├── cross_index/generate_indices_tiger.py   TIGER SIDs: 3 RQ levels + appended collision index
@@ -177,6 +186,9 @@ mmgen/
     ├── mfd/sweep_mfd.sbatch       Part B: sweep on valid -> chosen.json -> that one setting on test (H200)
     ├── mfd/paired_mfd.sbatch      MFD vs chain per user (tools/mfd_paired.py: paired bootstrap, same-user coverage/ranking); tools/mfd_table.py = comparison table
     ├── mfd/paired_parts.sbatch    Parts A–C paired bootstrap from saved per-user ranks, CPU (tools/mfd_paired_parts.py); tools/mfd_parts_table.py = Parts A–C tables
+    ├── plugin/views.sbatch        plug-in view index files (CPU); plugin/config_check.sbatch = dry runs + config diff vs C (gate)
+    ├── plugin/pack_plugin_train.sbatch   plug-in trainings packed on one GPU; refuses to train unless tools/plugin_gate.py passes
+    ├── plugin/first_token.sbatch  first-token accuracy for C and plug-in runs
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -288,7 +300,8 @@ sbatch --export=ALL,D=Instruments,B=mql,SEED=42 sbatch/baselines/baseline.sbatch
 - Baselines: `tiger_text` (A), `tiger_image` (B), `tiger_fnorm` / `tiger_fraw` (E early fusion),
   `mql` (C), `macrecpaper` (D, official), `macrec` (D as shipped, deviation). Controls: `mqltext` /
   `mqlimage` (C's SIDs, seqrec only), `mdmt122` (MD 1+2+2 + C-style multi-task), `mdmv122` (MD 1+2+2 +
-  multi-view history augmentation). `run_baseline.sh` uses `MACREC_DIR` (frozen code copy) when set;
+  multi-view history augmentation), `plug122|plug122s|plug133|plug133s` (plug-in, C's recipe). `DRYRUN=1` runs the exact
+  training command through `config_dryrun.py` into `mmgen_runs/plugin/dryrun/` (no training). `run_baseline.sh` uses `MACREC_DIR` (frozen code copy) when set;
   `pack_eval.sbatch` and `pack_mfd_train.sbatch` set it.
 - Effective batch = per-device × 2 GPUs × grad-accum 2, as in both repos' launchers, emulated on
   1 GPU with grad-accum 4.
@@ -333,6 +346,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | HF schedules `epochs × floor(batches / grad_accum)` steps, so runs can end at a fractional epoch (Arts 1+3+3: 21,000 steps = epoch 198.1) | normal; the cosine schedule has finished |
 | MD-RQ-VAE tokenizer training is not bit-deterministic (GPU kernels, sklearn k-means init): a rerun gives SIDs of the same quality but different codes | expected; check it with `docs/MDRQVAE.md` A3.7; use your own NAME/TAG so the official files are not overwritten; for exact v1 use the locked files |
 | HF `resize_token_embeddings` (mean-resizing) gives every added token (all SID codes) the SAME embedding row, so an untrained model cannot distinguish codes | sanity checks on untrained models must re-init the added rows randomly (`mfd_eval.py --random_init`); trained models are unaffected |
+| C's seed-42 train.log prints `deepspeed='./config/ds_z3_bf16.json'`, but `finetune_contrastive.train()` sets `args.deepspeed = None` right after that print | not a config difference; compare printed args with printed args (`plugin_config_diff.py`) |
 | the chain eval's `save_seqrec_20.json` stores users in sampler order, not dataset order | align by `all_users` (= dataset index), as `sbatch/tools/mfd_paired.py` does |
 | `pack_train.sbatch` (24 CPUs, long time limit) is rejected on h200_tandon ("partition not valid for this job") | train with `--partition=a100_tandon,h100_tandon --gres=gpu:1`; H200 only for evals |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
@@ -471,7 +485,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `15b6002`, `4c30cb2` | MFD stage 1 code (`macrec/mfd_*.py`, `sbatch/mfd/`); untrained-sanity embedding fix, `mfd_table.py` |
 | `93b32d9` | MFD stage 1 results: `docs/MFD_REPORT.md`, `mfd_paired.py`, `paired_mfd.sbatch` |
 | `4a6adca`…`5e29eca` | MFD Parts A–C code: L-level MFD, sweep, multi-view augmentation, pack training, eval jobs |
-| (next) | MFD Parts A–C results: `docs/MFD_REPORT.md` §7–§12, `mfd_parts_table.py`, `mfd_paired_parts.py` |
+| `57a585f`, `df0a5f8` | MFD Parts A–C results: `docs/MFD_REPORT.md` §7–§12, `mfd_parts_table.py`, `mfd_paired_parts.py` |
+| (next) | Plug-in (MD SIDs in C's framework): views, config gate, training/eval jobs, `docs/PLUGIN_REPORT.md` |
 
 ---
 
