@@ -91,12 +91,18 @@ are reference-only, not part of the main line.
     Plain Arts MFD (K_f=20) is below the chain: 0.0990 vs 0.1059.
   - Limit: f prediction (top-1 ≈ 0.10, top-20 0.35–0.41 for every model, ±0.01 with augmentation); still −0.007
     (Instruments) / −0.017 (Arts) HR@10 below D's best single list. Next: seeds 43/44, cost-capped K_f rule.
-- **MFD paused (2026-10-31).** **Plug-in in progress (seed 42), report `docs/PLUGIN_REPORT.md`:** the v1 MD SID split
+- **MFD paused (2026-10-31).** **Plug-in done (2026-11-01, seed 42), report `docs/PLUGIN_REPORT.md`:** the v1 MD SID split
   into a text view [f t..] and an image view [f i..] used as C's two modality SIDs, trained with C's exact recipe
   (`run_baseline.sh` B=plug122|plug122s|plug133|plug133s; `s` = shared-f token). Views made unique with MQL4GRec's
   distance reassignment (`macrec/cross_index/plugin_views.py`; provenance + v1 hash in `mmgen_runs/plugin/<D>/<cfg>/views.json`).
   Config gate before training: `sbatch/plugin/config_check.sbatch` (dry runs, `tools/plugin_config_diff.py`) → only
   index files + vocabulary differ from C seed 42 (`mmgen_runs/plugin/config_diff.json`).
+  - **Result: MD loses to C under C's recipe.** Merged test HR@10 vs C seed 42 (paired, all CIs < 0):
+    Instruments 1+2+2 0.1246 vs 0.1301 (−0.0055 [−0.0088, −0.0023]), 1+3+3 0.1217; Arts 1+2+2 0.1172 vs 0.1267
+    (−0.0095), 1+3+3 0.1162. All below C's worst seed. Best single list also loses (−0.003 to −0.007).
+  - C's recipe still lifts MD well above its own chain decoder (Instruments text 0.1227 vs 0.1181, Arts 0.1143 vs 0.1059),
+    but the merge gains MD little (two views share f → correlated lists). Shared-f hurts at 1+2+2 (merged −0.0045 vs main,
+    CI < 0), no effect at 1+3+3. f first-token top-20 0.36–0.43 over 256 codes vs C's first level 0.59–0.83 over 55–97 codes.
 
 ---
 
@@ -189,6 +195,8 @@ mmgen/
     ├── plugin/views.sbatch        plug-in view index files (CPU); plugin/config_check.sbatch = dry runs + config diff vs C (gate)
     ├── plugin/pack_plugin_train.sbatch   plug-in trainings packed on one GPU; refuses to train unless tools/plugin_gate.py passes
     ├── plugin/first_token.sbatch  first-token accuracy for C and plug-in runs
+    ├── plugin/paired.sbatch       plug-in vs C paired bootstrap (tools/plugin_paired.py, REF= picks another reference run) + tables (tools/plugin_table.py); CPU
+    ├── plugin/paired_sharedf.sbatch   shared-f vs main plug-in, paired (CPU)
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -396,6 +404,10 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | MD 1+2+2 chain + multi-view aug | 6 | 0.1188 / 0.0940 | 0.1061 / 0.0736 | — |
 | MFD 1+2+2 + multi-view aug, K_f=20 / Part B setting | 3 | 0.1208 / 0.0948, 0.1237 / 0.0959 | 0.1023 / 0.0710, 0.1066 / 0.0729 | — |
 | MFD 1+3+3, K_f=20 / own Part B setting (K_f=256) | 4 | 0.1196 / 0.0931, 0.1221 / 0.0938 | — | — |
+| Plug-in 1+2+2 main in C's recipe: text / image / merged (2 × 4 passes) | 4 | 0.1227 / 0.0960, 0.1238 / 0.0966, 0.1246 / 0.0975 | 0.1143 / 0.0805, 0.1144 / 0.0807, 0.1172 / 0.0826 | — |
+| Plug-in 1+3+3 main in C's recipe: text / image / merged (2 × 5 passes) | 5 | 0.1207 / 0.0938, 0.1208 / 0.0942, 0.1217 / 0.0948 | 0.1119 / 0.0822, 0.1143 / 0.0829, 0.1162 / 0.0845 | — |
+| Plug-in shared-f merged, 1+2+2 / 1+3+3 | 4 / 5 | 0.1201 / 0.0946, 0.1199 / 0.0934 | — | — |
+| C seed 42 merged (paired reference for the plug-in; `docs/PLUGIN_REPORT.md`) | 5 | 0.1301 / 0.0998 | 0.1267 / 0.0897 | — |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
 
 Earlier per-seed notes:
@@ -486,7 +498,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `93b32d9` | MFD stage 1 results: `docs/MFD_REPORT.md`, `mfd_paired.py`, `paired_mfd.sbatch` |
 | `4a6adca`…`5e29eca` | MFD Parts A–C code: L-level MFD, sweep, multi-view augmentation, pack training, eval jobs |
 | `57a585f`, `df0a5f8` | MFD Parts A–C results: `docs/MFD_REPORT.md` §7–§12, `mfd_parts_table.py`, `mfd_paired_parts.py` |
-| (next) | Plug-in (MD SIDs in C's framework): views, config gate, training/eval jobs, `docs/PLUGIN_REPORT.md` |
+| `15a2e1a`…`20db1ca` | Plug-in (MD SIDs in C's framework) code: views, config gate, training/eval jobs, first-token, paired + table tools |
+| (next) | Plug-in results: `docs/PLUGIN_REPORT.md` (MD loses to C under C's recipe) |
 
 ---
 
