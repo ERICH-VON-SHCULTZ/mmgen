@@ -11,6 +11,7 @@ its results files); users aligned by dataset index and checked item by item agai
 plugin_paired.py next to this file): python mfd_mt_paired.py [D] -> mmgen_runs/mfd/<D>/mt_paired.json
 """
 import json
+import os
 import sys
 
 import numpy as np
@@ -72,17 +73,18 @@ def main():
         L["mv (i)"], tg = ranked(D, "mfd122_mv", "eval_kf20", split)
         L["mv (ii)"], tg2 = ranked(D, "mfd122_mv", "eval_ii", split)
         assert torch.equal(tg, tg2)
-        for X in ("A", "B"):
+        VS = [X for X in "ABC" if os.path.exists(f"{RUNS}/mfd/{D}/mfd122_mt{X}/seed42/sweep/apply_test_ranks.pt")]
+        for X in VS:
             r = f"mfd122_mt{X}"
             L[f"{X} (i)"], t = ranked(D, r, "eval_kf20", split); assert torch.equal(t, tg)
             L[f"{X} (ii)"], t = ranked(D, r, "eval_ii", split); assert torch.equal(t, tg)
             L[f"{X} (iii)"], res[f"{X}_chosen"] = swept(D, r, split)
         L["plug-in 1+2+2 merged"] = plugin_merged(D, split, tg)
         boot = np.random.default_rng(0).integers(0, len(tg), size=(NB, len(tg)))
-        pairs = [(f"{X} ({s})", f"mv ({s})") for X in "AB" for s in ("i", "ii")] + \
-                [(f"{X} (iii)", "mv (ii)") for X in "AB"] + \
-                [(f"{X} ({s})", "plug-in 1+2+2 merged") for X in "AB" for s in ("i", "ii", "iii")] + \
-                [("B (ii)", "A (ii)"), ("mv (ii)", "plug-in 1+2+2 merged")]
+        pairs = [(f"{X} ({s})", f"mv ({s})") for X in VS for s in ("i", "ii")] + \
+                [(f"{X} (iii)", "mv (ii)") for X in VS] + \
+                [(f"{X} ({s})", "plug-in 1+2+2 merged") for X in VS for s in ("i", "ii", "iii")] + \
+                [(f"{X} (ii)", "A (ii)") for X in VS if X != "A"] + [("mv (ii)", "plug-in 1+2+2 merged")]
         for a, b in pairs:
             p = paired(L[a], L[b], boot)
             res["comparisons"].setdefault(f"{a} vs {b}", {})[split] = p

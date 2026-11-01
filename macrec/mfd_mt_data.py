@@ -8,14 +8,17 @@ prediction).
   C task        C definition (data.py)                                 MFD task         MFD version
   seqrec        bare text-SID history -> next text SID (no prompt)     mt_seqrec        text-view history -> text branch
   seqimage      bare image-SID history -> next image SID (no prompt)   mt_seqimage      image-view history -> image branch
-  fusionseqrec  prompt + text history -> image SID, or (coin flip)     mt_fusionseqrec  prompt + FULL-view history -> both
-                prompt + image history -> text SID                                      branches (deviation, see below)
+  fusionseqrec  prompt + text history -> image SID, or (coin flip)     mt_crossseqrec   same, on the branches (version C only)
+                prompt + image history -> text SID
+  (none)        -                                                      mt_fusionseqrec  "fullseqrec": prompt + FULL-view
+                                                                                        history -> both branches (A, B, C)
   item2image    prompt + item text SID -> same item's image SID        mt_item2image    prompt + item text view -> image branch
   image2item    prompt + item image SID -> same item's text SID        mt_image2item    prompt + item image view -> text branch
 
-Deviation (decided with the user, 2026-11-01): C's fusionseqrec is cross-modal and never shows both modalities in one
-history; here it is full view -> both branches, the MFD stage-1 task, because validation/test use the full view with
-the fusionseqrec prompt. Examples per epoch per task are C's: seqrec / seqimage / fusionseqrec = one per training
+Naming: the code identifier mt_fusionseqrec is NOT C's fusionseqrec. It is fullseqrec (full-view history -> both
+branches, the MFD stage-1 task with a prompt), the inference task: validation / test inputs and early stopping use it.
+It takes fusionseqrec's slot (prompt, example share) in A and B (decided with the user, 2026-11-01). C's fusionseqrec
+(cross-modal coin flip) is mt_crossseqrec, used in version C. The identifier is kept because runs were trained with it. Examples per epoch per task are C's: seqrec / seqimage / fusionseqrec = one per training
 (history, next item) pair (SeqRecDataset, train_data_mode 0), item2image / image2item = one per catalog item.
 Soft prompts: C's own (finetune_contrastive.train: prompt_num T5 vocabulary tokens at ids 100 (i + 1) ... for the
 i-th entry of --tasks; c_soft_prompts below rebuilds them for evaluation). Like C, seqrec / seqimage get no prompt.

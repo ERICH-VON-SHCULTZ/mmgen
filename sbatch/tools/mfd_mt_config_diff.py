@@ -7,7 +7,8 @@ Step 2: each task-mix dry run vs mfd122_mv's dry run (resolved args, TrainingArg
   model class, parameter count, examples). Allowed: the task mix (tasks, soft prompts, examples per task / epoch) and
   run-dir paths. Anything else is UNINTENDED -> exit 1 (do not train). The soft prompts used in training must equal
   C's construction as rebuilt by mfd_mt_data.c_soft_prompts (task_check_<run>.json from mfd_mt_check.py).
-Usage: python mfd_mt_config_diff.py <D> [run ...]  -> mmgen_runs/mfd/mt_gate/<D>/config_diff.json
+Usage: python mfd_mt_config_diff.py <D> [run ...]  -> mmgen_runs/mfd/mt_gate/<D>/config_diff.json (runs merged with
+the ones already recorded there)
 """
 import ast
 import json
@@ -81,7 +82,14 @@ def main():
                 print(f"   [{cat}] {k}: mv={v[0][:160]}  {r}={v[1][:160]}")
         print(f"   (paths differing: {len(cl['paths'])}, volatile: {sorted(cl['volatile'])})")
     res["all_ok"] = not bad
-    json.dump(res, open(f"{G}/{D}/config_diff.json", "w"), indent=1)
+    out = f"{G}/{D}/config_diff.json"
+    try:                                       # keep the records of runs gated earlier (e.g. A/B before C)
+        old = json.load(open(out))
+        res["runs"] = {k: v for k, v in old.get("runs", {}).items() if k not in res["runs"]} | res["runs"]
+        res["all_ok"] = res["all_ok"] and all(v["ok"] for v in res["runs"].values())
+    except FileNotFoundError:
+        pass
+    json.dump(res, open(out, "w"), indent=1)
     print("ALL OK" if not bad else "CONFIG DIFF FAILED: do not train")
     sys.exit(1 if bad else 0)
 
