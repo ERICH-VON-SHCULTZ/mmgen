@@ -2,9 +2,9 @@
 # Several MFD / chain trainings CONCURRENTLY on one GPU (one run alone keeps a GPU ~30% busy, below the cluster's
 # utilisation threshold; see pack_train.sbatch). Training math is unchanged; wall-clock is contended.
 # Every run uses ONE frozen copy of macrec/ and of the run scripts, made at job start.
-# RUNS entries:  mfd:<D>:<CFG 122|133>:<AUG 0|1>   (sbatch/mfd/run_mfd_train.sh)
+# RUNS entries:  mfd:<D>:<CFG 122|133>:<AUG 0|1>[:<SEED>]   (sbatch/mfd/run_mfd_train.sh; SEED default 42)
 #                chain:<D>:<baseline, e.g. mdmv122> (sbatch/baselines/run_baseline.sh STAGE=train)
-#                mfdmt:<D>:<A|B>   MFD 1+2+2 with C's task mix (run_mfd_train.sh MT=; needs a passed sbatch/mfd/mt_gate.sbatch)
+#                mfdmt:<D>:<A|B|C>[:<SEED>]   MFD 1+2+2 with C's task mix (run_mfd_train.sh MT=; needs a passed sbatch/mfd/mt_gate.sbatch)
 # Submit: sbatch --export=ALL,RUNS="mfd:Instruments:133:0 chain:Arts:mdmv122" sbatch/mfd/pack_mfd_train.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=a100_tandon,h100_tandon
@@ -45,11 +45,11 @@ for R in $RUNS; do
 done
 START=$(date +%s); PIDS=()
 for R in $RUNS; do
-  IFS=: read K D X Y <<< "$R"
+  IFS=: read K D X Y S <<< "$R"
   if [ $K = mfd ]; then
-    CMD="M=$M D=$D CFG=$X AUG=$Y SEED=42 bash $RM"
+    CMD="M=$M D=$D CFG=$X AUG=$Y SEED=${S:-42} bash $RM"
   elif [ $K = mfdmt ]; then
-    CMD="M=$M D=$D CFG=122 AUG=0 MT=$X SEED=42 bash $RM"
+    CMD="M=$M D=$D CFG=122 AUG=0 MT=$X SEED=${Y:-42} bash $RM"
   else
     CMD="MACREC_DIR=$M D=$D B=$X SEED=42 STAGE=train NW=2 bash $RB"
   fi
