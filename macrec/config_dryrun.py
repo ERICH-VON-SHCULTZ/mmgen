@@ -16,7 +16,8 @@ import sys
 import finetune_ext
 
 
-def main():
+def install():
+    """Take --dump_file out of sys.argv and hook finetune_ext / finetune_contrastive to dump and stop at train()."""
     i = sys.argv.index("--dump_file")
     dump = sys.argv[i + 1]
     del sys.argv[i:i + 2]
@@ -51,6 +52,10 @@ def main():
         fc.load_datasets = _load
         return _orig(args)
     fc.train = _capture
+
+
+def main():
+    install()
     finetune_ext.main()
 
 
