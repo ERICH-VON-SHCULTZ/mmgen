@@ -6,7 +6,9 @@
 # Run dirs: mmgen_runs/mfd/<D>/mfd<CFG>_stage1/seed<S> (AUG=0) | mfd<CFG>_mv/seed<S> (AUG=1).
 # MT=A|B (docs/MFD_REPORT.md §13): C's task mix on MFD (macrec/mfd_mt_data.py), run dir mfd<CFG>_mt<MT>; A = seqrec,
 #   seqimage, fusionseqrec; B = + item2image, image2item (C's task order). Extra gate before training: the task
-#   check (mfd_mt_check.py) and the config diff against mfd122_mv (mmgen_runs/mfd/mt_gate/<D>/config_diff.json, all_ok).
+#   check (mfd_mt_check.py) and the dry-run config diff against mfd122_mv (mmgen_runs/mfd/mt_gate/<D>/config_diff.json,
+#   runs.<run>.ok). The dry run does not reproduce real finetune_mfd runs in two TrainingArguments (see
+#   tools/mfd_mt_real_diff.py), so the real runs are also checked against mfd122_mv's real training_args.bin.
 # DRYRUN=1: the exact training command through mfd_dryrun.py into mmgen_runs/mfd/mt_gate/dryrun/<D>/<run> (no training).
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
@@ -52,7 +54,7 @@ else
     python -u mfd_mt_check.py --base_model ./config/ckpt --data_path $RUNS/data --dataset $D --index_file $IDX \
       --image_index_file $IDX --max_his_len 20 --prompt_num 4 --tasks $TASKS --out_file $OUT/task_check.json \
       > $OUT/task_check.log 2>&1 || { echo "TASK CHECK FAILED ($OUT)"; exit 3; }
-    python -c "import json, sys; c = json.load(open('$RUNS/mfd/mt_gate/$D/config_diff.json')); sys.exit(0 if c['all_ok'] and c['runs']['$NAME']['ok'] else 1)" \
+    python -c "import json, sys; c = json.load(open('$RUNS/mfd/mt_gate/$D/config_diff.json')); sys.exit(0 if c['runs']['$NAME']['ok'] else 1)" \
       || { echo "CONFIG DIFF NOT OK ($NAME)"; exit 3; }
   fi
 fi
