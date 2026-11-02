@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-10-31 (MFD Parts A–C: 1+3+3, K_f × weight sweep, multi-view augmentation, Arts; `docs/MFD_REPORT.md` §7–§12).
+Last updated: 2026-11-02 (MFD with MQL4GRec's task mix, versions A/B/C, `docs/MFD_REPORT.md` §13; codebook-geometry-aware training in progress, §14).
 
 ---
 
@@ -91,6 +91,13 @@ are reference-only, not part of the main line.
     Plain Arts MFD (K_f=20) is below the chain: 0.0990 vs 0.1059.
   - Limit: f prediction (top-1 ≈ 0.10, top-20 0.35–0.41 for every model, ±0.01 with augmentation); still −0.007
     (Instruments) / −0.017 (Arts) HR@10 below D's best single list. Next: seeds 43/44, cost-capped K_f rule.
+- **MFD with C's task mix done (2026-11-02, Instruments, seed 42), `docs/MFD_REPORT.md` §13:** A = seqrec + seqimage +
+  fullseqrec (full-view → both branches; code id `mt_fusionseqrec`, NOT C's fusionseqrec), B = A + item2image/image2item,
+  C = A + crossseqrec (C's fusionseqrec, the cross-modal coin flip). Test HR@10 at K_f=100, w=1/.5/.5: A 0.1227, B 0.1202
+  (CI < 0 vs mv), C 0.1245 vs mfd122_mv 0.1237 (ties). f prediction unchanged. Arts rule (valid > 0.1560) not triggered.
+- **Codebook-geometry-aware T5 (started 2026-11-01), `docs/MFD_REPORT.md` §14:** SID code embeddings = P_level · codebook
+  vector + delta (tied head), shuffled-codebook control, soft labels for f. Chain runs done (`mmgen_runs/geo/<D>/chain122_<VAR>/`);
+  MFD + chosen variant (AB2) and Arts in progress.
 - **MFD paused (2026-10-31).** **Plug-in done (2026-11-01, seed 42), report `docs/PLUGIN_REPORT.md`:** the v1 MD SID split
   into a text view [f t..] and an image view [f i..] used as C's two modality SIDs, trained with C's exact recipe
   (`run_baseline.sh` B=plug122|plug122s|plug133|plug133s; `s` = shared-f token). Views made unique with MQL4GRec's
@@ -130,6 +137,8 @@ mmgen/
 │   ├── md_mt_data.py      C-style multi-task datasets on one MD SID (mdshared, mdtext, mdimage, mdtrans)
 │   ├── mfd_model.py, mfd_data.py, finetune_mfd.py, mfd_eval.py   MFD: two-branch decoder, data/catalog (any 1+L+L SID), training entry, exact-scoring eval (1+L passes) + sanity checks
 │   ├── mfd_sweep.py       MFD wider search: K_f x score-weight sweep on VALID, chosen setting applied to test
+│   ├── mfd_mt_data.py, mfd_mt_check.py, mfd_dryrun.py   MFD with C's task mix (§13): tasks mt_* (mt_fusionseqrec = fullseqrec, mt_crossseqrec = C's fusionseqrec), input/target checks, dry run
+│   ├── geo_embed.py, finetune_geo.py, geo_check.py, geo_dryrun.py, geo_diag.py   codebook-geometry-aware T5 (§14): embeddings P·c+delta / shuffled control / soft f labels, bake to plain T5; entry; sanity checks; dry run; diagnostics
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
 │   ├── first_token_acc.py first-decoding-step accuracy (target's first token top-1 / top-20) for seqrec + seqimage lists
@@ -197,6 +206,8 @@ mmgen/
     ├── plugin/first_token.sbatch  first-token accuracy for C and plug-in runs
     ├── plugin/paired.sbatch       plug-in vs C paired bootstrap (tools/plugin_paired.py, REF= picks another reference run) + tables (tools/plugin_table.py); CPU
     ├── plugin/paired_sharedf.sbatch   shared-f vs main plug-in, paired (CPU)
+    ├── mfd/mt_gate.sbatch, eval_mt.sbatch, mt_paired.sbatch   task-mix gate (dry runs + task checks + config diff), eval (i)/(ii)/(iii), paired CIs (tools/mfd_mt_*.py)
+    ├── geo/run_geo_train.sh, geo_gate.sbatch, eval_geo.sbatch   geometry runs (KIND chain|mfd, VAR A|C|AB1|AB2; pack entry geo:<D>:<kind>:<var>), gate (sanity 1-3), eval + diagnostics; tools/geo_config_diff.py, geo_chain_paired.py
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -406,6 +417,7 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | MFD 1+3+3, K_f=20 / own Part B setting (K_f=256) | 4 | 0.1196 / 0.0931, 0.1221 / 0.0938 | — | — |
 | Plug-in 1+2+2 main in C's recipe: text / image / merged (2 × 4 passes) | 4 | 0.1227 / 0.0960, 0.1238 / 0.0966, 0.1246 / 0.0975 | 0.1143 / 0.0805, 0.1144 / 0.0807, 0.1172 / 0.0826 | — |
 | Plug-in 1+3+3 main in C's recipe: text / image / merged (2 × 5 passes) | 5 | 0.1207 / 0.0938, 0.1208 / 0.0942, 0.1217 / 0.0948 | 0.1119 / 0.0822, 0.1143 / 0.0829, 0.1162 / 0.0845 | — |
+| MFD 1+2+2 + C's task mix A / B / C (K_f=100, w=1/.5/.5) | 3 | 0.1227 / 0.0949, 0.1202 / 0.0933, 0.1245 / 0.0962 | — | — |
 | Plug-in shared-f merged, 1+2+2 / 1+3+3 | 4 / 5 | 0.1201 / 0.0946, 0.1199 / 0.0934 | — | — |
 | C seed 42 merged (paired reference for the plug-in; `docs/PLUGIN_REPORT.md`) | 5 | 0.1301 / 0.0998 | 0.1267 / 0.0897 | — |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
@@ -499,7 +511,10 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `4a6adca`…`5e29eca` | MFD Parts A–C code: L-level MFD, sweep, multi-view augmentation, pack training, eval jobs |
 | `57a585f`, `df0a5f8` | MFD Parts A–C results: `docs/MFD_REPORT.md` §7–§12, `mfd_parts_table.py`, `mfd_paired_parts.py` |
 | `15a2e1a`…`20db1ca` | Plug-in (MD SIDs in C's framework) code: views, config gate, training/eval jobs, first-token, paired + table tools |
-| (next) | Plug-in results: `docs/PLUGIN_REPORT.md` (MD loses to C under C's recipe) |
+| `e87ae13` | Plug-in results: `docs/PLUGIN_REPORT.md` (MD loses to C under C's recipe) |
+| `91ff52e`…`bc8c0bc` | MFD with C's task mix: datasets, checks, gate, eval, paired tools; pack seed field |
+| `84ab720`…`29e1744` | codebook-geometry-aware T5: model, entry, checks, gate, diagnostics, run scripts |
+| (next) | MFD task-mix results (`docs/MFD_REPORT.md` §13) |
 
 ---
 

@@ -1,6 +1,6 @@
 # MFD stage 1 on Instruments: report
 
-> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12 at the end; summary in §7.**
+> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14.**
 
 Two-branch decoder (MFD) vs the MD chain-decoder control, same SID and training recipe.
 Instruments, MD-RQ-VAE 1+2+2 v1 SID, seed 42. Written 2026-10-31.
@@ -676,3 +676,143 @@ and so predict f better. It does so only marginally:
 - Games is not run.
 - f prediction is the binding limit: the next lever has to change it (e.g. a dedicated f objective or the C-style
   multi-task recipe on top of MFD), not the search.
+
+## 13. MFD with MQL4GRec's task mix (versions A, B, C; Instruments)
+
+Written 2026-11-02. Instruments, MD-RQ-VAE 1+2+2 v1 SID (hash verified at every job), seed 42. The question: does C's
+multi-task recipe (which carries the whole C/D lead over single-task decoders, `docs/MDRQVAE_REPORT.md` §5.2) help MFD?
+Model, T5 config, optimizer, batch, LR, schedule and early stopping are mfd122_mv's; only the task mix and the prompts change.
+
+Runs: `mmgen_runs/mfd/Instruments/mfd122_mt{A,B,C}/seed42/`. Code: `macrec/mfd_mt_data.py`, `mfd_mt_check.py`,
+`mfd_dryrun.py`, `sbatch/mfd/mt_gate.sbatch`, `eval_mt.sbatch`, `mt_paired.sbatch`, `sbatch/tools/mfd_mt_config_diff.py`,
+`mfd_mt_real_diff.py`, `mfd_mt_paired.py`. Training: A/B pack 21588791, C pack 21598855 (with mfd122_mv seeds 43/44; C alone
+kept the GPU 27% busy, so the first C job 21591694 was stopped at epoch 1 and repacked). Evals 21591177/8, 21598856 (H200).
+Paired CIs: `mmgen_runs/mfd/Instruments/mt_paired.json`.
+
+### 13.1 Task mapping and naming
+
+**Naming.** Our full-view task is called **fullseqrec** in this report (code identifier `mt_fusionseqrec`, kept because
+runs were trained with it). It is **not** C's fusionseqrec: C's fusionseqrec is the cross-modal coin-flip task, implemented
+here as **`mt_crossseqrec`** (version C only).
+
+| C task (MQL4GRec `data.py`) | C definition | MFD task (code id) | MFD version | in |
+|---|---|---|---|---|
+| seqrec | bare text-SID history → next text SID, no prompt | mt_seqrec | text-view history [f t1 t2]… → text branch | A, B, C |
+| seqimage | bare image-SID history → next image SID, no prompt | mt_seqimage | image-view history [f i1 i2]… → image branch | A, B, C |
+| (none) | – | **fullseqrec** (mt_fusionseqrec) | soft prompt + full-view history → both branches (the inference task) | A, B, C |
+| item2image | prompt + item text SID → its image SID | mt_item2image | prompt + item text view → image branch | B |
+| image2item | prompt + item image SID → its text SID | mt_image2item | prompt + item image view → text branch | B |
+| fusionseqrec | prompt + text history → image SID, or (coin flip per example) image history → text SID | **mt_crossseqrec** | the same on MFD's branches | C |
+
+Deviations from C's recipe:
+- fullseqrec takes fusionseqrec's slot (prompt, example share) in A and B (decided with the user, 2026-11-01): MFD
+  decodes both branches from the full view at inference, which C's fusionseqrec never trains. C's cross-modal direction
+  is therefore absent from A and B; version C adds it as an extra task with its own prompt.
+- f is a target once per example (text row, position 0); single-branch tasks mask the other branch's codes, not f.
+- Prompts mirror C: none on the two sequence tasks, C's soft prompts (`finetune_contrastive.train`, task i → token ids
+  100(i+1)…) on the others, rebuilt identically at evaluation.
+- Validation / early stopping use only the inference task (fullseqrec on the valid split, eval_loss, patience 10), as
+  mfd122_mv; mfd122_mv's validation input has no prompt.
+
+### 13.2 Sanity checks and epoch size
+
+All passed before training (`mmgen_runs/mfd/mt_gate/Instruments/`):
+1. Branch independence: untrained-model check (`mfd_eval.py --sanity_only --random_init`) per run.
+2. Inputs / targets (`mfd_mt_check.py`): printed sample per task; on 5,000 random examples per sequence task (all of
+   each item task) the input is [prompt +] the right view and the labels carry loss on exactly the targeted branch plus
+   f once. Version C's coin flip: text-history → image share 0.5032 (n = 5,000).
+3. Examples per epoch per task = C's: 84,890 per sequence task, 6,250 per item task.
+4. Config diff vs mfd122_mv (dry run vs dry run): only the task mix (tasks, soft prompts, examples) and run paths differ;
+   soft prompts equal C's construction. The dry run does not reproduce real finetune_mfd runs in two TrainingArguments
+   (`dataloader_num_workers` 0 vs 2, `prediction_loss_only`), so each real run was also compared with mfd122_mv's real
+   run after its first checkpoint (`mfd_mt_real_diff.py`): only paths and `tasks` differ, for A, B and C.
+
+| run | tasks | examples / epoch | optimizer steps / epoch | steps run | epochs run | best checkpoint (valid loss) |
+|---|---|---|---|---|---|---|
+| mfd122_mv | seqrec_mv (3 views) | 254,670 | 248 | 15,128 | 61 | 12,648 (2.1418) |
+| A | seqrec, seqimage, fullseqrec | 254,670 | 248 | 17,360 | 70 | 14,880 (2.1636) |
+| B | A + item2image, image2item | 267,170 | 261 | 15,399 | 59 | 12,789 (2.1967) |
+| C | A + crossseqrec | 339,560 | 331 | 18,924 | 57 | 15,604 (2.1342) |
+
+(Validation losses are on the same users and targets; mfd122_mv's input has no prompt, so its loss is only roughly comparable.)
+
+### 13.3 Results (test; validation HR@10 in brackets)
+
+Settings: (i) K_f = 20, w = 1; (ii) K_f = 100, w_f = 1, w_t = w_i = 0.5 (mfd122_mv's best); (iii) the 108-setting grid
+chosen on VALIDATION, applied once to test. Joint scoring. H200, ms/user = decode time.
+
+| model | setting | HR@10 | NDCG@10 | HR@1 / HR@5 / NDCG@5 | decoder passes / user | ms / user |
+|---|---|---|---|---|---|---|
+| A | (i) | 0.1196 [0.1483] | 0.0940 | 0.0751 / 0.0996 / 0.0875 | 3 | 6.8 |
+| A | (ii) | 0.1227 [0.1511] | 0.0949 | 0.0745 / 0.1017 / 0.0882 | 3 | 29.8 |
+| A | (iii) K100, w=.75/.5/.5 | 0.1224 [0.1517] | 0.0949 | 0.0742 / 0.1016 / 0.0882 | 3 | 29.8 |
+| B | (i) | 0.1174 [0.1464] | 0.0926 | 0.0738 / 0.0992 / 0.0867 | 3 | 6.8 |
+| B | (ii) | 0.1202 [0.1501] | 0.0933 | 0.0741 / 0.0982 / 0.0862 | 3 | 29.4 |
+| B | (iii) K256, w=1/1/.5 | 0.1209 [0.1502] | 0.0936 | 0.0740 / 0.0986 / 0.0865 | 3 | 61.4 |
+| C | (i) | 0.1221 [0.1491] | 0.0947 | 0.0747 / 0.1013 / 0.0880 | 3 | 6.8 |
+| C | (ii) | **0.1245** [0.1541] | **0.0962** | 0.0750 / 0.1030 / 0.0893 | 3 | 29.8 |
+| C | (iii) = (ii) | 0.1245 [0.1541] | 0.0962 | | 3 | 29.8 |
+| mfd122_mv | (i) | 0.1208 [0.1484] | 0.0948 | 0.0757 / 0.1006 / 0.0883 | 3 | 6.8 |
+| mfd122_mv | (ii) (its Part B choice) | 0.1237 [0.1540] | 0.0959 | 0.0756 / 0.1024 / 0.0891 | 3 | 29.4 |
+| MD chain decoder 1+2+2 | beam 20 | 0.1181 [0.1476] | 0.0932 | | 6 | 25.3 |
+| Plug-in 1+2+2 merged (MD SID in C's recipe) | | 0.1246 [0.1539] | 0.0975 | | 2 × 4 | 36.2 |
+| C (MQL4GRec) seed 42 merged | | 0.1301 | 0.0998 | | 2 × 5 | 43.3 |
+
+**Four scoring modes at (ii)** (test HR@10 / NDCG@10; text / image = one branch's score with f, merge = C's ensemble rule
+over the two single-branch lists, joint = w_f s_f + w_t s_t + w_i s_i):
+
+| model | text | image | merge | joint |
+|---|---|---|---|---|
+| A | 0.1124 / 0.0899 | 0.1128 / 0.0899 | 0.1143 / 0.0907 | 0.1227 / 0.0949 |
+| B | 0.1104 / 0.0881 | 0.1090 / 0.0877 | 0.1115 / 0.0890 | 0.1202 / 0.0933 |
+| C | 0.1158 / 0.0916 | 0.1143 / 0.0911 | 0.1180 / 0.0927 | 0.1245 / 0.0962 |
+| mfd122_mv | 0.1135 / 0.0909 | 0.1135 / 0.0905 | 0.1161 / 0.0920 | 0.1237 / 0.0959 |
+
+Joint scoring stays the best mode for every version (+0.007 to +0.010 HR@10 over merge).
+
+**f accuracy and coverage (test; valid in brackets).**
+
+| model | f top-1 | f top-20 = coverage at K_f=20 | coverage at K_f=100 | HR@10 among covered, (ii) |
+|---|---|---|---|---|
+| mfd122_mv | 0.0996 [0.1172] | 0.3567 [0.3948] | 0.7713 [0.7934] | 0.1604 |
+| A | 0.0983 [0.1155] | 0.3469 [0.3835] | 0.7662 [0.7872] | 0.1601 |
+| B | 0.0969 [0.1135] | 0.3400 [0.3780] | 0.7494 [0.7779] | 0.1604 |
+| C | 0.0989 [0.1165] | 0.3544 [0.3908] | 0.7699 [0.7935] | 0.1617 |
+
+No task mix improves f prediction; B's item tasks lower it (−0.003 top-1, −0.017 top-20).
+Peak decode memory 10.9 GB at (i), 11.2 GB at (ii), every run (H200, batch 64).
+
+### 13.4 Paired differences (2,000 paired resamples of the same users, 95% CI)
+
+| comparison | test ΔHR@10 | test ΔNDCG@10 | valid ΔHR@10 |
+|---|---|---|---|
+| A (i) − mv (i) | −0.0012 [−0.0041, +0.0015] | −0.0008 [−0.0024, +0.0007] | −0.0001 [−0.0031, +0.0029] |
+| A (ii) − mv (ii) | −0.0011 [−0.0040, +0.0017] | −0.0009 [−0.0027, +0.0006] | −0.0030 [−0.0060, +0.0001] |
+| A (iii) − mv (ii) | −0.0013 [−0.0043, +0.0015] | −0.0010 [−0.0027, +0.0006] | −0.0023 [−0.0055, +0.0008] |
+| B (i) − mv (i) | **−0.0034 [−0.0065, −0.0002]** | **−0.0022 [−0.0039, −0.0005]** | −0.0020 [−0.0053, +0.0011] |
+| B (ii) − mv (ii) | **−0.0035 [−0.0065, −0.0006]** | **−0.0026 [−0.0044, −0.0010]** | **−0.0039 [−0.0072, −0.0006]** |
+| B (iii) − mv (ii) | −0.0029 [−0.0060, +0.0002] | **−0.0023 [−0.0041, −0.0006]** | **−0.0039 [−0.0072, −0.0006]** |
+| C (i) − mv (i) | +0.0013 [−0.0016, +0.0042] | −0.0000 [−0.0016, +0.0015] | +0.0006 [−0.0025, +0.0037] |
+| C (ii) − mv (ii) | +0.0008 [−0.0021, +0.0038] | +0.0003 [−0.0013, +0.0019] | +0.0001 [−0.0029, +0.0032] |
+| A (ii) − plug-in 1+2+2 merged | −0.0020 [−0.0050, +0.0010] | **−0.0026 [−0.0042, −0.0010]** | −0.0028 [−0.0060, +0.0002] |
+| B (ii) − plug-in 1+2+2 merged | **−0.0044 [−0.0076, −0.0014]** | **−0.0042 [−0.0060, −0.0025]** | **−0.0037 [−0.0071, −0.0004]** |
+| C (ii) − plug-in 1+2+2 merged | −0.0001 [−0.0031, +0.0029] | −0.0013 [−0.0030, +0.0003] | +0.0002 [−0.0029, +0.0035] |
+| B (ii) − A (ii) | −0.0025 [−0.0054, +0.0006] | **−0.0017 [−0.0034, −0.0000]** | −0.0009 [−0.0039, +0.0022] |
+| C (ii) − A (ii) | +0.0019 [−0.0008, +0.0046] | +0.0013 [−0.0003, +0.0028] | **+0.0030 [+0.0001, +0.0061]** |
+| mv (ii) − plug-in 1+2+2 merged | −0.0009 [−0.0039, +0.0022] | −0.0016 [−0.0032, +0.0000] | +0.0002 [−0.0030, +0.0033] |
+
+Bold = CI excludes 0. (i)/(iii) vs plug-in rows: `mt_paired.json`.
+
+### 13.5 Decision and reading
+
+**Arts rule** (a version must beat mfd122_mv's validation HR@10 at (ii), 0.1540, by more than 0.002): A 0.1511, B 0.1501,
+C 0.1541. **Not triggered for any version; no Arts runs.**
+
+- C's multi-task recipe does not transfer to MFD. A is a tie with mfd122_mv; B's item-level translation tasks hurt
+  (−0.0035 HR@10, CI < 0); C (+ the cross-modal coin-flip task) is the best of the three and ties mfd122_mv (+0.0008)
+  and the plug-in merged list (−0.0001 HR@10, NDCG −0.0013).
+- On MFD the cross-modal sequence task is the only one with a positive sign (C − A: +0.0030 valid, CI > 0; +0.0019 test),
+  consistent with it being C's most useful task. It adds ≈ nothing over multi-view augmentation, which already shows
+  the decoder each single-modality view of the history (mfd122_mv).
+- None of the versions changes f prediction (top-1 0.097–0.100 vs 0.0996); the binding limit of §11 stays.
+- C seed-42 merged (0.1301) remains 0.0056 HR@10 above the best MFD.
