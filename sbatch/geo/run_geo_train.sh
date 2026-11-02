@@ -23,8 +23,8 @@ case $VAR in
   *) echo "VAR must be A, C, AB1 or AB2"; exit 1 ;;
 esac
 case $KIND in
-  chain) NAME=chain122_$VAR; OUT=$RUNS/geo/$D/$NAME/seed$SEED; TASKS=seqrec; MFDARG="" ;;
-  mfd)   NAME=mfd122_mv_geo$VAR; OUT=$RUNS/mfd/$D/$NAME/seed$SEED; TASKS=seqrec_mv; MFDARG="--mfd" ;;
+  chain) NAME=chain122_$VAR; OUT=$RUNS/geo/$D/$NAME/seed$SEED; TASKS=seqrec; MFDARG=""; DATAP=$RUNS/data/ ;;   # run_baseline.sh's spelling
+  mfd)   NAME=mfd122_mv_geo$VAR; OUT=$RUNS/mfd/$D/$NAME/seed$SEED; TASKS=seqrec_mv; MFDARG="--mfd"; DATAP=$RUNS/data ;;
   *) echo "KIND must be chain or mfd"; exit 1 ;;
 esac
 [ "$DRYRUN" = 1 ] && { OUT=$RUNS/geo/gate/dryrun/$D/$NAME; rm -rf $OUT; }
@@ -54,7 +54,7 @@ ENTRY=finetune_geo.py; [ "$DRYRUN" = 1 ] && ENTRY="geo_dryrun.py --dump_file $OU
 [ -f $OUT/train_stats.json ] || torchrun --nproc_per_node=1 --master_port=$PORT $ENTRY $GEOARGS $MFDARG --geo_ckpt $TOKCK \
   --geo_report $OUT/geo_init.json --model_class plain \
   --stats_file $OUT/train_stats.json --dataloader_num_workers 2 --run_config_file $OUT/run_config.json \
-  --seed $SEED --data_path $RUNS/data --dataset $D --output_dir $OUT --base_model ./config/ckpt \
+  --seed $SEED --data_path $DATAP --dataset $D --output_dir $OUT --base_model ./config/ckpt \
   --per_device_batch_size 256 --gradient_accumulation_steps 4 --learning_rate 5e-4 --epochs 200 --weight_decay 0.01 \
   --save_and_eval_strategy epoch --logging_step 50 --max_his_len 20 --prompt_num 4 --patient 10 \
   --index_file $IDX --image_index_file $IDX --tasks $TASKS --valid_task seqrec > $OUT/train.log 2>&1
