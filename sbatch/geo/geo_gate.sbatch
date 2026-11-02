@@ -1,7 +1,8 @@
 #!/bin/bash
 # Gate of the codebook-geometry runs (docs/MFD_REPORT.md §14): sanity checks 1-2 (macrec/geo_check.py) and the dry-run
 # config diff against the controls (sanity 3, tools/geo_config_diff.py). No training. Frozen copy of the code.
-#   KINDS="chain mfd" VARS="A C AB1 AB2" (defaults): dry runs of every <kind>:<var>.
+#   KINDS="chain mfd" VARS="A C AB1 AB2" (defaults): dry runs of every <kind>:<var>; the controls' dry runs are made
+#   when missing (chain: run_baseline.sh DRYRUN=1, MFD mfd122_mv: run_mfd_train.sh DRYRUN=1 AUG=1).
 # Outputs: mmgen_runs/geo/<D>/geo_check.json, mmgen_runs/geo/gate/<D>/geo_config_diff.json, dry runs in geo/gate/dryrun/.
 # Submit: sbatch sbatch/geo/geo_gate.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
@@ -28,6 +29,7 @@ D=${D:-Instruments}; KINDS=${KINDS:-"chain mfd"}; VARS=${VARS:-"A C AB1 AB2"}
 M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/; cp -r $REPO/macrec/cross_index $M/
 RG=$TMPDIR/run_geo_train.sh; cp $REPO/sbatch/geo/run_geo_train.sh $RG
 RB=$TMPDIR/run_baseline.sh; cp $REPO/sbatch/baselines/run_baseline.sh $RB
+RM=$TMPDIR/run_mfd_train.sh; cp $REPO/sbatch/mfd/run_mfd_train.sh $RM
 T=$TMPDIR/tools; mkdir -p $T; cp $REPO/sbatch/tools/geo_config_diff.py $REPO/sbatch/tools/plugin_config_diff.py $T/
 mkdir -p $RUNS/geo/$D $RUNS/geo/gate/$D
 echo "job $SLURM_JOB_ID on $(hostname) D=$D KINDS=$KINDS VARS=$VARS commit $(cd $REPO && git rev-parse --short HEAD)"
@@ -43,6 +45,7 @@ python -u geo_check.py --index $RUNS/data/$D/$D.index_md122_a05_ep500_reassign.j
   --out_file $RUNS/geo/$D/geo_check.json > $RUNS/geo/$D/geo_check.log 2>&1 || { tail -5 $RUNS/geo/$D/geo_check.log; echo 'GEO CHECK FAILED'; exit 1; }
 tail -1 $RUNS/geo/$D/geo_check.log
 [ -f $RUNS/plugin/dryrun/$D/md122_a05_ep500_reassign/seed42/dryrun.json ] || MACREC_DIR=$M D=$D B=md122_a05_ep500_reassign SEED=42 STAGE=train NW=2 DRYRUN=1 bash $RB
+[ -f $RUNS/mfd/mt_gate/dryrun/$D/mfd122_mv/dryrun.json ] || M=$M D=$D CFG=122 AUG=1 SEED=42 DRYRUN=1 bash $RM   # MFD control dry run
 for K in $KINDS; do for V in $VARS; do
   M=$M D=$D KIND=\$K VAR=\$V SEED=42 DRYRUN=1 bash $RG
 done; done
