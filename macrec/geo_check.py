@@ -162,9 +162,11 @@ def main():
             y[:, -1] = -100
             kw = {}
         with torch.no_grad():
-            mine = m(input_ids=x, attention_mask=torch.ones_like(x), labels=y, **kw).loss.item()
+            o = m(input_ids=x, attention_mask=torch.ones_like(x), labels=y, **kw)
+            mine = o["loss"].item()                              # as the Trainer reads it
+            ok(f"{name}_soft_loss_is_output_key", "loss" in o.keys() and o.to_tuple()[0] is o["loss"])
             m.soft_Q = None
-            ref = m(input_ids=x, attention_mask=torch.ones_like(x), labels=y, **kw).loss.item()
+            ref = m(input_ids=x, attention_mask=torch.ones_like(x), labels=y, **kw)["loss"].item()
         ok(f"{name}_soft_loss_eps0_equals_model_loss", abs(mine - ref) < 1e-4, soft=mine, model=ref)
 
     # ---- 2. soft labels ----

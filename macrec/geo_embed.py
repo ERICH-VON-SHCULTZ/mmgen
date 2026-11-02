@@ -200,8 +200,9 @@ def make_geo_class(base_cls):
                 decoder_input_ids = self._shift_right(labels)
             out = base_cls.forward(self, input_ids=input_ids, attention_mask=attention_mask,
                                    decoder_input_ids=decoder_input_ids, labels=None, **kwargs)
-            out.loss = self.soft_loss(out.logits, labels)
-            return out
+            # a new output object: ModelOutput only exposes keys set at construction (out.loss = ... is not seen by the
+            # Trainer, which reads outputs["loss"])
+            return type(out)(loss=self.soft_loss(out.logits, labels), **{k: v for k, v in out.items() if k != "loss"})
 
     Geo.__name__ = "Geo" + base_cls.__name__
     return Geo
