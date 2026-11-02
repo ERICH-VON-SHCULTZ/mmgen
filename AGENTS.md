@@ -207,7 +207,7 @@ mmgen/
     ├── plugin/paired.sbatch       plug-in vs C paired bootstrap (tools/plugin_paired.py, REF= picks another reference run) + tables (tools/plugin_table.py); CPU
     ├── plugin/paired_sharedf.sbatch   shared-f vs main plug-in, paired (CPU)
     ├── mfd/mt_gate.sbatch, eval_mt.sbatch, mt_paired.sbatch   task-mix gate (dry runs + task checks + config diff), eval (i)/(ii)/(iii), paired CIs (tools/mfd_mt_*.py)
-    ├── geo/run_geo_train.sh, geo_gate.sbatch, eval_geo.sbatch   geometry runs (KIND chain|mfd, VAR A|C|AB1|AB2; pack entry geo:<D>:<kind>:<var>), gate (sanity 1-3), eval + diagnostics; tools/geo_config_diff.py, geo_chain_paired.py
+    ├── geo/run_geo_train.sh, geo_gate.sbatch, eval_geo.sbatch   geometry runs (KIND chain|mfd, VAR A|C|AB1|AB2; pack entry geo:<D>:<kind>:<var>), gate (sanity 1-3), eval + diagnostics; tools/geo_config_diff.py, geo_chain_paired.py, geo_data_check.py (next-f signal: codebook distance vs co-occurrence; soft-label T table; CPU)
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
