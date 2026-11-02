@@ -5,6 +5,7 @@
 # RUNS entries:  mfd:<D>:<CFG 122|133>:<AUG 0|1>[:<SEED>]   (sbatch/mfd/run_mfd_train.sh; SEED default 42)
 #                chain:<D>:<baseline, e.g. mdmv122> (sbatch/baselines/run_baseline.sh STAGE=train)
 #                mfdmt:<D>:<A|B|C>[:<SEED>]   MFD 1+2+2 with C's task mix (run_mfd_train.sh MT=; needs a passed sbatch/mfd/mt_gate.sbatch)
+#                geo:<D>:<chain|mfd>:<A|C|AB1|AB2>[:<SEED>]   codebook-geometry run (sbatch/geo/run_geo_train.sh; needs a passed sbatch/geo/geo_gate.sbatch)
 # Submit: sbatch --export=ALL,RUNS="mfd:Instruments:133:0 chain:Arts:mdmv122" sbatch/mfd/pack_mfd_train.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=a100_tandon,h100_tandon
@@ -32,6 +33,7 @@ export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR" $WANDB
 M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/
 RB=$TMPDIR/run_baseline.sh; cp $REPO/sbatch/baselines/run_baseline.sh $RB
 RM=$TMPDIR/run_mfd_train.sh; cp $REPO/sbatch/mfd/run_mfd_train.sh $RM
+RG=$TMPDIR/run_geo_train.sh; cp $REPO/sbatch/geo/run_geo_train.sh $RG
 LOGD=$RUNS_DIR/logs/pack_$SLURM_JOB_ID; mkdir -p $LOGD
 echo "job $SLURM_JOB_ID on $(hostname)  RUNS=$RUNS  commit $(cd $REPO && git rev-parse --short HEAD)"
 nvidia-smi --query-gpu=name,utilization.gpu,memory.used --format=csv,noheader,nounits -l 10 > $LOGD/gpu_util.csv &
@@ -50,6 +52,8 @@ for R in $RUNS; do
     CMD="M=$M D=$D CFG=$X AUG=$Y SEED=${S:-42} bash $RM"
   elif [ $K = mfdmt ]; then
     CMD="M=$M D=$D CFG=122 AUG=0 MT=$X SEED=${Y:-42} bash $RM"
+  elif [ $K = geo ]; then
+    CMD="M=$M D=$D KIND=$X VAR=$Y SEED=${S:-42} bash $RG"
   else
     CMD="MACREC_DIR=$M D=$D B=$X SEED=42 STAGE=train NW=2 bash $RB"
   fi
