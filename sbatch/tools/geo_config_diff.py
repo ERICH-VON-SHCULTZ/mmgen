@@ -26,7 +26,10 @@ PATHS = {"output_dir", "logging_dir", "run_name", "stats_file", "run_config_file
 GEOMETRY = {"model_class", "n_params"}
 VOLATILE = {"_n_gpu", "local_rank", "deepspeed_plugin", "accelerator_config", "hub_token", "push_to_hub_token",
             "torch_compile_backend", "torch_compile_mode"}
-WANT = {"A": ("codebook", 0.0), "C": ("shuffled", 0.0), "AB1": ("codebook", 0.1), "AB2": ("codebook", 0.2)}
+WANT = {"A": ("codebook", 0.0), "C": ("shuffled", 0.0), "AB1": ("codebook", 0.1), "AB2": ("codebook", 0.2),
+        "V1": ("shuffled", 0.2), "V2": ("codebook", 0.0), "V3": ("none", 0.2), "V4": ("codebook", 0.2)}
+SOFT = {"V3": ("uniform", None), "V4": ("geometric", 0.7), "AB1": ("geometric", None), "AB2": ("geometric", None),
+        "V1": ("geometric", None)}               # (soft-label mode, share of eps mass on the 10 nearest f)
 
 
 def classify(d):
@@ -71,8 +74,10 @@ def main():
         gi = json.load(open(f"{G}/dryrun/{D}/{r}/geo_init.json"))
         var = r.split("_")[1] if r.startswith("chain122_") else r.split("_geo")[1]
         geo, eps = WANT[var]
-        geo_ok = (gi["geo"] == geo and gi.get("soft_f", {}).get("eps", 0.0) == eps and gi["tied_head"]
-                  and gi["codebook_tensor"] == "<chain>_rq.vq_layers.<l>.embedding.weight")
+        sf = gi.get("soft_f", {})
+        geo_ok = (gi["geo"] == geo and sf.get("eps", 0.0) == eps and gi["tied_head"]
+                  and gi["codebook_tensor"] == "<chain>_rq.vq_layers.<l>.embedding.weight"
+                  and (var not in SOFT or (sf.get("mode", "geometric"), sf.get("nn_target")) == SOFT[var]))
         cl = classify(diff(comparable(ctl), comparable(p)))
         ok = not cl["UNINTENDED"] and geo_ok
         res["runs"][r] = cl | {"ok": ok, "geo_init_as_intended": geo_ok, "geo_init": gi,

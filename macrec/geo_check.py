@@ -188,6 +188,31 @@ def main():
                                              "mass_top5_neighbours": round(top.values.sum().item(), 4)})
         rep[f"soft_eps{eps}"] = sinfo | {"examples": ex,
                                          "median_sq_dist_all_pairs": d2[~torch.eye(len(fcodes), dtype=bool)].median().item()}
+    # §15 V3: plain label smoothing on f; V4: geometric targets with 70% of the eps mass on the 10 nearest f
+    ids, Q, _, sinfo = ge.soft_f_targets(tok, books, 0.2, "uniform")
+    K = len(ids)
+    off = ~torch.eye(K, dtype=torch.bool)
+    ok("V3_uniform_true_mass", (Q.diagonal() - 0.8).abs().max().item() < 1e-6)
+    ok("V3_uniform_other_mass", (Q[off] - 0.2 / (K - 1)).abs().max().item() < 1e-7, other=0.2 / (K - 1), f_codes=K)
+    ok("V3_rows_sum_1", (Q.sum(1) - 1).abs().max().item() < 1e-5)
+    rep["V3_uniform"] = sinfo | {"true_mass": 0.8, "other_mass": 0.2 / (K - 1)}
+    ids, Q, T4, sinfo = ge.soft_f_targets(tok, books, 0.2, "geometric", 0.7)
+    fcodes = [int(tok.convert_ids_to_tokens(int(i)).split("_")[1][:-1]) for i in ids]
+    c = books["s0"][torch.tensor(fcodes)]
+    d2 = torch.cdist(c, c).pow(2)
+    d2o = d2.clone(); d2o.fill_diagonal_(float("inf"))
+    order = d2o.argsort(1)
+    per = {}
+    for j in (0, 50, 100, 150, 200):
+        m = Q[j, order[j]] / 0.2
+        per[f"<s0_{fcodes[j]}>"] = {"eps_mass_5nn": round(m[:5].sum().item(), 4), "eps_mass_10nn": round(m[:10].sum().item(), 4)}
+    ok("V4_mean_10nn_mass_0.7", abs(sinfo["eps_mass_10nn"] - 0.7) < 1e-3, T=T4, mean_5nn=sinfo["eps_mass_5nn"])
+    ok("V4_rows_sum_1", (Q.sum(1) - 1).abs().max().item() < 1e-5)
+    rep["V4_geometric"] = sinfo | {"examples": per}
+    print(f"V4: T={T4:.3f}  mean eps mass on 5-NN {sinfo['eps_mass_5nn']:.3f}, on 10-NN {sinfo['eps_mass_10nn']:.3f}")
+    for code, v in per.items():
+        print("  ", code, v)
+    print(f"V3: true f {0.8}, every other f code {0.2 / (K - 1):.6f} ({K} f codes)")
     rep["all_pass"] = not fails
     rep["failures"] = fails
     json.dump(rep, open(a.out_file, "w"), indent=1)

@@ -14,7 +14,8 @@ A. Codebook-initialised code embeddings. Every SID code token <s0_k> / <t0_k> / 
    so the same table also gives the output logits: geometry enters both.
    geo="shuffled": the control; codebook vectors are permuted among the code tokens of each level (fixed seed).
 B. Soft labels for f: target q(f') = (1 - eps) 1[f' = f*] + eps softmax_{f' != f*}(-||c(f') - c(f*)||^2 / T),
-   T = median over f codes of the squared distance to their 10th-nearest f code. Applied to every label that is an
+   T = median over f codes of the squared distance to their 10th-nearest f code, or the T that puts a given share of
+   the eps mass on the 10 nearest f codes (§15 V4). soft_mode="uniform": plain label smoothing on f (§15 V3). Applied to every label that is an
    f token (chain: position 0; MFD: text row position 0); all other labels stay one-hot. eps = 0: HF's own loss.
 After training, bake() turns the model back into a plain T5 whose embedding table is the learned P c + delta, so all
 evaluation code loads it unchanged.
@@ -102,18 +103,44 @@ class GeoHead(nn.Module):
         return F.linear(x, self.geo.full_weight())
 
 
-def soft_f_targets(tokenizer, books, eps):
-    """(f token ids (K,), Q (K, K) target rows, T, info) for the f level 's0'."""
+def nn_mass(d2, T, k=10):
+    """Mean (over true f) share of the eps mass on the k nearest other f codes, for temperature T."""
+    lg = -d2 / T
+    lg.fill_diagonal_(float("-inf"))
+    q = lg.softmax(dim=1)
+    off = d2.clone()
+    off.fill_diagonal_(float("inf"))
+    order = off.argsort(dim=1)
+    return q.gather(1, order[:, :k]).sum(1).mean().item()
+
+
+def soft_f_targets(tokenizer, books, eps, mode="geometric", nn_target=None):
+    """(f token ids (K,), Q (K, K) target rows, T, info) for the f level 's0'.
+    mode geometric: q(f') = (1 - eps) 1[f' = f*] + eps softmax_{f' != f*}(-||c(f') - c(f*)||^2 / T), T = median squared
+      distance to the 10th-nearest f code, or (nn_target) the T whose eps mass on the 10 nearest codes is nn_target.
+    mode uniform: plain label smoothing on f: eps / (K - 1) on every other f code."""
     toks = [(i, c) for i, lv, c in code_tokens(tokenizer) if lv == "s0"]
     ids = torch.tensor([i for i, _ in toks])
+    K = len(toks)
+    info = {"eps": eps, "f_tokens": K, "mode": mode}
+    if mode == "uniform":
+        Q = torch.full((K, K), eps / (K - 1))
+        Q.fill_diagonal_(1 - eps)
+        return ids, Q, None, info | {"T": None}
     c = books["s0"][torch.tensor([k for _, k in toks])]
     d2 = torch.cdist(c, c).pow(2)
     T = d2.sort(dim=1).values[:, 10].median().item()             # column 0 is the code itself
+    if nn_target is not None:                                     # bisection on log T (mass decreases with T)
+        lo, hi = 1e-3, T
+        for _ in range(100):
+            mid = (lo * hi) ** 0.5
+            lo, hi = (mid, hi) if nn_mass(d2, mid) > nn_target else (lo, mid)
+        T = (lo * hi) ** 0.5
     logits = -d2 / T
     logits.fill_diagonal_(float("-inf"))
     Q = eps * logits.softmax(dim=1)
-    Q += (1 - eps) * torch.eye(len(toks))
-    return ids, Q, T, {"T": T, "eps": eps, "f_tokens": len(toks)}
+    Q += (1 - eps) * torch.eye(K)
+    return ids, Q, T, info | {"T": T, "nn_target": nn_target, "eps_mass_5nn": nn_mass(d2, T, 5), "eps_mass_10nn": nn_mass(d2, T, 10)}
 
 
 class GeoMixin:
@@ -121,7 +148,7 @@ class GeoMixin:
     _tied_weights_keys = ["encoder.embed_tokens", "decoder.embed_tokens", "lm_head"]
     geo_installed = False
 
-    def install_geometry(self, tokenizer, ckpt_path, geo, eps=0.0, perm_seed=0):
+    def install_geometry(self, tokenizer, ckpt_path, geo, eps=0.0, perm_seed=0, soft_mode="geometric", nn_target=None):
         assert self.config.tie_word_embeddings and self.lm_head.weight is self.shared.weight, "expected a tied T5"
         books = load_codebooks(ckpt_path)
         toks = code_tokens(tokenizer)
@@ -137,7 +164,7 @@ class GeoMixin:
             info.update(g.info)
             info["perm_seed"] = perm_seed if geo == "shuffled" else None
         if eps > 0:
-            ids, Q, T, sinfo = soft_f_targets(tokenizer, books, eps)
+            ids, Q, T, sinfo = soft_f_targets(tokenizer, books, eps, soft_mode, nn_target)
             fmap = torch.full((len(tokenizer) + 1,), -1, dtype=torch.long)
             fmap[ids] = torch.arange(len(ids))
             self.register_buffer("soft_ids", ids, persistent=False)

@@ -5,6 +5,12 @@
 #        C    shuffled-codebook control                     (--geo shuffled --geo_perm_seed 0)
 #        AB1  A + soft labels for f, eps = 0.1              (--geo codebook --soft_f_eps 0.1)
 #        AB2  A + soft labels for f, eps = 0.2              (--geo codebook --soft_f_eps 0.2)
+#   §15 (disentangling AB2):
+#        V1   shuffled init + AB2's soft labels             (--geo shuffled --geo_perm_seed 0 --soft_f_eps 0.2)
+#        V2   codebook init only (= A), one-hot f           (--geo codebook)
+#        V3   standard embeddings + uniform label smoothing on f, eps 0.2   (--geo none --soft_f_eps 0.2 --soft_f_mode uniform)
+#        V4   codebook init + geometric soft labels, T putting 70% of the eps mass on the 10 nearest f codes
+#             (--geo codebook --soft_f_eps 0.2 --soft_f_nn_mass 0.7)
 # KIND=chain: every other argument = the MD chain-decoder control (run_baseline.sh B=md122_a05_ep500_reassign: seqrec,
 #   finetune_ext path) -> mmgen_runs/geo/<D>/chain122_<VAR>/seed<S>.
 # KIND=mfd: every other argument = mfd122_mv (run_mfd_train.sh CFG=122 AUG=1: seqrec_mv, finetune_mfd path)
@@ -20,7 +26,11 @@ case $VAR in
   C)   GEOARGS="--geo shuffled --geo_perm_seed 0" ;;
   AB1) GEOARGS="--geo codebook --soft_f_eps 0.1" ;;
   AB2) GEOARGS="--geo codebook --soft_f_eps 0.2" ;;
-  *) echo "VAR must be A, C, AB1 or AB2"; exit 1 ;;
+  V1)  GEOARGS="--geo shuffled --geo_perm_seed 0 --soft_f_eps 0.2" ;;
+  V2)  GEOARGS="--geo codebook" ;;
+  V3)  GEOARGS="--geo none --soft_f_eps 0.2 --soft_f_mode uniform" ;;
+  V4)  GEOARGS="--geo codebook --soft_f_eps 0.2 --soft_f_nn_mass 0.7" ;;
+  *) echo "VAR must be A, C, AB1, AB2, V1, V2, V3 or V4"; exit 1 ;;
 esac
 case $KIND in
   chain) NAME=chain122_$VAR; OUT=$RUNS/geo/$D/$NAME/seed$SEED; TASKS=seqrec; MFDARG=""; DATAP=$RUNS/data/ ;;   # run_baseline.sh's spelling

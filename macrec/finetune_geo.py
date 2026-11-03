@@ -6,6 +6,8 @@ run_mfd_train.sh), unchanged arguments, plus:
   --geo_ckpt PATH                MD-RQ-VAE tokenizer checkpoint that produced the SID (v1: md/sids/v1/<D>/1+2+2/tokenizer.pth)
   --soft_f_eps EPS               B: soft labels for f (0 = one-hot, the control's loss)
   --geo_perm_seed S              permutation seed of the shuffled control (default 0)
+  --soft_f_mode geometric|uniform   B's targets: geometric (codebook distances) or plain label smoothing on f (§15 V3)
+  --soft_f_nn_mass M             geometric targets with the T that puts share M of the eps mass on the 10 nearest f (§15 V4)
   --mfd                          run finetune_mfd.py's path (MFDT5, MFD datasets / collator) instead of the chain's
   --geo_report PATH              JSON written at install: codebook tensor, tied head, norms, T, ...
 The model class becomes geo_embed.make_geo_class(PlainT5 | MFDT5); the geometry is installed when the Trainer is
@@ -36,9 +38,12 @@ GEO = pop_arg("--geo", "none")
 CKPT = pop_arg("--geo_ckpt")
 EPS = float(pop_arg("--soft_f_eps", 0.0))
 PERM_SEED = int(pop_arg("--geo_perm_seed", 0))
+SOFT_MODE = pop_arg("--soft_f_mode", "geometric")
+NN_MASS = pop_arg("--soft_f_nn_mass")
+NN_MASS = float(NN_MASS) if NN_MASS is not None else None
 MFD = pop_arg("--mfd", False, flag=True)
 REPORT = pop_arg("--geo_report")
-assert GEO in ("none", "codebook", "shuffled") and (GEO != "none" or EPS > 0) and CKPT
+assert GEO in ("none", "codebook", "shuffled") and (GEO != "none" or EPS > 0) and CKPT and SOFT_MODE in ("geometric", "uniform")
 
 
 def setup():
@@ -56,7 +61,7 @@ def setup():
     class GeoTrainer(_Base):
         def __init__(self, *a, **k):
             model, tok = k["model"], k["tokenizer"]
-            info = model.install_geometry(tok, CKPT, GEO, EPS, PERM_SEED)
+            info = model.install_geometry(tok, CKPT, GEO, EPS, PERM_SEED, SOFT_MODE, NN_MASS)
             info["n_params"] = sum(p.numel() for p in model.parameters())
             state["model"], state["info"] = model, info
             if REPORT and int(os.environ.get("LOCAL_RANK", 0)) == 0:
