@@ -236,8 +236,11 @@ sweep, but neither clears 0.002 on both datasets.
 
 ### Not proposed
 
-- More codebook geometry (embedding init, soft labels with a smaller T, geometric coarse groups): the §14 runs, the data
-  check and Part 3 all find the f codebook geometry weakly related to what the next f is.
+- More codebook geometry was listed here on the Instruments evidence (§14 runs, data check, Part 3). **Correction
+  (2026-11-03): the Arts geometry runs finished after this report.** On Arts, codebook init + soft f labels (AB2) gains
+  significantly: chain +0.0046 test HR@10 [+0.0016, +0.0077], MFD at setting (ii) +0.0114 [+0.0084, +0.0143], with f top-1
+  0.098 → 0.110. No Arts shuffled control exists yet, so the gain is not yet attributable to geometry (on Instruments the
+  shuffled control matched AB2 on test). Geometry is therefore an open question on Arts, not a rejected direction.
 - Larger K_f or wider beams: coverage is not binding (Part 1 finding 2, Part 3 "sum").
 - Changing the tokenizer (a coarser first shared level, i.e. a v2 SID) is the direct version of proposal 1 but is out of
   scope here (v1 locked); proposal 1 tests the same hypothesis on v1.
