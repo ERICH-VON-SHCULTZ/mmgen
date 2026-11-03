@@ -5,6 +5,8 @@
 #                      -> mmgen_runs/expl/<D>/first_<run>.pt
 #   STEP=infer D=<D>   Part 3 re-scoring checks on mfd122_mv, VALIDATION only (macrec/expl_infer.py)
 #                      -> mmgen_runs/expl/<D>/infer_valid.json
+#   STEP=group D=<D>   coarse regions of f (k-means of the f codebook vs random groups): does mfd122_mv's f mass find
+#                      the right region? (macrec/expl_group.py) -> mmgen_runs/expl/<D>/group.json
 # Frozen snapshot of macrec/*.py. Submit: sbatch --export=ALL,STEP=first,D=Instruments sbatch/expl/expl.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=a100_tandon,h100_tandon,h200_tandon
@@ -41,6 +43,8 @@ if [ $STEP = first ]; then
   python -u expl_first_step.py \$C --ckpt_path $RUNS/baselines/$D/plug122/seed42 --index_file .index_plug122_text.json --image_index_file .index_plug122_image.json --out_file $O/first_plug122.pt
   python -u expl_first_step.py \$C --ckpt_path $RUNS/baselines/$D/md122_a05_ep500_reassign/seed42 --index_file $MD --image_index_file $MD --first_tasks seqrec --out_file $O/first_chain.pt
   python -u expl_first_step.py \$C --ckpt_path $RUNS/mfd/$D/mfd122_mv/seed42 --index_file $MD --image_index_file $MD --first_tasks seqrec --out_file $O/first_mv.pt
+elif [ $STEP = group ]; then
+  python -u expl_group.py \$C --ckpt_path $RUNS/mfd/$D/mfd122_mv/seed42 --index_file $MD --image_index_file $MD --tokenizer_ckpt $V1/tokenizer.pth --out_file $O/group.json
 else
   python -u expl_infer.py \$C --ckpt_path $RUNS/mfd/$D/mfd122_mv/seed42 --index_file $MD --image_index_file $MD --out_file $O/infer_valid.json
 fi
