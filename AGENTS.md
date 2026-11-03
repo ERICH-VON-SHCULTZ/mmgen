@@ -98,6 +98,10 @@ are reference-only, not part of the main line.
 - **Codebook-geometry-aware T5 (started 2026-11-01), `docs/MFD_REPORT.md` §14:** SID code embeddings = P_level · codebook
   vector + delta (tied head), shuffled-codebook control, soft labels for f. Chain runs done (`mmgen_runs/geo/<D>/chain122_<VAR>/`);
   MFD + chosen variant (AB2) and Arts in progress.
+- **Exploration (2026-11-03), `docs/EXPLORATION.md`:** inference-only analysis of how the SID is used. C beats us where
+  its coarse, content-coherent first code is right and our fine f is not (item text-NN shares C's text L1 77%, our f 32%);
+  no inference re-scoring gains > 0.0015 valid HR@10; ranked proposals (coarse-to-fine f factorisation, f-loss weight,
+  item-level encoder structure, cheaper f selection by item mass).
 - **MFD paused (2026-10-31).** **Plug-in done (2026-11-01, seed 42), report `docs/PLUGIN_REPORT.md`:** the v1 MD SID split
   into a text view [f t..] and an image view [f i..] used as C's two modality SIDs, trained with C's exact recipe
   (`run_baseline.sh` B=plug122|plug122s|plug133|plug133s; `s` = shared-f token). Views made unique with MQL4GRec's
@@ -139,6 +143,7 @@ mmgen/
 │   ├── mfd_sweep.py       MFD wider search: K_f x score-weight sweep on VALID, chosen setting applied to test
 │   ├── mfd_mt_data.py, mfd_mt_check.py, mfd_dryrun.py   MFD with C's task mix (§13): tasks mt_* (mt_fusionseqrec = fullseqrec, mt_crossseqrec = C's fusionseqrec), input/target checks, dry run
 │   ├── geo_embed.py, finetune_geo.py, geo_check.py, geo_dryrun.py, geo_diag.py   codebook-geometry-aware T5 (§14): embeddings P·c+delta / shuffled control / soft f labels, bake to plain T5; entry; sanity checks; dry run; diagnostics
+│   ├── expl_first_step.py, expl_infer.py, expl_group.py   exploration (docs/EXPLORATION.md): per-user first-step ranks, MFD re-scoring checks (valid), f-region check
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
 │   ├── first_token_acc.py first-decoding-step accuracy (target's first token top-1 / top-20) for seqrec + seqimage lists
@@ -208,6 +213,7 @@ mmgen/
     ├── plugin/paired_sharedf.sbatch   shared-f vs main plug-in, paired (CPU)
     ├── mfd/mt_gate.sbatch, eval_mt.sbatch, mt_paired.sbatch   task-mix gate (dry runs + task checks + config diff), eval (i)/(ii)/(iii), paired CIs (tools/mfd_mt_*.py)
     ├── geo/run_geo_train.sh, geo_gate.sbatch, eval_geo.sbatch   geometry runs (KIND chain|mfd, VAR A|C|AB1|AB2; pack entry geo:<D>:<kind>:<var>), gate (sanity 1-3), eval + diagnostics; tools/geo_config_diff.py, geo_chain_paired.py, geo_data_check.py (next-f signal: codebook distance vs co-occurrence; soft-label T table; CPU)
+    ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU)
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -514,7 +520,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `e87ae13` | Plug-in results: `docs/PLUGIN_REPORT.md` (MD loses to C under C's recipe) |
 | `91ff52e`…`bc8c0bc` | MFD with C's task mix: datasets, checks, gate, eval, paired tools; pack seed field |
 | `84ab720`…`29e1744` | codebook-geometry-aware T5: model, entry, checks, gate, diagnostics, run scripts |
-| (next) | MFD task-mix results (`docs/MFD_REPORT.md` §13) |
+| `034c7af` | MFD task-mix results (`docs/MFD_REPORT.md` §13) |
+| `79e5937`… | geometry data check; exploration tools |
+| (next) | `docs/EXPLORATION.md` |
 
 ---
 
