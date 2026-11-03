@@ -816,3 +816,99 @@ C 0.1541. **Not triggered for any version; no Arts runs.**
   the decoder each single-modality view of the history (mfd122_mv).
 - None of the versions changes f prediction (top-1 0.097–0.100 vs 0.0996); the binding limit of §11 stays.
 - C seed-42 merged (0.1301) remains 0.0056 HR@10 above the best MFD.
+
+## 14. Codebook-geometry-aware training (chain first, then MFD; Instruments and Arts)
+
+Written 2026-11-03. Seed 42, locked v1 1+2+2 SID and the tokenizer checkpoint that produced it (hashes verified: index =
+v1, `md/sids/v1/<D>/1+2+2/tokenizer.pth` = the attempt's `final.pth`, and re-encoding every item reproduces the index
+except the 24 (Instruments) items moved by the distance reassignment). Code: `macrec/geo_embed.py`, `finetune_geo.py`,
+`geo_check.py`, `geo_dryrun.py`, `geo_diag.py`; jobs `sbatch/geo/{run_geo_train.sh,geo_gate.sbatch,eval_geo.sbatch}`;
+tools `sbatch/tools/{geo_config_diff,geo_chain_paired,geo_data_check}.py`. Runs: `mmgen_runs/geo/<D>/chain122_<VAR>/`,
+`mmgen_runs/mfd/<D>/mfd122_mv_geo<VAR>/`.
+
+### 14.1 Implementation as built
+
+- **A. Codebook-initialised code embeddings.** For every code token (levels s0 = f, t0, t1, v0, v1 = the user's f, t1,
+  t2, i1, i2) emb = P_level c(code) + delta(code). c(code) = row of `<chain>_rq.vq_layers.<l>.embedding.weight` in the
+  tokenizer checkpoint: MACRec's VectorQuantizer is a plain nn.Embedding trained by the VQ loss after k-means init, there
+  is no EMA / centroid buffer, and the SIDs are argmins over exactly these rows. P_level = alpha · Q (Q with orthonormal
+  columns, so cosines are preserved exactly at init); alpha matches the mean norm of T5's default embeddings (11.29);
+  delta = 0 at init. Other tokens keep their rows. **The T5 ties input embeddings and output head** (checked at
+  install), so the geometry enters the logits too. After training the model is baked to a plain T5 (logits unchanged,
+  max diff 0.0), so evaluation is the control's.
+- **C. Shuffled control:** codebook rows permuted among the codes of each level (seed 0); same norms, no geometry
+  (cosine correlation with the true geometry 0.00–0.05).
+- **B. Soft labels for f:** q = (1 − eps) one-hot + eps softmax_{f'≠f*}(−d²/T), T = median squared distance to the
+  10th-nearest f code (Instruments 17.2, Arts 24.2). At this T the soft target is nearly flat: the 5 / 10 nearest f codes
+  get only 6.4% / 11.7% of the eps mass (Arts 5.3% / 9.8%); see §14.5.
+- Sanity checks (all passed, `mmgen_runs/geo/<D>/geo_check.json`): init cosines = projected codebook cosines (max diff
+  < 1e-4) for A and the permuted vectors for C; norms; tied head; gradients reach P and delta; save/reload and bake
+  equivalence; soft-label rows sum to 1 with 1 − eps on the true f; soft-label loss reaches the Trainer as
+  `outputs["loss"]` (a first AB1/AB2 attempt failed on this and was fixed). Config diff (dry run vs the control's dry run):
+  only the model class and the added P / delta parameters differ (`mmgen_runs/geo/gate/<D>/geo_config_diff.json`).
+
+### 14.2 Runs and results
+
+Chain variants were chosen on Instruments VALIDATION HR@10: AB2 (0.1497 vs control 0.1476, +0.0022 > the 0.002 rule,
+shuffled control −0.0018), so the Arts rule triggered and AB2 ran on MFD (Instruments, Arts) and the chain (Arts).
+
+| run | eval | valid HR@10 / NDCG@10 | test HR@1 | test HR@10 / NDCG@10 | Δ test HR@10 vs control [95% CI] | epochs / best / steps |
+|---|---|---|---|---|---|---|
+| Instr. chain control | beam 20 | 0.1476 / 0.1132 | 0.0751 | 0.1181 / 0.0932 | — | 193 / 183 / 16,019 |
+| chain + A | beam 20 | 0.1476 / 0.1156 | 0.0767 | 0.1179 / 0.0943 | −0.0002 [−0.0036, +0.0032] | 101 / 91 / 8,383 |
+| chain + C (shuffled) | beam 20 | 0.1457 / 0.1137 | 0.0770 | 0.1197 / 0.0951 | +0.0016 [−0.0016, +0.0047] | 129 / 119 / 10,707 |
+| chain + AB1 (eps 0.1) | beam 20 | 0.1491 / 0.1154 | 0.0754 | 0.1172 / 0.0932 | −0.0009 [−0.0041, +0.0022] | 102 / 92 / 8,466 |
+| chain + AB2 (eps 0.2) | beam 20 | 0.1497 / 0.1158 | 0.0759 | 0.1189 / 0.0941 | +0.0008 [−0.0025, +0.0042] | 105 / 95 / 8,715 |
+| Instr. MFD mv | (ii) | 0.1540 / 0.1160 | 0.0756 | 0.1237 / 0.0959 | — | 61 / ≈51 / 15,128 |
+| MFD mv + AB2 | (ii) = (iii) | 0.1557 / 0.1181 | 0.0765 | 0.1239 / 0.0962 | +0.0002 [−0.0029, +0.0032] | 47 / 37 / 11,656 |
+| MFD mv + C (shuffled) | (ii) | 0.1499 / 0.1156 | 0.0770 | 0.1244 / 0.0970 | +0.0007 [−0.0024, +0.0037] | 52 / 42 / 12,896 |
+| Arts chain control | beam 20 | 0.1244 / 0.0867 | 0.0488 | 0.1059 / 0.0739 | — | 186 / 176 / 19,716 |
+| **Arts chain + AB2** | beam 20 | **0.1304** / 0.0935 | 0.0577 | **0.1106 / 0.0807** | **+0.0046 [+0.0016, +0.0077]** | 116 / 106 / 12,296 |
+| Arts MFD mv | (ii) | 0.1253 / 0.0858 | 0.0474 | 0.1066 / 0.0729 | — | 56 / ≈46 / 17,696 |
+| **Arts MFD mv + AB2** | (ii) | **0.1373** / 0.0959 | 0.0568 | **0.1180 / 0.0827** | **+0.0114 [+0.0084, +0.0143]** | 51 / 41 / 16,116 |
+
+Setting (i) (K_f = 20): Instruments MFD + AB2 0.1201 vs 0.1208; Arts 0.1110 vs 0.1023 (+0.0088 [+0.0059, +0.0116]).
+Arts MFD + AB2 (iii) chose K_f = 256 (same HR@10 as (ii), 84.6 ms/user). Paired NDCG@10 on Arts: chain +0.0069, MFD
++0.0098 (CIs exclude 0). Decoder passes / ms per user are unchanged by the embeddings (chain 6 / ≈25, MFD 3 / 29–37).
+
+### 14.3 Diagnostics (test)
+
+| run | f top-1 / top-20 | wrong top-1 f: distance to true f / mean pair distance | wrong top-1 within the true f's 10 NN | learned-embedding vs codebook cosine correlation (s0 / t0 / t1 / v0 / v1) |
+|---|---|---|---|---|
+| Instr. chain control | 0.0992 / 0.3515 | 0.855 | 0.061 | 0.14 / 0.29 / 0.10 / 0.37 / 0.22 |
+| chain + A / AB1 / AB2 | 0.100–0.101 / 0.351–0.362 | 0.841–0.848 | 0.064–0.068 | 0.94 / 0.83 / 0.97 / 0.94 / 0.97 |
+| chain + C | 0.0995 / 0.3418 | 0.854 | 0.065 | ≈ 0.0 |
+| Instr. MFD mv / + AB2 / + C | 0.0996 / 0.1024 / 0.1027 (top-20 0.357 / 0.370 / 0.357) | 0.853 / 0.848 / 0.849 | 0.068 / 0.065 / 0.062 | mv 0.07–0.25; AB2 0.76–0.93; C ≈ 0 |
+| Arts chain control / + AB2 | 0.0975 / **0.1094** (top-20 0.398 / 0.420) | 0.861 / 0.845 | 0.120 / 0.130 | 0.17–0.41 / 0.84–0.96 |
+| Arts MFD mv / + AB2 | 0.0981 / **0.1096** (top-20 0.410 / 0.425) | 0.860 / 0.847 | 0.121 / 0.127 | 0.08–0.31 / 0.77–0.94 |
+
+HR@10 by the rank of the true f (MFD at K_f = 100; the chain's "0 beyond f rank 20" is a consequence of beam 20, not
+evidence; `geo_diag.json` of each run): ranks 21–50 give 0.029–0.039, 51–100 ≤ 0.007, for every Instruments MFD model.
+
+### 14.4 Reading
+
+- The model keeps the codebook geometry (correlation 0.77–0.97 after training vs 0.07–0.41 for the controls), but
+  wrong top-1 f guesses do not land closer to the true f on either dataset (within-10-NN 0.065 vs 0.061–0.068).
+- **Instruments: no effect** (all test differences within ±0.002, shuffled control ties AB2 on test).
+- **Arts: a large gain** on both decoders (+0.005 chain, +0.011 MFD test HR@10, CIs > 0), with f top-1 up 0.098 → 0.110
+  and training stopping ~70 epochs (chain) / ~5 epochs (MFD) earlier. Without an Arts shuffled control the cause is
+  open: geometry, the near-uniform soft labels acting as label smoothing, or the re-initialisation. §15 disentangles it.
+- Earlier statements that more geometry work is not warranted (`docs/EXPLORATION.md`) were written before the Arts
+  results and are corrected there.
+
+### 14.5 Data check and soft-label temperature (no training; `sbatch/tools/geo_data_check.py`)
+
+Next-f signal from the history's f codes, test top-1 / top-20 (users whose target f is not in the history in brackets):
+geometry (mean distance) Instruments 0.034 / 0.248 (0.004 / 0.169), Arts 0.072 / 0.324 (0.004 / 0.202); co-occurrence of
+f transitions in training sequences 0.050 / 0.328 (0.017 / 0.260), Arts 0.089 / 0.393 (0.010 / 0.272); popularity
+0.032 / 0.230, Arts 0.030 / 0.188; trained models 0.100 / 0.357 and 0.098 / 0.410. Behavioural co-occurrence is the
+stronger signal; content geometry is weak (below popularity on Instruments' non-repeat users).
+
+Temperatures that put a given share of the eps mass on the 10 nearest f codes (eps mass on 5-NN / 10-NN):
+
+| | Instruments T | 5-NN / 10-NN | Arts T | 5-NN / 10-NN |
+|---|---|---|---|---|
+| used (median 10th-NN) | 17.22 | 0.064 / 0.117 | 24.23 | 0.053 / 0.098 |
+| 50% | 4.60 | 0.345 / 0.500 | 5.46 | 0.347 / 0.500 |
+| 70% | 3.14 | 0.534 / 0.700 | 3.80 | 0.536 / 0.700 |
+| 90% | 1.92 | 0.779 / 0.900 | 2.37 | 0.780 / 0.900 |
