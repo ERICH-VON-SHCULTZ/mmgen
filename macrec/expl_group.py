@@ -59,7 +59,7 @@ def main():
         fr = (lp > lp.gather(1, tf[:, None])).sum(1)
         out = {"users": len(tf), "f_top1": (fr == 0).float().mean().item(), "f_top20": (fr < 20).float().mean().item()}
         for name, g in groups.items():
-            gt = torch.tensor(g)
+            gt = torch.tensor(g, dtype=torch.long)
             G = int(gt.max()) + 1
             m = lp.max(1, keepdim=True).values
             gl = torch.zeros(len(tf), G).index_add_(1, gt, (lp - m).exp()).log() + m       # log P(group)
