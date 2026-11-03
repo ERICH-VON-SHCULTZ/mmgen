@@ -72,7 +72,10 @@ def main():
     p.add_argument("--splits", default="valid,test")
     args = p.parse_args()
     tok = T5Tokenizer.from_pretrained(args.ckpt_path)
-    model = T5ForConditionalGeneration.from_pretrained(args.ckpt_path).cuda().eval()
+    cls = T5ForConditionalGeneration
+    if json.load(open(os.path.join(args.ckpt_path, "config.json"))).get("struct_mode"):   # §16 encoder-structure runs
+        from enc_struct import StructT5 as cls
+    model = cls.from_pretrained(args.ckpt_path).cuda().eval()
     books = ge.load_codebooks(args.tokenizer_ckpt)
     codes = ge.code_tokens(tok)
     f_ids = torch.tensor([i for i, lv, _ in codes if lv == "s0"])
