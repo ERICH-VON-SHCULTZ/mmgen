@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-02 (MFD with MQL4GRec's task mix, versions A/B/C, `docs/MFD_REPORT.md` §13; codebook-geometry-aware training in progress, §14).
+Last updated: 2026-11-05 (codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -95,9 +95,15 @@ are reference-only, not part of the main line.
   fullseqrec (full-view → both branches; code id `mt_fusionseqrec`, NOT C's fusionseqrec), B = A + item2image/image2item,
   C = A + crossseqrec (C's fusionseqrec, the cross-modal coin flip). Test HR@10 at K_f=100, w=1/.5/.5: A 0.1227, B 0.1202
   (CI < 0 vs mv), C 0.1245 vs mfd122_mv 0.1237 (ties). f prediction unchanged. Arts rule (valid > 0.1560) not triggered.
-- **Codebook-geometry-aware T5 (started 2026-11-01), `docs/MFD_REPORT.md` §14:** SID code embeddings = P_level · codebook
-  vector + delta (tied head), shuffled-codebook control, soft labels for f. Chain runs done (`mmgen_runs/geo/<D>/chain122_<VAR>/`);
-  MFD + chosen variant (AB2) and Arts in progress.
+- **Codebook-geometry-aware T5 done (2026-11-05, seed 42), `docs/MFD_REPORT.md` §14–§15:** SID code embeddings = P_level ·
+  codebook vector + delta (tied head). Test HR@10, MFD mv recipe at K_f=100, w=1/.5/.5, control → codebook init + soft f (AB2):
+  Instruments 0.1237 → 0.1239 (none), Arts 0.1066 → 0.1180 (+0.0114, CI > 0), Games 0.0908 → 0.0962 (+0.0053, CI > 0, valid CI
+  touches 0). Arts disentangled: codebook init alone (V2) equals AB2; shuffled init + soft (V1) +0.0066; uniform label smoothing
+  (V3) +0.0037, not carried to Instruments/Games; geometric small-T labels (V4) add nothing. Near-miss unchanged; early stopping
+  not the cause. Runs: `mmgen_runs/geo/<D>/chain122_<VAR>/`, `mmgen_runs/mfd/<D>/mfd122_mv_geo<VAR>/`.
+- **Item-level encoder structure done (2026-11-05, chain, seed 42), `docs/MFD_REPORT.md` §16:** E1 slot + recency embeddings worse
+  (valid −0.0067 / −0.0022); E2 one summed vector per item ties (+0.0002 / −0.0007; Arts NDCG +0.0034 on test) with 5× fewer
+  positions. MFD extension not triggered. 5 history items reach the 20-item result. Runs: `mmgen_runs/struct/<D>/`.
 - **Exploration (2026-11-03), `docs/EXPLORATION.md`:** inference-only analysis of how the SID is used. C beats us where
   its coarse, content-coherent first code is right and our fine f is not (item text-NN shares C's text L1 77%, our f 32%);
   no inference re-scoring gains > 0.0015 valid HR@10; ranked proposals (coarse-to-fine f factorisation, f-loss weight,
@@ -143,6 +149,7 @@ mmgen/
 │   ├── mfd_sweep.py       MFD wider search: K_f x score-weight sweep on VALID, chosen setting applied to test
 │   ├── mfd_mt_data.py, mfd_mt_check.py, mfd_dryrun.py   MFD with C's task mix (§13): tasks mt_* (mt_fusionseqrec = fullseqrec, mt_crossseqrec = C's fusionseqrec), input/target checks, dry run
 │   ├── geo_embed.py, finetune_geo.py, geo_check.py, geo_dryrun.py, geo_diag.py   codebook-geometry-aware T5 (§14): embeddings P·c+delta / shuffled control / soft f labels, bake to plain T5; entry; sanity checks; dry run; diagnostics
+│   ├── enc_struct.py, finetune_struct.py, struct_dryrun.py, eval_struct.py, struct_check.py   item-level encoder structure (§16): StructT5 (E1, E2), training / dry-run / eval entries, sanity checks
 │   ├── expl_first_step.py, expl_infer.py, expl_group.py   exploration (docs/EXPLORATION.md): per-user first-step ranks, MFD re-scoring checks (valid), f-region check
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -213,6 +220,7 @@ mmgen/
     ├── plugin/paired_sharedf.sbatch   shared-f vs main plug-in, paired (CPU)
     ├── mfd/mt_gate.sbatch, eval_mt.sbatch, mt_paired.sbatch   task-mix gate (dry runs + task checks + config diff), eval (i)/(ii)/(iii), paired CIs (tools/mfd_mt_*.py)
     ├── geo/run_geo_train.sh, geo_gate.sbatch, eval_geo.sbatch   geometry runs (KIND chain|mfd, VAR A|C|AB1|AB2; pack entry geo:<D>:<kind>:<var>), gate (sanity 1-3), eval + diagnostics; tools/geo_config_diff.py, geo_chain_paired.py, geo_data_check.py (next-f signal: codebook distance vs co-occurrence; soft-label T table; CPU)
+    ├── struct/run_struct_train.sh, struct_gate.sbatch, eval_struct.sbatch   §16 runs (VAR E1|E2; pack entry struct:<D>:<var>), gate, eval + history truncation; tools/struct_config_diff.py; tools/geo_sec15_16.py = §15/§16 tables and paired CIs (CPU)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU)
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
@@ -424,6 +432,9 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | Plug-in 1+2+2 main in C's recipe: text / image / merged (2 × 4 passes) | 4 | 0.1227 / 0.0960, 0.1238 / 0.0966, 0.1246 / 0.0975 | 0.1143 / 0.0805, 0.1144 / 0.0807, 0.1172 / 0.0826 | — |
 | Plug-in 1+3+3 main in C's recipe: text / image / merged (2 × 5 passes) | 5 | 0.1207 / 0.0938, 0.1208 / 0.0942, 0.1217 / 0.0948 | 0.1119 / 0.0822, 0.1143 / 0.0829, 0.1162 / 0.0845 | — |
 | MFD 1+2+2 + C's task mix A / B / C (K_f=100, w=1/.5/.5) | 3 | 0.1227 / 0.0949, 0.1202 / 0.0933, 0.1245 / 0.0962 | — | — |
+| MFD 1+2+2 + multi-view aug, K_f=100, w=1/.5/.5 (Games row new) | 3 | 0.1237 / 0.0959 | 0.1066 / 0.0729 | 0.0908 / 0.0478 |
+| + codebook init + soft f (AB2) / codebook init only (V2) | 3 | 0.1239 / 0.0962, — | 0.1180 / 0.0827, 0.1177 / 0.0833 | 0.0962 / 0.0508, — |
+| MD 1+2+2 chain + E1 / E2 (item-level encoder, §16) | 6 | 0.1157 / 0.0902, 0.1177 / 0.0929 | 0.1018 / 0.0706, 0.1064 / 0.0772 | — |
 | Plug-in shared-f merged, 1+2+2 / 1+3+3 | 4 / 5 | 0.1201 / 0.0946, 0.1199 / 0.0934 | — | — |
 | C seed 42 merged (paired reference for the plug-in; `docs/PLUGIN_REPORT.md`) | 5 | 0.1301 / 0.0998 | 0.1267 / 0.0897 | — |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
@@ -522,7 +533,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `84ab720`…`29e1744` | codebook-geometry-aware T5: model, entry, checks, gate, diagnostics, run scripts |
 | `034c7af` | MFD task-mix results (`docs/MFD_REPORT.md` §13) |
 | `79e5937`… | geometry data check; exploration tools |
-| (next) | `docs/EXPLORATION.md` |
+| `c41a87a`…`48a2ce6` | `docs/EXPLORATION.md` |
+| `41c9f46`…`f6e42a7` | §15 variants V1–V4, §16 encoder structure code, §14 report |
+| (next) | §15, §16 results |
 
 ---
 

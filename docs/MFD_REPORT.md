@@ -1,6 +1,6 @@
 # MFD stage 1 on Instruments: report
 
-> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14.**
+> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16.**
 
 Two-branch decoder (MFD) vs the MD chain-decoder control, same SID and training recipe.
 Instruments, MD-RQ-VAE 1+2+2 v1 SID, seed 42. Written 2026-10-31.
@@ -912,3 +912,183 @@ Temperatures that put a given share of the eps mass on the 10 nearest f codes (e
 | 50% | 4.60 | 0.345 / 0.500 | 5.46 | 0.347 / 0.500 |
 | 70% | 3.14 | 0.534 / 0.700 | 3.80 | 0.536 / 0.700 |
 | 90% | 1.92 | 0.779 / 0.900 | 2.37 | 0.780 / 0.900 |
+
+## 15. Disentangling AB2: what produced the Arts gain, and does it carry over?
+
+Written 2026-11-05. Seed 42, locked v1 1+2+2 SIDs (hash checked at every training and eval job). Tables and CIs:
+`sbatch/tools/geo_sec15_16.py` → `mmgen_runs/geo/sec15_16.json`. Training: packs 21744857 (Arts), 21744858 (Instruments V3,
+Games). Evals on H200: 21744860–21744878. Variants are `run_geo_train.sh` VAR V1–V4; all gates passed (below).
+
+### 15.1 Variants and sanity checks
+
+| variant | code embeddings | f target |
+|---|---|---|
+| control | standard | one-hot |
+| AB2 | true codebook | eps 0.2, near-uniform geometric (T = median 10th-NN) |
+| V1 | **shuffled** codebook (seed 0) | same as AB2 |
+| V2 | true codebook | one-hot |
+| V3 | standard | **uniform** label smoothing, eps 0.2 |
+| V4 | true codebook | eps 0.2, geometric with T putting 70% of the eps mass on the 10 nearest f |
+
+- Config diff vs the matching control (dry run vs dry run): only the embedding construction and the f target differ, all
+  runs (`geo/gate/<D>/geo_config_diff.json`). The new Games mfd122_mv control uses `run_mfd_train.sh` unchanged.
+- V3: 0.8 on the true f, 0.2 / 255 = 0.000784 on every other f, rows sum to 1.
+- V4: T = 3.144 (Instruments), 3.797 (Arts), 2.661 (Games; not trained); mean eps mass 0.53 on the 5 nearest and 0.70 on
+  the 10 nearest, matching §14.5 (per-code 10-NN mass 0.57–0.80).
+
+### 15.2 Arts, MFD (seqrec_mv)
+
+Paired Δ = X − control at the same setting ((iii) vs the control's (ii)); bold = CI excludes 0.
+
+| run | setting | valid HR@1 / HR@10 / NDCG@10 | test HR@1 / HR@10 / NDCG@10 | Δ test HR@10 [95% CI] | Δ test NDCG@10 | Δ valid HR@10 |
+|---|---|---|---|---|---|---|
+| control | (i) | 0.0528 / 0.1202 / 0.0834 | 0.0475 / 0.1023 / 0.0710 | | | |
+| | (ii) | 0.0540 / 0.1253 / 0.0858 | 0.0474 / 0.1066 / 0.0729 | | | |
+| | (iii) K100 w.75 | 0.0539 / 0.1253 / 0.0858 | 0.0477 / 0.1064 / 0.0732 | | | |
+| AB2 | (i) | 0.0626 / 0.1299 / 0.0923 | 0.0566 / 0.1110 / 0.0800 | **+0.0088 [+0.0059, +0.0116]** | **+0.0089** | **+0.0097** |
+| | (ii) | 0.0636 / 0.1373 / 0.0959 | 0.0568 / 0.1180 / 0.0827 | **+0.0114 [+0.0084, +0.0143]** | **+0.0098** | **+0.0120** |
+| | (iii) K256 | 0.0636 / 0.1373 / 0.0959 | 0.0568 / 0.1180 / 0.0827 | **+0.0114 [+0.0084, +0.0143]** | **+0.0098** | **+0.0121** |
+| V1 shuffled + soft | (i) | 0.0613 / 0.1261 / 0.0898 | 0.0558 / 0.1081 / 0.0784 | **+0.0058 [+0.0031, +0.0087]** | **+0.0074** | **+0.0058** |
+| | (ii) = (iii) | 0.0611 / 0.1321 / 0.0925 | 0.0560 / 0.1132 / 0.0804 | **+0.0066 [+0.0038, +0.0097]** | **+0.0075** | **+0.0068** |
+| V2 codebook, one-hot | (i) | 0.0641 / 0.1332 / 0.0948 | 0.0574 / 0.1132 / 0.0816 | **+0.0109 [+0.0081, +0.0138]** | **+0.0106** | **+0.0129** |
+| | (ii) | 0.0643 / 0.1369 / 0.0970 | 0.0577 / 0.1177 / 0.0833 | **+0.0111 [+0.0082, +0.0142]** | **+0.0105** | **+0.0117** |
+| | (iii) K100 w.75 | 0.0642 / 0.1382 / 0.0972 | 0.0569 / 0.1184 / 0.0834 | **+0.0118 [+0.0088, +0.0148]** | **+0.0105** | **+0.0129** |
+| V3 uniform smoothing | (i) | 0.0553 / 0.1238 / 0.0860 | 0.0490 / 0.1056 / 0.0736 | **+0.0034 [+0.0008, +0.0061]** | **+0.0025** | **+0.0035** |
+| | (ii) | 0.0555 / 0.1311 / 0.0891 | 0.0498 / 0.1103 / 0.0760 | **+0.0037 [+0.0010, +0.0063]** | **+0.0031** | **+0.0059** |
+| | (iii) K50 | 0.0555 / 0.1311 / 0.0891 | 0.0498 / 0.1102 / 0.0759 | **+0.0037 [+0.0009, +0.0063]** | **+0.0031** | **+0.0059** |
+| V4 codebook + small T | (i) | 0.0617 / 0.1309 / 0.0931 | 0.0556 / 0.1115 / 0.0799 | **+0.0092 [+0.0063, +0.0123]** | **+0.0089** | **+0.0107** |
+| | (ii) | 0.0627 / 0.1379 / 0.0965 | 0.0556 / 0.1168 / 0.0818 | **+0.0102 [+0.0073, +0.0132]** | **+0.0089** | **+0.0126** |
+| | (iii) K50 | 0.0627 / 0.1379 / 0.0965 | 0.0556 / 0.1167 / 0.0818 | **+0.0101 [+0.0073, +0.0131]** | **+0.0089** | **+0.0127** |
+
+Between variants at (ii), test HR@10 (NDCG@10): AB2 − V2 +0.0003 [−0.0024, +0.0029] (−0.0007); AB2 − V1 **+0.0048 [+0.0019,
++0.0074]** (**+0.0023**); V2 − V1 **+0.0045 [+0.0017, +0.0074]** (**+0.0030**); AB2 − V3 **+0.0077 [+0.0050, +0.0104]** (**+0.0067**);
+V4 − AB2 −0.0012 [−0.0037, +0.0014] (−0.0009); V1 − V3 **+0.0029 [+0.0003, +0.0059]** (**+0.0044**).
+
+### 15.3 Arts chain; Instruments and Games MFD
+
+| run | valid HR@1 / HR@10 / NDCG@10 | test HR@1 / HR@10 / NDCG@10 | Δ test HR@10 [95% CI] | Δ test NDCG@10 | Δ valid HR@10 |
+|---|---|---|---|---|---|
+| Arts chain control | 0.0561 / 0.1244 / 0.0867 | 0.0488 / 0.1059 / 0.0739 | | | |
+| chain + AB2 | 0.0643 / 0.1304 / 0.0935 | 0.0577 / 0.1106 / 0.0807 | **+0.0046 [+0.0016, +0.0077]** | **+0.0069** | **+0.0060** |
+| chain + V1 | 0.0659 / 0.1257 / 0.0924 | 0.0590 / 0.1066 / 0.0795 | +0.0007 [−0.0023, +0.0036] | **+0.0056** | +0.0013 |
+| chain + V3 | 0.0568 / 0.1250 / 0.0876 | 0.0509 / 0.1074 / 0.0757 | +0.0014 [−0.0014, +0.0041] | **+0.0019** | +0.0005 |
+| Instruments MFD control (ii) | 0.0846 / 0.1540 / 0.1160 | 0.0756 / 0.1237 / 0.0959 | | | |
+| MFD + V3 (ii) | 0.0854 / 0.1509 / 0.1155 | 0.0740 / 0.1237 / 0.0951 | −0.0001 [−0.0030, +0.0027] | −0.0007 | **−0.0031** |
+| Games MFD control (i) | 0.0195 / 0.1008 / 0.0535 | 0.0168 / 0.0865 / 0.0459 | | | |
+| Games MFD control (ii) = (iii) K256 | 0.0198 / 0.1071 / 0.0561 | 0.0172 / 0.0908 / 0.0478 | | | |
+| Games MFD + AB2 (i) | 0.0217 / 0.1018 / 0.0551 | 0.0184 / 0.0894 / 0.0479 | **+0.0029 [+0.0005, +0.0052]** | **+0.0020** | +0.0010 |
+| Games MFD + AB2 (ii) = (iii) | 0.0214 / 0.1093 / 0.0582 | 0.0185 / 0.0962 / 0.0508 | **+0.0053 [+0.0030, +0.0076]** | **+0.0030** | +0.0023 [−0.0001, +0.0048] |
+| Games MFD + V3 (i) | 0.0193 / 0.0963 / 0.0514 | 0.0162 / 0.0846 / 0.0446 | −0.0019 [−0.0041, +0.0003] | **−0.0013** | **−0.0045** |
+| Games MFD + V3 (ii) | 0.0191 / 0.1044 / 0.0548 | 0.0176 / 0.0920 / 0.0484 | +0.0012 [−0.0011, +0.0034] | +0.0006 | **−0.0026** |
+
+Between Arts chain variants, test HR@10: AB2 − V1 **+0.0040 [+0.0012, +0.0068]** (NDCG@10 +0.0013, CI spans 0), AB2 − V3 **+0.0032
+[+0.0005, +0.0060]**, V1 − V3 −0.0008 [−0.0036, +0.0020].
+
+### 15.4 Diagnostics
+
+| run | test f top-1 / top-20 | wrong f: distance ratio / within 10 NN | epochs / best / steps | ms/user (H200) |
+|---|---|---|---|---|
+| Arts MFD control | 0.0981 / 0.4102 | 0.860 / 0.121 | 56 / 46 / 17,696 | 8.4 (i), 37.4 (ii) |
+| AB2 | 0.1096 / 0.4247 | 0.847 / 0.127 | 51 / 41 / 16,116 | 8.6, 37.3, 84.6 (iii) |
+| V1 | 0.1071 / 0.4161 | 0.861 / 0.118 | 53 / 43 / 16,748 | 8.5, 37.5 |
+| V2 | 0.1102 / 0.4245 | 0.852 / 0.123 | 49 / 39 / 15,484 | 8.4, 37.5 |
+| V3 | 0.1046 / 0.4197 | 0.854 / 0.124 | 60 / 50 / 18,960 | 8.6, 37.6, 19.8 (iii) |
+| V4 | 0.1098 / 0.4239 | 0.847 / 0.130 | 49 / 39 / 15,484 | 8.4, 36.8, 19.3 (iii) |
+| Arts chain control | 0.0975 / 0.3984 | 0.861 / 0.120 | 186 / 176 / 19,716 | 24.9 |
+| chain + AB2 | 0.1094 / 0.4197 | 0.845 / 0.130 | 116 / 106 / 12,296 | 25.1 |
+| chain + V1 | 0.1068 / 0.4054 | 0.855 / 0.123 | 142 / 132 / 15,052 | 25.6 |
+| chain + V3 | 0.1032 / 0.4170 | 0.854 / 0.128 | 185 / 175 / 19,610 | 25.3 |
+| Instruments MFD control | 0.0996 / 0.3567 | 0.853 / 0.068 | 61 / 51 / 15,128 | 6.8, 29.4 |
+| Instruments MFD + V3 | 0.1007 / 0.3592 | 0.848 / 0.063 | 61 / 51 / 15,128 | 6.8, 29.5 |
+| Games MFD control | 0.0800 / 0.4844 | 0.805 / 0.167 | 53 / 43 / 38,319 | 8.2, 39.4, 94.6 (iii) |
+| Games MFD + AB2 | 0.0796 / 0.4903 | 0.800 / 0.174 | 59 / 49 / 42,657 | 8.2, 39.7 |
+| Games MFD + V3 | 0.0779 / 0.4875 | 0.804 / 0.171 | 51 / 41 / 36,873 | 8.2, 39.4, 94.5 (iii) |
+
+Decoder passes: MFD 3, chain 6, unchanged. HR@10 by true-f rank at K_f = 100, Arts (ranks 1 / 2–5 / 6–20 / 21–50 / 51–100):
+control 0.591 / 0.226 / 0.094 / 0.018 / 0.001; V2 0.608 / 0.224 / 0.104 / 0.018 / 0.001; AB2 0.587 / 0.211 / 0.118 / 0.027 / 0.003;
+V1 0.589 / 0.209 / 0.103 / 0.028 / 0.003; V3 0.571 / 0.205 / 0.107 / 0.024 / 0.002; V4 0.589 / 0.210 / 0.113 / 0.023 / 0.001.
+Top-1-f users rise from 2,174 to 2,444 under V2 (of 22,171).
+
+### 15.5 Reading
+
+**The case that applies: "V2 about equal to AB2": the initialization explains the gain, and it has to be the true codebook.**
+
+- V2 ≈ AB2: test HR@10 +0.0003 apart, CI spans 0 (valid +0.0004). **Soft labels add nothing once the embeddings carry the
+  codebook.** V2 at (iii) is the best Arts run on validation (0.1382).
+- V1 ≈ AB2 does **not** hold: shuffling the codebook loses 0.0048 on MFD and 0.0040 on the chain (CIs > 0). So geometry
+  matters here, unlike Instruments.
+- V3 ≈ AB2 does **not** hold: plain label smoothing gives only +0.0037 on MFD, and it is not significant on the chain.
+  It also fails to carry over: on Instruments and Games it is flat on test and significantly worse on validation.
+- V4 above AB2 does **not** hold: actually geometric targets add nothing (−0.0012, CI spans 0). Near-miss rates stay flat
+  in every variant, so wrong guesses still do not land closer, even with geometric targets.
+- Early stopping is **not** the explanation: Arts MFD runs stop at 49–60 epochs in all variants, including the winners
+  close to the control (56), and Games AB2 ran longer (59 vs 53) yet gained. Instruments chain + A stopped 92 epochs
+  earlier with no gain (§14).
+- Not purely geometric: V1 still gains on MFD (+0.0066) and keeps much of the HR@1 / NDCG gain on both decoders (chain test
+  HR@1 0.0590 vs AB2 0.0577), and it raises f top-1 to 0.107. Some of that is V1's soft labels (V1 − V3 +0.0029 on MFD,
+  −0.0008 on the chain), so the non-geometric share is not cleanly separated: **shuffled init with one-hot f was not run on
+  Arts**.
+- **The effect is not Arts-specific, but it varies:** Games AB2 +0.0053 on test (CI > 0), though validation is +0.0023 with a
+  CI touching 0; Instruments none (§14). V2 was not run on Instruments MFD or Games, so attributing the Games gain to the
+  init rests on V3's null result there.
+- Seed 42 only; the mechanism is unknown. Learned embeddings keep the geometry on all three datasets, including
+  Instruments, where nothing is gained, so keeping it is not sufficient.
+
+## 16. Item-level structure in the encoder (chain decoder)
+
+Written 2026-11-05. `macrec/enc_struct.py`, `finetune_struct.py`, `eval_struct.py`, `struct_check.py`; jobs `sbatch/struct/`;
+pack 21746130, evals 21746132–21746138 (H200). Runs: `mmgen_runs/struct/<D>/chain122_E{1,2}/seed42/`.
+
+- **E1:** zero-initialised slot (f, t1, t2, i1, i2) + recency (items back, 0–19) embeddings on every history code token.
+- **E2:** one encoder position per item = sum of its code embeddings + recency embedding; the cross-attention mask follows
+  the item sequence (`_prepare_encoder_decoder_kwargs_for_generation` is overridden for beam search).
+- Sanity: config diff vs the chain control: only the model class, the 3,328 added parameters and `struct_mode` differ. E1 at
+  init equals the control on a real batch (logits max diff 0.0, equal loss, equal beam output). E2's encoder length equals
+  the item count for every example (20 items → 20 positions vs 101 tokens); it runs through the forward pass and beam search.
+
+| dataset, run | valid HR@1 / HR@10 / NDCG@10 | test HR@1 / HR@10 / NDCG@10 | Δ valid HR@10 [95% CI] | Δ test HR@10 [95% CI] | Δ test NDCG@10 | f top-1 / top-20 | epochs / best / steps |
+|---|---|---|---|---|---|---|---|
+| Instruments control | 0.0846 / 0.1476 / 0.1132 | 0.0751 / 0.1181 / 0.0932 | | | | 0.0992 / 0.3515 | 193 / 183 / 16,019 |
+| E1 | 0.0833 / 0.1409 / 0.1098 | 0.0711 / 0.1157 / 0.0902 | **−0.0067 [−0.0098, −0.0035]** | −0.0024 [−0.0054, +0.0005] | **−0.0030** | 0.0930 / 0.3458 | 174 / 164 / 14,442 |
+| E2 | 0.0865 / 0.1478 / 0.1144 | 0.0749 / 0.1177 / 0.0929 | +0.0002 [−0.0030, +0.0033] | −0.0004 [−0.0034, +0.0026] | −0.0003 | 0.0986 / 0.3512 | 200 / 193 / 16,600 |
+| Arts control | 0.0561 / 0.1244 / 0.0867 | 0.0488 / 0.1059 / 0.0739 | | | | 0.0975 / 0.3984 | 186 / 176 / 19,716 |
+| E1 | 0.0504 / 0.1222 / 0.0831 | 0.0456 / 0.1018 / 0.0706 | −0.0022 [−0.0052, +0.0006] | **−0.0041 [−0.0069, −0.0012]** | **−0.0033** | 0.0981 / 0.3984 | 174 / 164 / 18,444 |
+| E2 | 0.0602 / 0.1237 / 0.0881 | 0.0551 / 0.1064 / 0.0772 | −0.0007 [−0.0037, +0.0022] | +0.0004 [−0.0026, +0.0032] | **+0.0034** | 0.1039 / 0.4163 | 198 / 190 / 21,000 |
+
+Near-miss ratio / within-10-NN: Instruments control 0.855 / 0.061, E1 0.859 / 0.062, E2 0.851 / 0.057; Arts control 0.861 / 0.120,
+E1 0.860 / 0.123, E2 0.852 / 0.128. Decoder passes 6; ms/user 24.6–25.3 (H200). E2 ran to the end of the 200-epoch schedule
+on both datasets (best epochs 193, 190), so early stopping never fired; it may be under-trained relative to the others.
+
+**History truncated at inference, validation HR@10:**
+
+| run | last 1 item | last 5 items | last 20 items |
+|---|---|---|---|
+| Instruments control | 0.1247 | 0.1466 | 0.1476 |
+| E1 | 0.1244 | 0.1424 | 0.1409 |
+| E2 | 0.1188 | 0.1460 | 0.1478 |
+| Arts control | 0.1090 | 0.1245 | 0.1244 |
+| E1 | 0.1087 | 0.1231 | 0.1222 |
+| E2 | 0.0998 | 0.1235 | 0.1237 |
+
+**Extension rule: not triggered.** Neither variant beats the control's validation HR@10 by more than 0.002 on both datasets
+(E1 −0.0067 / −0.0022, E2 +0.0002 / −0.0007), so no MFD version was trained.
+
+Reading:
+- Explicit structure does not help HR@10. E1 is worse on both datasets; E2 ties, with 5× fewer encoder positions.
+- E2 confirms additivity carries the history: summing the five codes loses nothing at HR@10, and on Arts it gains NDCG@10
+  (+0.0034) and HR@1 (0.0551 vs 0.0488) with f top-1 0.104. That Arts gain is on test and did not show in validation HR@10.
+- Older history adds little in the models as trained: 5 items reach the 20-item result (within 0.001). The last item alone
+  gives 84–88% of it. Most users have short histories (median about 5 items), so this limits how much older history could help.
+- E1 at 5 items beats E1 at 20 on both datasets (0.1424 vs 0.1409; 0.1231 vs 0.1222), so its recency embedding does not
+  use older items well.
+
+### 16.1 Updated comparison (test HR@10 / NDCG@10; best MFD run chosen on VALIDATION)
+
+| dataset | chain control | MFD control (ii) | best MFD | plug-in 1+2+2 merged | C seed 42 merged | best MFD − plug-in | best MFD − C |
+|---|---|---|---|---|---|---|---|
+| Instruments | 0.1181 / 0.0932 | 0.1237 / 0.0959 | AB2 (ii): 0.1239 / 0.0962 | 0.1246 / 0.0975 | 0.1301 / 0.0998 | −0.0008 [−0.0037, +0.0023] | **−0.0063 [−0.0093, −0.0031]** |
+| Arts | 0.1059 / 0.0739 | 0.1066 / 0.0729 | V2 (iii): 0.1184 / 0.0834 | 0.1172 / 0.0826 | 0.1267 / 0.0897 | +0.0011 [−0.0018, +0.0040] | **−0.0083 [−0.0113, −0.0053]** |
+| Games | 0.0885 / 0.0468 | 0.0908 / 0.0478 | AB2 (ii): 0.0962 / 0.0508 | not run | 0.1016 / 0.0544 | | **−0.0054 [−0.0080, −0.0029]** |
+
+MFD cost: 3 decoder passes, 29.8 / 37.5 / 39.7 ms/user vs C's 2 × 5 passes (Instruments 43.3 ms/user). The gap to C on Arts
+shrinks from −0.0201 to −0.0083.
