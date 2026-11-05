@@ -134,7 +134,7 @@ def main():
             m.eval()
             # save / reload as the Trainer does (safetensors, strict=False), then bake
             before = logits(m, mfd, V)
-            with tempfile.TemporaryDirectory() as d:
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
                 m.save_pretrained(d)
                 m2, _ = build(cls, tk, ckpt, "codebook", 0.0)
                 res = m2.load_state_dict(load_file(f"{d}/model.safetensors"), strict=False)
@@ -253,7 +253,7 @@ def main():
         m.bake()
         after = m(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y).logits
     m.__class__ = ItemMFDT5
-    with tempfile.TemporaryDirectory() as d:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         m.save_pretrained(d)
         m2 = ItemMFDT5.from_pretrained(d).eval()
         with torch.no_grad():
