@@ -25,8 +25,8 @@ import torch
 from transformers import T5Tokenizer
 
 from mfd_data import Catalog
-from mfd_eval import load_split, rank_lists, score_batch
-from mfd_model import BRANCH_TOKENS, MFDT5
+from mfd_eval import load_mfd_model, load_split, rank_lists, score_batch
+from mfd_model import BRANCH_TOKENS
 from utils import parse_dataset_args, parse_global_args, parse_test_args
 
 W_F = (0.5, 0.75, 1.0)
@@ -190,7 +190,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     torch.manual_seed(args.seed); random.seed(args.seed); np.random.seed(args.seed)
     tokenizer = T5Tokenizer.from_pretrained(args.ckpt_path)
-    model = MFDT5.from_pretrained(args.ckpt_path).cuda().eval()
+    model = load_mfd_model(args.ckpt_path).cuda().eval()
     model.config.use_cache = False
     cat = Catalog(args, tokenizer, "cuda")
     T, I = tokenizer.convert_tokens_to_ids(list(BRANCH_TOKENS))

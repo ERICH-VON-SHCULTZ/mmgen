@@ -213,6 +213,88 @@ def main():
     for code, v in per.items():
         print("  ", code, v)
     print(f"V3: true f {0.8}, every other f code {0.2 / (K - 1):.6f} ({K} f codes)")
+    # §17 on V2-MFD: P1a item-level encoder, P1b/c f weight, P1d/e offset penalty
+    from argparse import Namespace
+    from enc_struct import ItemMFDT5
+    from mfd_data import Catalog, branch_tensors
+    from mfd_eval import score_batch
+    tk = T5Tokenizer.from_pretrained("./config/ckpt", model_max_length=512)
+    tk.add_tokens(sorted({t for v in idx.values() for t in v} | set(BRANCH_TOKENS)))
+    keys = list(idx)[:60]
+    full = lambda k: "".join(idx[k])
+    txt = lambda k: "".join(idx[k][:3])
+    n_it = [1, 3, 5, 12, 20, 7]
+    hist = [[keys[(j + q) % 60] for q in range(n)] for j, n in enumerate(n_it)]
+    enc_t = tk(["".join(full(k) for k in h) for h in hist] + ["".join(txt(k) for k in h) for h in hist], return_tensors="pt", padding="longest")
+    x, xm = enc_t["input_ids"], enc_t["attention_mask"]
+    T_, I_ = tk.convert_tokens_to_ids(list(BRANCH_TOKENS))
+    tab = torch.tensor([tk.convert_tokens_to_ids(idx[k]) for k in keys[:12]])
+    y, labels = branch_tensors(tab, torch.arange(12), T_, I_)
+    cls = ge.make_geo_class(ItemMFDT5)
+    torch.manual_seed(0)
+    m = cls(T5Config.from_pretrained("./config/ckpt"))
+    m.resize_token_embeddings(len(tk))
+    m.install_geometry(tk, ckpt, "codebook")
+    m.install_struct(tk, "E2")
+    m.eval()
+    enc, em = m.struct_encode(x, xm)
+    ok("P1a_encoder_length_is_items", em.sum(1).tolist() == n_it + n_it and enc.last_hidden_state.shape[1] == 20,
+       items=n_it, encoder_lengths=em.sum(1).tolist(), token_lengths=xm.sum(1).tolist())
+    out = m(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y)
+    ok("P1a_mfd_decoder_rows_unchanged", out.logits.shape[:3] == (12, 2, y.shape[2]), shape=list(out.logits.shape))
+    cat = Catalog(Namespace(data_path=os.path.dirname(os.path.dirname(a.index)), dataset=a.dataset, index_file=os.path.basename(a.index)[len(a.dataset):]), tk, "cpu")
+    m.config.use_cache = False
+    with torch.no_grad():
+        sb = score_batch(m, cat, x[:2], xm[:2], 5, T_, I_)
+    ok("P1a_score_batch_runs", len(sb["item"]) > 0 and torch.isfinite(sb["s_t"]).all())
+    with torch.no_grad():
+        before = m(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y).logits
+        m.bake()
+        after = m(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y).logits
+    m.__class__ = ItemMFDT5
+    with tempfile.TemporaryDirectory() as d:
+        m.save_pretrained(d)
+        m2 = ItemMFDT5.from_pretrained(d).eval()
+        with torch.no_grad():
+            re_ = m2(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y).logits
+    ok("P1a_bake_and_reload", (before - after).abs().max() < 1e-4 and (before - re_).abs().max() < 1e-4,
+       bake=float((before - after).abs().max()), reload=float((before - re_).abs().max()))
+    base = ge.make_geo_class(MFDT5)
+
+    def build_w(fw, lam):
+        torch.manual_seed(0)
+        z = base(T5Config.from_pretrained("./config/ckpt"))
+        z.resize_token_embeddings(len(tk))
+        z.install_geometry(tk, ckpt, "codebook", f_weight=fw, offset_lambda=lam)
+        return z
+
+    def loss_of(z, train):
+        z.train(train)
+        torch.manual_seed(1)
+        return z(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)
+    for name, fw in (("P1b", 2.0), ("P1c", 3.0)):
+        z = build_w(fw, 0.0)
+        o = loss_of(z, True)
+        lp = o.logits.float().log_softmax(-1)
+        v = labels != -100
+        ce = -lp[v].gather(1, labels[v][:, None]).squeeze(1)
+        isf = torch.zeros_like(labels, dtype=torch.bool)
+        isf[:, 0, 0] = True
+        manual = (fw * (-lp[isf].gather(1, labels[isf][:, None])).sum() + ce.sum() - (-lp[isf].gather(1, labels[isf][:, None])).sum()) / v.sum()
+        ok(f"{name}_loss_equals_weighted_sum", abs(o["loss"].item() - manual.item()) < 1e-4, loss=o["loss"].item(), manual=manual.item())
+        with torch.no_grad():
+            z.eval()
+            ev = z(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)
+            ok(f"{name}_eval_loss_is_plain_ce", abs(ev["loss"].item() - (-ev.logits.float().log_softmax(-1)[v].gather(1, labels[v][:, None])).mean().item()) < 1e-4)
+    for name, lam in (("P1d", 1e-3), ("P1e", 1e-2)):
+        z = build_w(1.0, lam)
+        plain = build_w(1.0, 0.0)
+        a0, b0 = loss_of(z, True), loss_of(plain, True)
+        ok(f"{name}_penalty_zero_at_init", z.offset_penalty().item() == 0 and abs(a0["loss"].item() - b0["loss"].item()) < 1e-5,
+           with_penalty=a0["loss"].item(), without=b0["loss"].item())
+        with torch.no_grad():
+            z.shared.delta[:] = 1.0
+        ok(f"{name}_penalty_value", abs(z.offset_penalty().item() - z.shared.delta.shape[1]) < 1e-4, value=z.offset_penalty().item())
     rep["all_pass"] = not fails
     rep["failures"] = fails
     json.dump(rep, open(a.out_file, "w"), indent=1)

@@ -6,6 +6,7 @@
 #                chain:<D>:<baseline, e.g. mdmv122> (sbatch/baselines/run_baseline.sh STAGE=train)
 #                mfdmt:<D>:<A|B|C>[:<SEED>]   MFD 1+2+2 with C's task mix (run_mfd_train.sh MT=; needs a passed sbatch/mfd/mt_gate.sbatch)
 #                struct:<D>:<E1|E2>[:<SEED>]   chain decoder with item-level encoder structure (sbatch/struct/run_struct_train.sh; needs sbatch/struct/struct_gate.sbatch)
+#                cgeo:<D>   baseline C + codebook-initialised code embeddings (run_baseline.sh B=mql GEOARGS, §17 Part 3) -> geo/<D>/c_geo/
 #                geo:<D>:<chain|mfd>:<A|C|AB1|AB2|V1..V4>[:<SEED>]   codebook-geometry run (sbatch/geo/run_geo_train.sh; needs a passed sbatch/geo/geo_gate.sbatch)
 # Submit: sbatch --export=ALL,RUNS="mfd:Instruments:133:0 chain:Arts:mdmv122" sbatch/mfd/pack_mfd_train.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
@@ -54,6 +55,9 @@ for R in $RUNS; do
     CMD="M=$M D=$D CFG=$X AUG=$Y SEED=${S:-42} bash $RM"
   elif [ $K = mfdmt ]; then
     CMD="M=$M D=$D CFG=122 AUG=0 MT=$X SEED=${Y:-42} bash $RM"
+  elif [ $K = cgeo ]; then
+    T=$RUNS_DIR/baselines/$D/tok
+    CMD="MACREC_DIR=$M D=$D B=mql SEED=42 STAGE=train NW=2 OUTROOT=$RUNS_DIR/geo/$D/c_geo GEOARGS='--geo codebook --geo_sid c --geo_ckpt $T/mql_text/best_collision_model.pth --geo_ckpt_image $T/mql_image/best_collision_model.pth' bash $RB"
   elif [ $K = struct ]; then
     CMD="M=$M D=$D VAR=$X SEED=${Y:-42} bash $RS"
   elif [ $K = geo ]; then

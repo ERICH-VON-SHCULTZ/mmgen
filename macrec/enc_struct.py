@@ -9,6 +9,7 @@ positions only (exact within ~8 tokens). Two variants, everything else identical
       the recency embedding (zero-initialised); the encoder sequence is the number of items, so T5's relative
       positions count items. </s> is dropped. The decoder and its cross-attention mask follow the item sequence.
 Items are found from the tokens themselves (an item starts at its <s0_..> token), so any order / padding side works.
+ItemMFDT5 is E2 on the MFD decoder (§17 P1a; evaluation: mfd_eval.load_mfd_model).
 The struct parameters live in their own submodule (`struct`); embeddings stay tied as in the control. The variant is
 stored in config.struct_mode, so StructT5.from_pretrained rebuilds it (evaluation: eval_struct.py).
 """
@@ -19,6 +20,7 @@ import torch.nn as nn
 from transformers.modeling_outputs import BaseModelOutput
 
 from finetune_ext import PlainT5
+from mfd_model import MFDT5
 
 CODE_TOKEN = re.compile(r"^<([stv])(\d+)_(\d+)>$")
 SLOTS = ("s0", "t0", "t1", "v0", "v1")
@@ -53,7 +55,7 @@ class StructInput(nn.Module):
         return s, code & (item >= 0), item, rec, n.squeeze(1)
 
 
-class StructT5(PlainT5):
+class StructMixin:
     def __init__(self, config):
         super().__init__(config)
         self.struct = StructInput(config.vocab_size, config.d_model)
@@ -61,7 +63,7 @@ class StructT5(PlainT5):
 
     def install_struct(self, tokenizer, mode):
         assert mode in ("E1", "E2")
-        dev = self.shared.weight.device
+        dev = next(self.parameters()).device
         self.struct = StructInput(len(tokenizer), self.config.d_model).to(dev)
         self.struct.set_table(tokenizer)
         self.struct_mode = mode
@@ -87,6 +89,8 @@ class StructT5(PlainT5):
         out = self.encoder(inputs_embeds=x, attention_mask=mask, return_dict=True)
         return BaseModelOutput(last_hidden_state=out.last_hidden_state), mask
 
+
+class StructT5(StructMixin, PlainT5):
     def forward(self, input_ids=None, attention_mask=None, labels=None, decoder_input_ids=None,
                 decoder_attention_mask=None, task_flag=None, encoder_outputs=None, **kwargs):
         if encoder_outputs is None and input_ids is not None and self.struct_mode is not None:
@@ -104,3 +108,16 @@ class StructT5(PlainT5):
         model_kwargs["encoder_outputs"] = enc
         model_kwargs["attention_mask"] = mask                        # E2: the item-level mask for cross-attention
         return model_kwargs
+
+
+class ItemMFDT5(StructMixin, MFDT5):
+    """MFD with one encoder position per history item (E2; §17 P1a): each item is the sum of the code embeddings present
+    in its history view (5 in the full view, 3 in the text / image views of seqrec_mv) + recency. Decoder rows unchanged."""
+
+    def forward(self, input_ids=None, attention_mask=None, decoder_input_ids=None, labels=None,
+                encoder_outputs=None, **kwargs):
+        if encoder_outputs is None and input_ids is not None and self.struct_mode is not None:
+            encoder_outputs, attention_mask = self.struct_encode(input_ids, attention_mask)
+            input_ids = None
+        return super().forward(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids,
+                               labels=labels, encoder_outputs=encoder_outputs, **kwargs)

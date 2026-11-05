@@ -8,6 +8,11 @@ run_mfd_train.sh), unchanged arguments, plus:
   --geo_perm_seed S              permutation seed of the shuffled control (default 0)
   --soft_f_mode geometric|uniform   B's targets: geometric (codebook distances) or plain label smoothing on f (§15 V3)
   --soft_f_nn_mass M             geometric targets with the T that puts share M of the eps mass on the 10 nearest f (§15 V4)
+  --f_loss_weight W              §17: f cross-entropy x W in training (validation loss unchanged)
+  --offset_lambda L              §17: + L * mean ||delta||^2 in training
+  --item_enc                     §17 P1a (with --mfd): one encoder position per history item (enc_struct.ItemMFDT5)
+  --geo_sid md|c                 c = baseline C's tokens (<a_k>.. / <A_k>..), §17 Part 3; --geo_ckpt = text tokenizer,
+  --geo_ckpt_image PATH          C's image tokenizer
   --mfd                          run finetune_mfd.py's path (MFDT5, MFD datasets / collator) instead of the chain's
   --geo_report PATH              JSON written at install: codebook tensor, tied head, norms, T, ...
 The model class becomes geo_embed.make_geo_class(PlainT5 | MFDT5); the geometry is installed when the Trainer is
@@ -41,6 +46,11 @@ PERM_SEED = int(pop_arg("--geo_perm_seed", 0))
 SOFT_MODE = pop_arg("--soft_f_mode", "geometric")
 NN_MASS = pop_arg("--soft_f_nn_mass")
 NN_MASS = float(NN_MASS) if NN_MASS is not None else None
+F_WEIGHT = float(pop_arg("--f_loss_weight", 1.0))
+OFFSET = float(pop_arg("--offset_lambda", 0.0))
+ITEM = pop_arg("--item_enc", False, flag=True)
+SID = pop_arg("--geo_sid", "md")
+CKPT_IMAGE = pop_arg("--geo_ckpt_image")
 MFD = pop_arg("--mfd", False, flag=True)
 REPORT = pop_arg("--geo_report")
 assert GEO in ("none", "codebook", "shuffled") and (GEO != "none" or EPS > 0) and CKPT and SOFT_MODE in ("geometric", "uniform")
@@ -52,7 +62,11 @@ def setup():
     import geo_embed
     if MFD:                                     # finetune_mfd.py does `from mfd_model import MFDT5; finetune_ext.PlainT5 = MFDT5`
         import mfd_model
-        mfd_model.MFDT5 = geo_embed.make_geo_class(mfd_model.MFDT5)
+        if ITEM:
+            import enc_struct
+            mfd_model.MFDT5 = geo_embed.make_geo_class(enc_struct.ItemMFDT5)
+        else:
+            mfd_model.MFDT5 = geo_embed.make_geo_class(mfd_model.MFDT5)
     else:
         finetune_ext.PlainT5 = geo_embed.make_geo_class(finetune_ext.PlainT5)
     state = {}
@@ -61,7 +75,9 @@ def setup():
     class GeoTrainer(_Base):
         def __init__(self, *a, **k):
             model, tok = k["model"], k["tokenizer"]
-            info = model.install_geometry(tok, CKPT, GEO, EPS, PERM_SEED, SOFT_MODE, NN_MASS)
+            info = model.install_geometry(tok, CKPT, GEO, EPS, PERM_SEED, SOFT_MODE, NN_MASS, F_WEIGHT, OFFSET, SID, CKPT_IMAGE)
+            if ITEM:
+                info["item_enc"] = model.install_struct(tok, "E2")
             info["n_params"] = sum(p.numel() for p in model.parameters())
             state["model"], state["info"] = model, info
             if REPORT and int(os.environ.get("LOCAL_RANK", 0)) == 0:
@@ -80,6 +96,9 @@ def bake_and_save(state, out_dir):
     dev = next(m.parameters()).device
     V = m.config.vocab_size
     x = torch.randint(32100, V, (4, 12), device=dev)               # SID code tokens (+ the few other added tokens)
+    if getattr(m, "struct_mode", None):                            # item-level encoder: items start at <s0_..>
+        s0 = (m.struct.slot_of == 0).nonzero().squeeze(1)
+        x[:, ::4] = s0[torch.randint(len(s0), x[:, ::4].shape, device=dev)]
     y = torch.randint(32100, V, (4, 3), device=dev)
     y = y.unsqueeze(1).repeat(1, 2, 1) if MFD else y
     with torch.no_grad():

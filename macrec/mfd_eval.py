@@ -42,6 +42,14 @@ METRICS = ["hit@1", "hit@5", "hit@10", "ndcg@5", "ndcg@10"]
 TOPN = 20
 
 
+def load_mfd_model(path):
+    """MFDT5, or enc_struct.ItemMFDT5 when the checkpoint has config.struct_mode (§17 P1a)."""
+    if json.load(open(os.path.join(path, "config.json"))).get("struct_mode"):
+        from enc_struct import ItemMFDT5
+        return ItemMFDT5.from_pretrained(path)
+    return MFDT5.from_pretrained(path)
+
+
 def excl_cumsum(x):
     return torch.cumsum(x, 0) - x
 
@@ -53,7 +61,11 @@ def score_batch(model, cat, ids, mask, K, T, I):
     dev = ids.device
     B = ids.shape[0]
     L = cat.L
-    enc = model.encoder(input_ids=ids, attention_mask=mask, return_dict=True).last_hidden_state
+    if getattr(model, "struct_mode", None):                      # §17 P1a: one encoder position per history item
+        enc, mask = model.struct_encode(ids, mask)
+        enc = enc.last_hidden_state
+    else:
+        enc = model.encoder(input_ids=ids, attention_mask=mask, return_dict=True).last_hidden_state
     start = model.config.decoder_start_token_id
     ar = torch.arange(B, device=dev)
     # pass 1: log P(f), restricted to the shared codes that exist in the catalog
@@ -356,7 +368,7 @@ def main():
                 model.lm_head.weight[n_old:] = torch.randn_like(model.lm_head.weight[n_old:]) * model.lm_head.weight[:n_old].std()
     else:
         tokenizer = T5Tokenizer.from_pretrained(args.ckpt_path)
-        model = MFDT5.from_pretrained(args.ckpt_path)
+        model = load_mfd_model(args.ckpt_path)
     model = model.cuda().eval()
     model.config.use_cache = False
     cat = Catalog(args, tokenizer, "cuda")

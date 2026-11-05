@@ -17,6 +17,11 @@ B. Soft labels for f: target q(f') = (1 - eps) 1[f' = f*] + eps softmax_{f' != f
    T = median over f codes of the squared distance to their 10th-nearest f code, or the T that puts a given share of
    the eps mass on the 10 nearest f codes (§15 V4). soft_mode="uniform": plain label smoothing on f (§15 V3). Applied to every label that is an
    f token (chain: position 0; MFD: text row position 0); all other labels stay one-hot. eps = 0: HF's own loss.
+C. Further training terms on top of A (§17): f_weight multiplies the cross-entropy of every f label (training only; the
+   denominator stays the number of targets, so all other terms are unchanged); offset_lambda adds lambda * mean over
+   code tokens of ||delta||^2 (training only). Validation loss (early stopping) stays the plain token cross-entropy.
+sid="c" (§17 Part 3): the same construction for baseline C's tokens <a_k>..<d_k> (text) and <A_k>..<D_k> (image), from
+   rq.vq_layers.<l>.embedding.weight of C's two tokenizers; the level key is the token's letter.
 After training, bake() turns the model back into a plain T5 whose embedding table is the learned P c + delta, so all
 evaluation code loads it unchanged.
 """
@@ -27,17 +32,28 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 CODE_TOKEN = re.compile(r"^<([stv])(\d+)_(\d+)>$")
+C_TOKEN = re.compile(r"^<([a-dA-D])_(\d+)>$")
 RQ = {"s": "shared_rq", "t": "text_rq", "v": "image_rq"}
 
 
-def code_tokens(tokenizer):
-    """[(token id, level key e.g. 't0', code)] for every SID code token in the tokenizer."""
+def code_tokens(tokenizer, sid="md"):
+    """[(token id, level key e.g. 't0' (sid c: 'a'..'D'), code)] for every SID code token in the tokenizer."""
     out = []
     for tok, i in tokenizer.get_vocab().items():
-        m = CODE_TOKEN.match(tok)
+        m = (C_TOKEN if sid == "c" else CODE_TOKEN).match(tok)
         if m:
-            out.append((i, m.group(1) + m.group(2), int(m.group(3))))
+            out.append((i, m.group(1), int(m.group(2))) if sid == "c" else (i, m.group(1) + m.group(2), int(m.group(3))))
     return sorted(out)
+
+
+def load_c_codebooks(text_ckpt, image_ckpt):
+    """C's two single-modality tokenizers: level key 'a'..'d' (text), 'A'..'D' (image) -> (K, d_code) codebook tensor."""
+    out = {}
+    for path, letters in ((text_ckpt, "abcd"), (image_ckpt, "ABCD")):
+        sd = torch.load(path, map_location="cpu", weights_only=False)["state_dict"]
+        for j, c in enumerate(letters):
+            out[c] = sd[f"rq.vq_layers.{j}.embedding.weight"].float()
+    return out
 
 
 def load_codebooks(ckpt_path):
@@ -147,13 +163,17 @@ class GeoMixin:
     """install() / soft-label loss / bake() for PlainT5 and MFDT5 subclasses."""
     _tied_weights_keys = ["encoder.embed_tokens", "decoder.embed_tokens", "lm_head"]
     geo_installed = False
+    f_weight, offset_lambda = 1.0, 0.0
 
-    def install_geometry(self, tokenizer, ckpt_path, geo, eps=0.0, perm_seed=0, soft_mode="geometric", nn_target=None):
+    def install_geometry(self, tokenizer, ckpt_path, geo, eps=0.0, perm_seed=0, soft_mode="geometric", nn_target=None,
+                         f_weight=1.0, offset_lambda=0.0, sid="md", image_ckpt=None):
         assert self.config.tie_word_embeddings and self.lm_head.weight is self.shared.weight, "expected a tied T5"
-        books = load_codebooks(ckpt_path)
-        toks = code_tokens(tokenizer)
+        books = load_c_codebooks(ckpt_path, image_ckpt) if sid == "c" else load_codebooks(ckpt_path)
+        toks = code_tokens(tokenizer, sid)
         info = {"geo": geo, "tied_head": True, "codebook_tensor": "<chain>_rq.vq_layers.<l>.embedding.weight",
-                "ckpt": ckpt_path, "code_tokens": len(toks)}
+                "ckpt": ckpt_path, "code_tokens": len(toks), "sid": sid, "image_ckpt": image_ckpt,
+                "f_weight": f_weight, "offset_lambda": offset_lambda}
+        self.f_weight, self.offset_lambda = f_weight, offset_lambda
         if geo in ("codebook", "shuffled"):
             g = GeoEmbedding(self.shared, toks, books, perm_seed if geo == "shuffled" else None)
             self.shared = g
@@ -171,6 +191,11 @@ class GeoMixin:
             self.register_buffer("soft_Q", Q, persistent=False)
             self.register_buffer("soft_map", fmap, persistent=False)
             info["soft_f"] = sinfo
+        elif f_weight != 1.0:
+            ids = torch.tensor([i for i, lv, _ in toks if lv == "s0"])
+            fmap = torch.full((len(tokenizer) + 1,), -1, dtype=torch.long)
+            fmap[ids] = torch.arange(len(ids))
+            self.register_buffer("soft_map", fmap, persistent=False)
         self.geo_info = info
         return info
 
@@ -178,19 +203,33 @@ class GeoMixin:
         if not self.geo_installed:
             super().tie_weights()
 
+    def custom_active(self):
+        return getattr(self, "soft_Q", None) is not None or (self.training and (self.f_weight != 1.0 or self.offset_lambda > 0))
+
+    def offset_penalty(self):
+        return self.shared.delta.pow(2).sum(1).mean()
+
     def soft_loss(self, logits, labels):
-        """Mean token cross-entropy over labels != -100; labels that are f tokens use the soft target."""
+        """Token cross-entropy summed over labels != -100 / their number; f labels use the soft target if there is one
+        and (training) weight f_weight; + offset penalty (training)."""
         lp = logits.float().log_softmax(-1).reshape(-1, logits.size(-1))
         y = labels.reshape(-1)
         valid = y != -100
         yc = y.clamp(min=0)
         nll = -lp.gather(1, yc[:, None]).squeeze(1)
-        r = self.soft_map[yc.clamp(max=len(self.soft_map) - 1)]
-        m = valid & (r >= 0)
-        if m.any():
-            nll = nll.clone()
-            nll[m] = -(lp[m][:, self.soft_ids] * self.soft_Q[r[m]]).sum(1)
-        return nll[valid].mean()
+        Q = getattr(self, "soft_Q", None)
+        if Q is not None or self.f_weight != 1.0:
+            r = self.soft_map[yc.clamp(max=len(self.soft_map) - 1)]
+            m = valid & (r >= 0)
+            if Q is not None and m.any():
+                nll = nll.clone()
+                nll[m] = -(lp[m][:, self.soft_ids] * Q[r[m]]).sum(1)
+            if self.training and self.f_weight != 1.0:
+                nll = nll * torch.where(m, torch.full_like(nll, self.f_weight), torch.ones_like(nll))
+        loss = nll[valid].sum() / valid.sum()
+        if self.training and self.offset_lambda > 0:
+            loss = loss + self.offset_lambda * self.offset_penalty()
+        return loss
 
     @torch.no_grad()
     def bake(self):
@@ -220,7 +259,7 @@ def make_geo_class(base_cls):
                 kwargs["decoder_attention_mask"] = decoder_attention_mask
             if encoder_outputs is not None:
                 kwargs["encoder_outputs"] = encoder_outputs
-            if getattr(self, "soft_Q", None) is None or labels is None:
+            if labels is None or not self.custom_active():
                 return base_cls.forward(self, input_ids=input_ids, attention_mask=attention_mask,
                                         decoder_input_ids=decoder_input_ids, labels=labels, **kwargs)
             if decoder_input_ids is None:                       # chain: HF builds them from the labels

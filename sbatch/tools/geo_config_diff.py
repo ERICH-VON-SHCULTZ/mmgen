@@ -5,7 +5,10 @@ Reference (recorded, informational): the chain control's dry run (run_baseline.s
   vs its REAL seed-42 run (printed args, training_args.bin, config.json).
 Runs: each geometry dry run (run_geo_train.sh DRYRUN=1) vs its control's dry run, dry vs dry:
   chain122_<VAR>     vs the chain control (plugin/dryrun/<D>/md122_a05_ep500_reassign/seed42)
-  mfd122_mv_geo<VAR> vs mfd122_mv (mfd/mt_gate/dryrun/<D>/mfd122_mv)
+  mfd122_mv_geo<VAR> vs mfd122_mv (mfd/mt_gate/dryrun/<D>/mfd122_mv); P1* vs V2-MFD (geo/gate/dryrun/<D>/mfd122_mv_geoV2):
+  only the listed change differs (P1a: + the item encoder, 400 epochs; P1b-e: nothing in the config, the loss term is
+  checked in geo_init.json)
+  c_geo (§17 Part 3) vs C's dry run (plugin/dryrun/<D>/mql/seed42): dry run in geo/<D>/c_geo/dryrun
   (resolved args, TrainingArguments, model config incl. vocab, examples, tokenizer size). Allowed: run-dir paths and
   the embedding construction itself (model_class Geo*, n_params = + P_level + delta). The f loss is not an argument;
   geo_init.json of the dry run must state the intended construction (geo, eps, tied head, codebook tensor).
@@ -28,6 +31,9 @@ VOLATILE = {"_n_gpu", "local_rank", "deepspeed_plugin", "accelerator_config", "h
             "torch_compile_backend", "torch_compile_mode"}
 WANT = {"A": ("codebook", 0.0), "C": ("shuffled", 0.0), "AB1": ("codebook", 0.1), "AB2": ("codebook", 0.2),
         "V1": ("shuffled", 0.2), "V2": ("codebook", 0.0), "V3": ("none", 0.2), "V4": ("codebook", 0.2)}
+WANT.update({"P1a": ("codebook", 0.0), "P1b": ("codebook", 0.0), "P1c": ("codebook", 0.0), "P1d": ("codebook", 0.0), "P1e": ("codebook", 0.0)})
+TRAIN = {"P1b": (2.0, 0.0), "P1c": (3.0, 0.0), "P1d": (1.0, 1e-3), "P1e": (1.0, 1e-2), "P1a": (1.0, 0.0)}   # (f_weight, offset_lambda)
+P1A_LISTED = {"resolved_args.epochs", "training_args.num_train_epochs", "model_config.struct_mode"}
 SOFT = {"V3": ("uniform", None), "V4": ("geometric", 0.7), "AB1": ("geometric", None), "AB2": ("geometric", None),
         "V1": ("geometric", None)}               # (soft-label mode, share of eps mass on the 10 nearest f)
 
@@ -70,18 +76,36 @@ def main():
             print(f"   [{x}] {k}: real={v[0]}  dry={v[1]}")
     for r in runs:
         ctl = cd if r.startswith("chain122_") else json.load(open(f"{RUNS}/mfd/mt_gate/dryrun/{D}/mfd122_mv/dryrun.json"))
-        p = json.load(open(f"{G}/dryrun/{D}/{r}/dryrun.json"))
-        gi = json.load(open(f"{G}/dryrun/{D}/{r}/geo_init.json"))
+        if "_geoP1" in r:
+            ctl = json.load(open(f"{G}/dryrun/{D}/mfd122_mv_geoV2/dryrun.json"))
+        dd = f"{RUNS}/geo/{D}/c_geo/dryrun" if r == "c_geo" else f"{G}/dryrun/{D}/{r}"
+        p = json.load(open(f"{dd}/dryrun.json"))
+        gi = json.load(open(f"{dd}/geo_init.json"))
+        if r == "c_geo":
+            ctl = json.load(open(f"{RUNS}/plugin/dryrun/{D}/mql/seed42/dryrun.json"))
+            cl = classify(diff(comparable(ctl), comparable(p)))
+            ok = not cl["UNINTENDED"] and gi["geo"] == "codebook" and gi["sid"] == "c" and gi["tied_head"] and bool(gi["image_ckpt"])
+            res["runs"][r] = cl | {"ok": ok, "geo_init": gi, "control": "C seed 42 dry run"}
+            print(f"== c_geo vs C: {'OK' if ok else 'NOT OK'}  code tokens {gi['code_tokens']}, levels {gi['levels']}")
+            for cat in ("geometry", "UNINTENDED"):
+                for k, v in cl[cat].items():
+                    print(f"   [{cat}] {k}: control={v[0][:120]}  c_geo={v[1][:120]}")
+            continue
         var = r.split("_")[1] if r.startswith("chain122_") else r.split("_geo")[1]
         geo, eps = WANT[var]
         sf = gi.get("soft_f", {})
         geo_ok = (gi["geo"] == geo and sf.get("eps", 0.0) == eps and gi["tied_head"]
                   and gi["codebook_tensor"] == "<chain>_rq.vq_layers.<l>.embedding.weight"
                   and (var not in SOFT or (sf.get("mode", "geometric"), sf.get("nn_target")) == SOFT[var]))
+        if var in TRAIN:
+            geo_ok = geo_ok and (gi["f_weight"], gi["offset_lambda"]) == TRAIN[var] and (("item_enc" in gi) == (var == "P1a"))
         cl = classify(diff(comparable(ctl), comparable(p)))
+        if var == "P1a":
+            for k in [k for k in cl["UNINTENDED"] if k in P1A_LISTED]:
+                cl["geometry"][k] = cl["UNINTENDED"].pop(k)
         ok = not cl["UNINTENDED"] and geo_ok
         res["runs"][r] = cl | {"ok": ok, "geo_init_as_intended": geo_ok, "geo_init": gi,
-                               "control": "chain md122_a05_ep500_reassign" if r.startswith("chain122_") else "mfd122_mv"}
+                               "control": "chain md122_a05_ep500_reassign" if r.startswith("chain122_") else ("V2-MFD" if "_geoP1" in r else "mfd122_mv")}
         print(f"== {r} vs its control: {'OK' if ok else 'NOT OK'}  (geo={gi['geo']}, eps={gi.get('soft_f', {}).get('eps', 0.0)}, "
               f"intended: {geo_ok})")
         for cat in ("geometry", "UNINTENDED"):

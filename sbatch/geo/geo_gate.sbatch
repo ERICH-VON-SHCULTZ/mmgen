@@ -49,6 +49,13 @@ tail -1 $RUNS/geo/$D/geo_check.log
 for K in $KINDS; do for V in $VARS; do
   M=$M D=$D KIND=\$K VAR=\$V SEED=42 DRYRUN=1 bash $RG
 done; done
-cd $T && python geo_config_diff.py $D $NAMES
+if [ \"\${CGEO:-0}\" = 1 ]; then    # §17 Part 3: C + codebook init, dry run against C's own dry run
+  TK=$RUNS/baselines/$D/tok
+  [ -f $RUNS/plugin/dryrun/$D/mql/seed42/dryrun.json ] || MACREC_DIR=$M D=$D B=mql SEED=42 STAGE=train NW=2 DRYRUN=1 bash $RB
+  MACREC_DIR=$M D=$D B=mql SEED=42 STAGE=train NW=2 DRYRUN=1 OUTROOT=$RUNS/geo/$D/c_geo \\
+    GEOARGS=\"--geo codebook --geo_sid c --geo_ckpt \$TK/mql_text/best_collision_model.pth --geo_ckpt_image \$TK/mql_image/best_collision_model.pth\" bash $RB
+  NAMES=\"$NAMES c_geo\"
+fi
+cd $T && python geo_config_diff.py $D \${NAMES:-$NAMES}
 "
 echo done

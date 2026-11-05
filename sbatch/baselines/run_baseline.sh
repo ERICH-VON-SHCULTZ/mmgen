@@ -10,7 +10,12 @@ DATA=/scratch/yw8866/mmgen_runs/data/
 # the resolved args, TrainingArguments and model config to $OUT/dryrun.json; $OUT is a scratch dir (the real run dir
 # is never touched). Used for the config diff against C (docs/PLUGIN_REPORT.md §2).
 DRYRUN=${DRYRUN:-0}
-if [ "$DRYRUN" = 1 ]; then OUT=/scratch/yw8866/mmgen_runs/plugin/dryrun/$D/$B/seed$SEED; rm -rf $OUT; mkdir -p $OUT
+# GEOARGS + OUTROOT (docs/MFD_REPORT.md §17 Part 3): same run through finetune_geo.py (codebook-initialised code embeddings),
+# run dir $OUTROOT/seed$SEED (dry run: $OUTROOT/dryrun); everything else unchanged.
+GEOARGS=${GEOARGS:-}; OUTROOT=${OUTROOT:-}
+if [ -n "$OUTROOT" ]; then
+  OUT=$OUTROOT/seed$SEED; [ "$DRYRUN" = 1 ] && { OUT=$OUTROOT/dryrun; rm -rf $OUT; }; mkdir -p $OUT/eval/valid $OUT/eval/test
+elif [ "$DRYRUN" = 1 ]; then OUT=/scratch/yw8866/mmgen_runs/plugin/dryrun/$D/$B/seed$SEED; rm -rf $OUT; mkdir -p $OUT
 else OUT=/scratch/yw8866/mmgen_runs/baselines/$D/$B/seed$SEED; mkdir -p $OUT/eval/valid $OUT/eval/test; fi
 PORT=$((20000 + RANDOM % 20000))
 STAGE=${STAGE:-all}; NW=${NW:-2}
@@ -61,6 +66,10 @@ cd $M
 if [ "$STAGE" != eval ] && [ ! -f $OUT/train_stats.json ]; then
   echo "== train $D $B seed $SEED"; date
   ENTRY="finetune_ext.py"; [ "$DRYRUN" = 1 ] && ENTRY="config_dryrun.py --dump_file $OUT/dryrun.json"
+  if [ -n "$GEOARGS" ]; then
+    ENTRY="finetune_geo.py"; [ "$DRYRUN" = 1 ] && ENTRY="geo_dryrun.py --dump_file $OUT/dryrun.json"
+    ENTRY="$ENTRY $GEOARGS --geo_report $OUT/geo_init.json"
+  fi
   torchrun --nproc_per_node=1 --master_port=$PORT $ENTRY --model_class $MC --stats_file $OUT/train_stats.json --dataloader_num_workers $NW \
     --run_config_file $CFG \
     --seed $SEED --data_path $DATA --dataset $D --output_dir $OUT --base_model ./config/ckpt \
