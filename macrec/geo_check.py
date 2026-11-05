@@ -242,7 +242,8 @@ def main():
        items=n_it, encoder_lengths=em.sum(1).tolist(), token_lengths=xm.sum(1).tolist())
     out = m(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y)
     ok("P1a_mfd_decoder_rows_unchanged", out.logits.shape[:3] == (12, 2, y.shape[2]), shape=list(out.logits.shape))
-    cat = Catalog(Namespace(data_path=os.path.dirname(os.path.dirname(a.index)), dataset=a.dataset, index_file=os.path.basename(a.index)[len(a.dataset):]), tk, "cpu")
+    ds_name = os.path.basename(os.path.dirname(a.index))
+    cat = Catalog(Namespace(data_path=os.path.dirname(os.path.dirname(a.index)), dataset=ds_name, index_file=os.path.basename(a.index)[len(ds_name):]), tk, "cpu")
     m.config.use_cache = False
     with torch.no_grad():
         sb = score_batch(m, cat, x[:2], xm[:2], 5, T_, I_)
