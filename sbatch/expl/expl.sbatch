@@ -5,6 +5,7 @@
 #                      -> mmgen_runs/expl/<D>/first_<run>.pt
 #   STEP=infer D=<D>   Part 3 re-scoring checks on mfd122_mv, VALIDATION only (macrec/expl_infer.py)
 #                      -> mmgen_runs/expl/<D>/infer_valid.json
+#   STEP=topk D=<D> RUN= TAG= KF= WF= WT= WI=   top-300 list of an MFD run at one setting (macrec/expl_topk.py, MFD_REPORT §18)
 #   STEP=firstc D=<D>  first-code rank of C + codebook init vs C (valid, test; MFD_REPORT §17 Part 3)
 #   STEP=group D=<D>   coarse regions of f (k-means of the f codebook vs random groups): does mfd122_mv's f mass find
 #                      the right region? (macrec/expl_group.py) -> mmgen_runs/expl/<D>/group.json
@@ -28,7 +29,7 @@ SIF=/share/apps/images/cuda12.1.1-cudnn8.9.0-devel-ubuntu22.04.2.sif
 OVERLAY=/scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3   # always :ro in jobs
 export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR"; export TRITON_CACHE_DIR=$TMPDIR/triton
-D=${D:-Instruments}; STEP=${STEP:-first}
+D=${D:-Instruments}; STEP=${STEP:-first}; RUN=${RUN:-}; TAG=${TAG:-}; KF=${KF:-}; WF=${WF:-}; WT=${WT:-}; WI=${WI:-}
 MD=.index_md122_a05_ep500_reassign.json; V1=$RUNS/md/sids/v1/$D/1+2+2
 [ "$(sha256sum < $RUNS/data/$D/$D$MD | cut -d' ' -f1)" = "$(cut -d' ' -f1 $V1/index.sha256)" ] || { echo "index != v1"; exit 1; }
 M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/
@@ -44,6 +45,9 @@ if [ $STEP = first ]; then
   python -u expl_first_step.py \$C --ckpt_path $RUNS/baselines/$D/plug122/seed42 --index_file .index_plug122_text.json --image_index_file .index_plug122_image.json --out_file $O/first_plug122.pt
   python -u expl_first_step.py \$C --ckpt_path $RUNS/baselines/$D/md122_a05_ep500_reassign/seed42 --index_file $MD --image_index_file $MD --first_tasks seqrec --out_file $O/first_chain.pt
   python -u expl_first_step.py \$C --ckpt_path $RUNS/mfd/$D/mfd122_mv/seed42 --index_file $MD --image_index_file $MD --first_tasks seqrec --out_file $O/first_mv.pt
+elif [ $STEP = topk ]; then       # §18: top-300 lists at one setting; RUN, TAG, KF, WF, WT, WI from the environment
+  python -u expl_topk.py \$C --ckpt_path $RUNS/mfd/$D/$RUN/seed42 --index_file $MD --image_index_file $MD --k_f $KF --w_f $WF --w_t $WT --w_i $WI \
+    --out_file $O/topk_$TAG.pt
 elif [ $STEP = firstc ]; then    # §17 Part 3: first-code rank of C + codebook init, valid and test
   for SP in valid test; do
     python -u expl_first_step.py \$C --ckpt_path $RUNS/geo/$D/c_geo/seed42 --index_file .index_lemb_mql.json --image_index_file .index_vitemb_mql.json --split \$SP --out_file $O/first_C_geo_\$SP.pt
