@@ -272,6 +272,10 @@ def sanity(args, model, tokenizer, cat, T, I):
     rep = {}
     # 1) changing one branch's codes must leave every logit of the other branch unchanged
     base = model(**inp).logits
+    # two identical forward passes: non-zero only if the model itself is not bit-reproducible on this GPU (the item-level
+    # encoder's scatter_add sums in no fixed order, §17 P1a); the independence check then allows that numerical noise
+    noise = float((model(**inp).logits - base).abs().max())
+    rep["repeat_forward_max_abs_diff"] = noise
     for b_mod, b_chk, pos in ((0, 1, 3), (1, 0, 3)):
         x = {k: v.clone() for k, v in inp.items()}
         lvl = cat.levels["t" if b_mod == 0 else "i"][0]
@@ -282,6 +286,8 @@ def sanity(args, model, tokenizer, cat, T, I):
         name = "text->image" if b_mod == 0 else "image->text"
         rep[f"independence_{name}"] = {
             "other_branch_identical": bool(torch.equal(base[:, b_chk], new[:, b_chk])),
+            "other_branch_ok": bool(torch.equal(base[:, b_chk], new[:, b_chk])
+                                    or (noise > 0 and float((base[:, b_chk] - new[:, b_chk]).abs().max()) < 1e-4)),
             "other_branch_max_abs_diff": float((base[:, b_chk] - new[:, b_chk]).abs().max()),
             "modified_branch_changed": bool(not torch.equal(base[:, b_mod], new[:, b_mod]))}
     # 3) f counted once: model loss == mean CE over exactly 1 + 2L targets per example (f, t_1..t_L, i_1..i_L)
@@ -321,7 +327,7 @@ def sanity(args, model, tokenizer, cat, T, I):
             diffs.append(float((man - vec).abs()))
     rep["exact_scoring"] = {"pairs_checked": len(diffs), "max_abs_diff": max(diffs), "tolerance": 1e-4,
                             "pass": max(diffs) < 1e-4}
-    rep["all_pass"] = (all(v["other_branch_identical"] and v["modified_branch_changed"]
+    rep["all_pass"] = (all(v["other_branch_ok"] and v["modified_branch_changed"]
                            for k, v in rep.items() if k.startswith("independence"))
                        and rep["f_loss_once"]["targets_per_example"] == 1 + 2 * cat.L
                        and rep["f_loss_once"]["image_branch_f_is_ignored"]
