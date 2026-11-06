@@ -9,6 +9,9 @@
 #        P1a  one encoder position per history item, up to 400 epochs   (--geo codebook --item_enc)
 #        P1b  / P1c  f loss weight 2 / 3                                (--geo codebook --f_loss_weight 2|3)
 #        P1d  / P1e  offset penalty lambda 1e-3 / 1e-2                  (--geo codebook --offset_lambda 1e-3|1e-2)
+#   §18 (schedule check on Arts):
+#        V2s  V2-MFD with P1a's schedule (max 400 epochs, cosine over 400)  (--geo codebook; EPOCHS=400)
+#        P1a200  P1a with V2-MFD's schedule (max 200 epochs), the other corner of the 2 x 2  (--geo codebook --item_enc)
 #   §15 (disentangling AB2):
 #        V1   shuffled init + AB2's soft labels             (--geo shuffled --geo_perm_seed 0 --soft_f_eps 0.2)
 #        V2   codebook init only (= A), one-hot f           (--geo codebook)
@@ -35,6 +38,8 @@ case $VAR in
   V3)  GEOARGS="--geo none --soft_f_eps 0.2 --soft_f_mode uniform" ;;
   V4)  GEOARGS="--geo codebook --soft_f_eps 0.2 --soft_f_nn_mass 0.7" ;;
   P1a) GEOARGS="--geo codebook --item_enc"; EPOCHS=400 ;;
+  V2s) GEOARGS="--geo codebook"; EPOCHS=400 ;;
+  P1a200) GEOARGS="--geo codebook --item_enc" ;;
   P1b) GEOARGS="--geo codebook --f_loss_weight 2" ;;
   P1c) GEOARGS="--geo codebook --f_loss_weight 3" ;;
   P1d) GEOARGS="--geo codebook --offset_lambda 1e-3" ;;
