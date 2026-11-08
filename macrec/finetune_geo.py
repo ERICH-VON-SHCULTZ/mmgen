@@ -11,6 +11,7 @@ run_mfd_train.sh), unchanged arguments, plus:
   --f_loss_weight W              §17: f cross-entropy x W in training (validation loss unchanged)
   --offset_lambda L              §17: + L * mean ||delta||^2 in training
   --item_enc                     §17 P1a (with --mfd): one encoder position per history item (enc_struct.ItemMFDT5)
+  --dense_lambda L               §20 Task 2 (with --item_enc): + L * dense item-level CE (dense_head.DenseItemMFDT5), training only
   --geo_sid md|c                 c = baseline C's tokens (<a_k>.. / <A_k>..), §17 Part 3; --geo_ckpt = text tokenizer,
   --geo_ckpt_image PATH          C's image tokenizer
   --mfd                          run finetune_mfd.py's path (MFDT5, MFD datasets / collator) instead of the chain's
@@ -49,10 +50,12 @@ NN_MASS = float(NN_MASS) if NN_MASS is not None else None
 F_WEIGHT = float(pop_arg("--f_loss_weight", 1.0))
 OFFSET = float(pop_arg("--offset_lambda", 0.0))
 ITEM = pop_arg("--item_enc", False, flag=True)
+DENSE = float(pop_arg("--dense_lambda", 0.0))
 SID = pop_arg("--geo_sid", "md")
 CKPT_IMAGE = pop_arg("--geo_ckpt_image")
 MFD = pop_arg("--mfd", False, flag=True)
 REPORT = pop_arg("--geo_report")
+assert DENSE == 0 or ITEM, "--dense_lambda needs --item_enc"
 assert GEO in ("none", "codebook", "shuffled") and (GEO != "none" or EPS > 0) and CKPT and SOFT_MODE in ("geometric", "uniform")
 
 
@@ -62,7 +65,10 @@ def setup():
     import geo_embed
     if MFD:                                     # finetune_mfd.py does `from mfd_model import MFDT5; finetune_ext.PlainT5 = MFDT5`
         import mfd_model
-        if ITEM:
+        if ITEM and DENSE > 0:
+            import dense_head
+            mfd_model.MFDT5 = geo_embed.make_geo_class(dense_head.DenseItemMFDT5)
+        elif ITEM:
             import enc_struct
             mfd_model.MFDT5 = geo_embed.make_geo_class(enc_struct.ItemMFDT5)
         else:
@@ -78,6 +84,11 @@ def setup():
             info = model.install_geometry(tok, CKPT, GEO, EPS, PERM_SEED, SOFT_MODE, NN_MASS, F_WEIGHT, OFFSET, SID, CKPT_IMAGE)
             if ITEM:
                 info["item_enc"] = model.install_struct(tok, "E2")
+            if DENSE > 0:
+                import argparse
+                import mfd_data
+                a = argparse.Namespace(**{k: sys.argv[sys.argv.index("--" + k) + 1] for k in ("data_path", "dataset", "index_file")})
+                info["dense"] = model.install_dense(mfd_data.item_token_table(a, tok), DENSE)
             info["n_params"] = sum(p.numel() for p in model.parameters())
             state["model"], state["info"] = model, info
             if REPORT and int(os.environ.get("LOCAL_RANK", 0)) == 0:

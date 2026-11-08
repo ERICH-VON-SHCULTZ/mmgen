@@ -12,6 +12,8 @@
 #   §18 (schedule check on Arts):
 #        V2s  V2-MFD with P1a's schedule (max 400 epochs, cosine over 400)  (--geo codebook; EPOCHS=400)
 #        P1a200  P1a with V2-MFD's schedule (max 200 epochs), the other corner of the 2 x 2  (--geo codebook --item_enc)
+#   §20 Task 2 (on top of P1a, same 400-epoch cap):
+#        P2a / P2b  P1a + dense item-level head, lambda 0.1 / 0.5  (--geo codebook --item_enc --dense_lambda 0.1|0.5)
 #   §15 (disentangling AB2):
 #        V1   shuffled init + AB2's soft labels             (--geo shuffled --geo_perm_seed 0 --soft_f_eps 0.2)
 #        V2   codebook init only (= A), one-hot f           (--geo codebook)
@@ -40,6 +42,8 @@ case $VAR in
   P1a) GEOARGS="--geo codebook --item_enc"; EPOCHS=400 ;;
   V2s) GEOARGS="--geo codebook"; EPOCHS=400 ;;
   P1a200) GEOARGS="--geo codebook --item_enc" ;;
+  P2a) GEOARGS="--geo codebook --item_enc --dense_lambda 0.1"; EPOCHS=400 ;;
+  P2b) GEOARGS="--geo codebook --item_enc --dense_lambda 0.5"; EPOCHS=400 ;;
   P1b) GEOARGS="--geo codebook --f_loss_weight 2" ;;
   P1c) GEOARGS="--geo codebook --f_loss_weight 3" ;;
   P1d) GEOARGS="--geo codebook --offset_lambda 1e-3" ;;

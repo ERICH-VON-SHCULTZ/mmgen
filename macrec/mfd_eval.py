@@ -43,7 +43,12 @@ TOPN = 20
 
 
 def load_mfd_model(path):
-    """MFDT5, or enc_struct.ItemMFDT5 when the checkpoint has config.struct_mode (§17 P1a)."""
+    """MFDT5, or enc_struct.ItemMFDT5 when the checkpoint has config.struct_mode (§17 P1a), or dense_head.DenseItemMFDT5
+    when it has config.dense_head (§20 Task 2)."""
+    cfg = json.load(open(os.path.join(path, "config.json")))
+    if cfg.get("dense_head"):
+        from dense_head import DenseItemMFDT5
+        return DenseItemMFDT5.from_pretrained(path)
     if json.load(open(os.path.join(path, "config.json"))).get("struct_mode"):
         from enc_struct import ItemMFDT5
         return ItemMFDT5.from_pretrained(path)

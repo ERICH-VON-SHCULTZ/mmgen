@@ -296,6 +296,61 @@ def main():
         with torch.no_grad():
             z.shared.delta[:] = 1.0
         ok(f"{name}_penalty_value", abs(z.offset_penalty().item() - z.shared.delta.shape[1]) < 1e-4, value=z.offset_penalty().item())
+    # §20 Task 2: P2a/P2b = P1a + dense item-level head (dense_head.DenseItemMFDT5)
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from dense_head import DenseItemMFDT5
+    from mfd_data import item_token_table
+    from mfd_eval import load_mfd_model
+    ns = Namespace(data_path=os.path.dirname(os.path.dirname(a.index)), dataset=ds_name, index_file=os.path.basename(a.index)[len(ds_name):])
+    lam = 0.5
+    torch.manual_seed(0)
+    dm = ge.make_geo_class(DenseItemMFDT5)(T5Config.from_pretrained("./config/ckpt"))
+    dm.resize_token_embeddings(len(tk))
+    dm.install_geometry(tk, ckpt, "codebook")
+    dm.install_struct(tk, "E2")
+    dinfo = dm.install_dense(item_token_table(ns, tk), lam)
+    for mod in dm.modules():                                           # deterministic training-mode forward for the checks
+        if isinstance(mod, nn.Dropout):
+            mod.p = 0.0
+    items = dm.items_from_labels(labels)
+    ok("P2_target_item_from_labels", items.tolist() == [int(k) for k in keys[:12]], items=items.tolist()[:4])
+    ok("P2_item_vector_is_sum_of_5_code_embeddings",
+       (dm.item_vectors()[int(keys[0])] - dm.shared(tab[0]).sum(0)).abs().max().item() < 1e-5)
+    dm.train()
+    o = dm(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)
+    l_mfd, l_dense = dm._last_losses
+    p1a = ItemMFDT5.forward(dm, input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)["loss"]
+    e2, m2_ = dm.struct_encode(x[:12], xm[:12])
+    manual_dense = F.cross_entropy(dm.dense_logits(dm.start_state(e2.last_hidden_state, m2_)), items)
+    ok("P2_loss_is_mfd_plus_lambda_dense", abs(o["loss"].item() - (l_mfd + lam * l_dense).item()) < 1e-5
+       and abs(l_mfd.item() - p1a.item()) < 1e-5 and abs(l_dense.item() - manual_dense.item()) < 1e-4,
+       loss=o["loss"].item(), mfd=l_mfd.item(), p1a_loss=p1a.item(), dense=l_dense.item(), manual_dense=manual_dense.item())
+    dm.eval()
+    with torch.no_grad():
+        ev = dm(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)["loss"]
+        ev1 = ItemMFDT5.forward(dm, input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)["loss"]
+        lg0 = dm.dense_logits(dm.start_state(e2.last_hidden_state, m2_))
+    ok("P2_eval_loss_is_plain_mfd", abs(ev.item() - ev1.item()) < 1e-6, eval_loss=ev.item())
+    ok("P2_initial_dense_logits_small", lg0.abs().max().item() < 5.0, max_abs=lg0.abs().max().item(), std=lg0.std().item())
+    with torch.no_grad():
+        before = dm(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y).logits
+        dm.bake()
+        after = dm(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y).logits
+        lg1 = dm.dense_logits(dm.start_state(e2.last_hidden_state, m2_))
+    dm.__class__ = DenseItemMFDT5
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+        dm.save_pretrained(d)
+        dr = load_mfd_model(d).eval()
+        with torch.no_grad():
+            re_ = dr(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y).logits
+            e3, m3 = dr.struct_encode(x[:12], xm[:12])
+            lg2 = dr.dense_logits(dr.start_state(e3.last_hidden_state, m3))
+    ok("P2_bake_and_reload", type(dr).__name__ == "DenseItemMFDT5" and (before - after).abs().max() < 1e-4
+       and (before - re_).abs().max() < 1e-4 and (lg0 - lg1).abs().max() < 1e-4 and (lg0 - lg2).abs().max() < 1e-4,
+       cls=type(dr).__name__, bake=float((before - after).abs().max()), reload=float((before - re_).abs().max()),
+       dense_bake=float((lg0 - lg1).abs().max()), dense_reload=float((lg0 - lg2).abs().max()))
+    rep["P2_dense_info"] = dinfo
     rep["all_pass"] = not fails
     rep["failures"] = fails
     json.dump(rep, open(a.out_file, "w"), indent=1)
