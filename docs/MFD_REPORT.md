@@ -1,6 +1,6 @@
 # MFD stage 1 on Instruments: report
 
-> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18; results summary with P1a on all datasets (chosen on test): §19.**
+> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18; main method P1a, reproduction and results summary: §19; error decomposition, test-time view ensemble, dense head, seeds: §20.**
 
 Two-branch decoder (MFD) vs the MD chain-decoder control, same SID and training recipe.
 Instruments, MD-RQ-VAE 1+2+2 v1 SID, seed 42. Written 2026-10-31.
@@ -1289,7 +1289,165 @@ on Instruments and Games it was not tested.
    (Superseded as the headline by §19: P1a on all three datasets, chosen on test.)
 4. Codebook init also helps C on Arts (+0.0037 merged HR@10, CI > 0); against C + init the Arts gap is −0.0076.
 
-## 19. Results summary: P1a on all three datasets (chosen on test)
+## 19. Main method: P1a — reproduction
+
+**P1a is the main method** (decision 2026-11-07): V2-MFD + item-level encoder input. V2-MFD and the runs of §13–§18 are
+its ablations. Everything below is for seed 42 on the locked v1 1+2+2 SIDs; seeds 43/44 are §20 Task 3.
+
+### 19.1 Code
+
+| what | value |
+|---|---|
+| training code | commit `8378533` (Instruments, Games; pack job 22071268) and `4722218` (Arts; pack job 21971478). Between the two, `git diff 4722218 8378533 -- macrec/ sbatch/geo/run_geo_train.sh` touches only `expl_topk.py` (new), `mfd_eval.py` (sanity-check tolerance) and two new run-script variants: the training path is identical |
+| evaluation code | commit `8378533` (eval jobs 22140084 Arts, 22140086 Instruments, 22174810 Games) |
+| later commits | up to the current HEAD the training and evaluation path is unchanged for P1a; §20 added options that are off by default (`--dense_lambda`, `load_mfd_model`'s dense branch) |
+| frozen copy | every job copies `macrec/*.py` to `$TMPDIR` at start and prints the commit in its log |
+
+**Bit-exactness.** Evaluating the saved checkpoints reproduces the numbers below (the evaluation's own repeat-forward noise is
+~1e-5 on logits, from `scatter_add` in the item encoder; it did not change any rank in the sanity checks). **Retraining is not
+bit-reproducible**: the item encoder's `scatter_add` and cuDNN kernels are non-deterministic on GPU, so a rerun with the same
+seed gives a different checkpoint of the same quality; seeds 43/44 (§20 Task 3) give the spread to expect.
+
+Checkpoints: `mmgen_runs/mfd/<D>/mfd122_mv_geoP1a/seed42/` (`model.safetensors` = baked best checkpoint, plain tied T5 + the
+item-encoder submodule).
+
+### 19.2 Data and SIDs
+
+| dataset | v1 1+2+2 index (`md/sids/v1/<D>/1+2+2/index.json`), SHA-256 | tokenizer (`tokenizer.pth`, for codebook init), SHA-256 |
+|---|---|---|
+| Instruments | `512221a10e72602185bb0bae1127daef72f6f4f54e67ca0b1a704de331166564` | `bf4a8a0b5afda3ce0214d606b5b8cc034107ed16bb2760db011ed45b5fc7e30e` |
+| Arts | `cbc70c4ed3da57fe3172bc280a2feccee5ab92bec1689691c9cb3eb88a7e0960` | `43b26cef4222af47ef31c00577b4a2c17a860e34d253f1abfbd4588d55729821` |
+| Games | `48851182c58e4cfd89106efa7bfbdbd080c9b36a7761ff8c062622ea44c5e144` | `c39d096986250f1724505b0c18dc159aec567488a95bc407e3bfa1b80fcc0859` |
+
+Data directory `mmgen_runs/data/<D>/`: `<D>.inter.json` = MACRec's shipped `macrec/data/<D>/<D>.inter.json` (identical bytes)
+and `<D>.index_md122_a05_ep500_reassign.json` = a copy of the v1 `index.json` (every job checks its hash against
+`index.sha256` and stops on a mismatch). To set up: `cp mmgen_runs/md/sids/v1/<D>/1+2+2/index.json
+mmgen_runs/data/<D>/<D>.index_md122_a05_ep500_reassign.json`. Splits: leave-one-out (train = prefixes of items[:-2], valid
+items[-2], test items[-1]), history ≤ 20 items. No text or image features are used by the recommender (only the SIDs and the
+tokenizer's codebooks).
+
+### 19.3 Model
+
+- T5 from `macrec/config/ckpt`: 4 encoder + 4 decoder layers, d_model 128, d_ff 1024 (ReLU), 6 heads, d_kv 64, dropout 0.1,
+  relative position buckets 32 (max distance 128), tied input/output embeddings; vocabulary = T5's 32,100 + the SID code
+  tokens + `<T>`/`<I>` (Arts 33,378). 8.9M parameters (Arts).
+- **Codebook-initialised code embeddings** (`geo_embed.py`, `--geo codebook`): each SID code token's embedding is
+  P_level · v + δ, v = that code's vector in the MD-RQ-VAE codebook (`<chain>_rq.vq_layers.<l>.embedding.weight` of
+  `tokenizer.pth`), P_level a learned projection per level (scale-initialised so the mean norm matches T5's embeddings), δ a
+  per-token offset initialised to 0. The same table is the input embedding and the output head (tied). After training it is
+  baked into a plain embedding table (logits unchanged, max diff checked < 1e-4; 0.0 for the three runs).
+- **Item-level encoder input** (`enc_struct.ItemMFDT5`, `--item_enc`, E2): one encoder position per history item = the sum of
+  the embeddings of the codes present in that view (full view: f, t1, t2, i1, i2; text view: f, t1, t2; image view: f, i1, i2)
+  + a recency embedding (items back from the most recent, 0..19, zero-initialised). No view marker, no `</s>`. Items are found
+  from their `<s0_…>` token. Verified on training batches: 5 / 3 / 3 tokens per item, sum exact.
+- **MFD two-branch decoder** (`mfd_model.MFDT5`): rows [start, f, `<T>`, t1] → [f, –, t1, t2] and [start, f, `<I>`, i1] →
+  [–, –, i1, i2]; one cross-entropy over the 5 targets (f counted once, in the text row), full-vocabulary softmax.
+
+### 19.4 Training data per epoch
+
+Training examples = every (history, next item) prefix of items[:-2], each in **all three views per epoch** (full, text,
+image; 3 × the pairs, shuffled together by the Trainer's random sampler, so a pair's views fall in different batches); the
+target is always the full SID. Validation and test use the full view only (one example per user).
+
+| dataset | (history, target) pairs | examples / epoch | optimizer steps / epoch |
+|---|---|---|---|
+| Instruments | 84,890 | 254,670 | 248 |
+| Arts | 107,566 | 322,698 | 316 |
+| Games | 246,737 | 740,211 | 723 |
+
+### 19.5 Training hyperparameters
+
+| | value |
+|---|---|
+| batch | 256 per device × gradient accumulation 4 = 1,024, one GPU |
+| optimizer | AdamW (`adamw_torch`; β 0.9 / 0.999, ε 1e-8, grad-norm clip 1.0 = HF defaults), fp32 |
+| learning rate | 5e-4, cosine decay, warmup ratio 0.01 |
+| weight decay | 0.01 |
+| dropout | 0.1 (T5 config) |
+| epoch cap | 400 (the cosine schedule is laid out over 400 epochs; §18 Task 2: a 200-epoch cap gives the same result) |
+| evaluation / saving | every epoch (from epoch 1), `save_total_limit` 1 |
+| early stopping | validation loss (token cross-entropy of the full-view validation set, the MFD loss), patience 10 |
+| checkpoint selection | `load_best_model_at_end`: the lowest validation loss |
+| seed | 42 (`--seed`, HF `set_seed`) |
+| other | history ≤ 20, `--prompt_num 4` (passed for parity; MFD inputs have no prompt), 2 dataloader workers |
+
+### 19.6 Commands
+
+```bash
+# 0. gate (sanity checks + dry-run config diff; run_geo_train.sh refuses to train without it)
+sbatch --export=ALL,D=Arts,KINDS=mfd,VARS="V2 P1a" sbatch/geo/geo_gate.sbatch
+# 1. training (packs several runs on one GPU; the cluster cancels jobs < 60% GPU for > 2 h, one run uses ~30%)
+sbatch --export=ALL,RUNS="geo:Instruments:mfd:P1a geo:Arts:mfd:P1a geo:Games:mfd:P1a" sbatch/mfd/pack_mfd_train.sbatch
+#    = per run, inside the container, in a frozen copy of macrec/ (sbatch/geo/run_geo_train.sh D=<D> KIND=mfd VAR=P1a SEED=42):
+torchrun --nproc_per_node=1 finetune_geo.py --geo codebook --item_enc --mfd \
+  --geo_ckpt /scratch/yw8866/mmgen_runs/md/sids/v1/<D>/1+2+2/tokenizer.pth --geo_report <OUT>/geo_init.json --model_class plain \
+  --stats_file <OUT>/train_stats.json --dataloader_num_workers 2 --run_config_file <OUT>/run_config.json \
+  --seed 42 --data_path /scratch/yw8866/mmgen_runs/data --dataset <D> --output_dir <OUT> --base_model ./config/ckpt \
+  --per_device_batch_size 256 --gradient_accumulation_steps 4 --learning_rate 5e-4 --epochs 400 --weight_decay 0.01 \
+  --save_and_eval_strategy epoch --logging_step 50 --max_his_len 20 --prompt_num 4 --patient 10 \
+  --index_file .index_md122_a05_ep500_reassign.json --image_index_file .index_md122_a05_ep500_reassign.json \
+  --tasks seqrec_mv --valid_task seqrec
+#    <OUT> = /scratch/yw8866/mmgen_runs/mfd/<D>/mfd122_mv_geoP1a/seed42
+# 2. evaluation (settings (i), (ii), the (iii) grid on validation, diagnostics); H200 for comparable ms/user
+sbatch --partition=h200_tandon --export=ALL,D=<D>,KIND=mfd,RUN=mfd122_mv_geoP1a sbatch/geo/eval_geo.sbatch
+#    setting (ii) = the main number:
+python -u mfd_eval.py --ckpt_path <OUT> --data_path /scratch/yw8866/mmgen_runs/data --dataset <D> \
+  --index_file .index_md122_a05_ep500_reassign.json --image_index_file .index_md122_a05_ep500_reassign.json \
+  --max_his_len 20 --test_batch_size 64 --tasks seqrec_mv --prompt_num 4 --k_f 100 --w_f 1.0 --w_t 0.5 --w_i 0.5 --out_dir <OUT>/eval_ii
+```
+
+### 19.7 Inference
+
+Setting (ii), fixed (no tuning): K_f = 100 shared codes by log P(f); every catalog item under those codes is scored exactly,
+score = 1 · log P(f) + 0.5 · log P(t1, t2 | f) + 0.5 · log P(i1, i2 | f), ties by item id; 3 decoder passes (f; level 1 of both
+branches for every kept f; level 2 for every catalog prefix under the kept f), batch 64. ms/user = GPU time of scoring + ranking
+per user (`torch.cuda.synchronize` around each batch), on an otherwise idle H200 (Instruments, Games; Arts below).
+
+**Note on the setting.** §17 reported (iii), the 108-setting grid chosen on validation. On Arts and Games (iii) = (ii). On
+Instruments (iii) chose w_f = 0.75 (test HR@10 0.1299); the main method uses (ii) as specified, test HR@10 **0.1291**.
+
+### 19.8 Expected results (seed 42)
+
+| dataset | split | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | f coverage (K_f = 100) | f top-1 |
+|---|---|---|---|---|---|---|---|---|
+| Instruments | valid | 0.0906 | 0.1303 | 0.1546 | 0.1119 | 0.1197 | 0.7970 | 0.1229 |
+| Instruments | test | 0.0798 | 0.1074 | 0.1291 | 0.0936 | 0.1006 | 0.7737 | 0.1052 |
+| Arts | valid | 0.0714 | 0.1120 | 0.1417 | 0.0928 | 0.1023 | 0.8114 | 0.1308 |
+| Arts | test | 0.0665 | 0.0975 | 0.1227 | 0.0822 | 0.0904 | 0.7939 | 0.1165 |
+| Games | valid | 0.0224 | 0.0714 | 0.1138 | 0.0467 | 0.0603 | 0.8727 | 0.0859 |
+| Games | test | 0.0200 | 0.0618 | 0.1009 | 0.0409 | 0.0534 | 0.8652 | 0.0825 |
+
+(Instruments at (iii), w_f = 0.75: valid 0.1553 / 0.1199, test 0.0802 / 0.1071 / 0.1299 / 0.0939 / 0.1013.)
+
+Paired test differences vs C seed 42 merged at (ii) (2,000 resamples, 95% CI; `mmgen_runs/geo/p1a_ii_vs_C.json`): HR@10 / NDCG@10
+Instruments −0.0011 [−0.0044, +0.0022] / +0.0008 [−0.0009, +0.0025]; Arts −0.0040 [−0.0071, −0.0009] / +0.0007 [−0.0011,
++0.0026]; Games −0.0006 [−0.0033, +0.0018] / −0.0010 [−0.0024, +0.0003].
+
+| dataset | epochs run | best epoch | best step | steps run | best validation loss | training wall time | decoder sequences / user | ms/user (test, batch 64) |
+|---|---|---|---|---|---|---|---|---|
+| Instruments | 57 | 47 | 11,656 | 14,136 | 2.1082 | 1.25 h | 5,225 | 14.8 (H200) |
+| Arts | 66 | 56 | 17,696 | 20,856 | 2.2712 | 2.84 h | 6,739 | 20.0 (H100, not comparable); H200: ARTS_H200 |
+| Games | 75 | 65 | 46,995 | 54,225 | 2.1678 | 3.16 h | 7,028 | 20.3 (H200) |
+
+Wall time: H100, packed with 3–5 other trainings on the same GPU (so not a single-run time).
+
+### 19.9 Compute against C (seed 42)
+
+| dataset | effective batch P1a / C | examples / epoch P1a / C | optimizer steps run P1a / C | steps to best checkpoint P1a / C | examples seen P1a / C |
+|---|---|---|---|---|---|
+| Instruments | 1,024 / 1,024 | 254,670 / 267,170 | 14,136 / 26,622 (0.53) | 11,656 / 24,012 | 14.5M / 27.3M |
+| Arts | 1,024 / 1,024 | 322,698 / 341,530 | 20,856 / 39,960 (0.52) | 17,696 / 36,630 | 21.4M / 40.9M |
+| Games | 1,024 / 1,024 | 740,211 / 767,889 | 54,225 / 111,750 (0.49) | 46,995 / 104,250 | 55.5M / 114.4M |
+
+C (MQL4GRec, `run_baseline.sh B=mql`): 256 × grad-accum 4 = 1,024 on one GPU (= the paper's 256 × 2 GPUs × 2), lr 5e-4,
+200-epoch cap; its epoch = seqrec + seqimage + fusionseqrec (one example per pair each) + item2image + image2item (one per
+item). Both batch sizes match, and the per-epoch data budgets are within 4–6% (both see each training pair 3 times per
+epoch; C adds 2 item-translation examples per item). So **"matched batch and per-epoch data budget, about half of C's
+optimizer steps (0.49–0.53×)" is correct**. Both stop by early stopping (P1a at epochs 57–75, C at 102–149).
+
+### 19.10 Results summary: P1a on all three datasets (chosen on test, 2026-11-07)
+
+*Superseded for Instruments by 19.7–19.8: the main method fixes setting (ii) (Instruments test 0.1291 / 0.1006); the tables below use (iii).*
 
 **Selection note (user decision, 2026-11-07).** The headline model is **P1a on every dataset, chosen by test results**.
 P1a is above V2-MFD on test on all three datasets. On Arts and Games it is also the validation choice (§17.2); on Instruments
@@ -1298,7 +1456,7 @@ slightly optimistic. P1a is also what a recipe fixed on Arts validation (§17 Pa
 each run are still chosen on validation at (iii). The final comparison against C needs seeds 43/44 with P1a fixed in advance.
 Seed 42, locked v1 1+2+2 SIDs; numbers from `mmgen_runs/geo/sec17_18.json` and C's result files.
 
-### 19.1 Test
+#### Test
 
 | dataset | model | HR@1 | HR@5 | HR@10 | NDCG@10 |
 |---|---|---|---|---|---|
@@ -1322,7 +1480,7 @@ Seed 42, locked v1 1+2+2 SIDs; numbers from `mmgen_runs/geo/sec17_18.json` and C
 | | C text / image | 0.0198 / 0.0193 | 0.0607 / 0.0599 | 0.0978 / 0.0971 | 0.0520 / 0.0517 |
 | | **C merged** | **0.0208** | **0.0639** | **0.1016** | **0.0544** |
 
-### 19.2 Paired test differences vs C seed 42 merged (2,000 resamples, 95% CI)
+#### Paired test differences vs C seed 42 merged (2,000 resamples, 95% CI)
 
 | dataset | P1a − C HR@10 | P1a − C NDCG@10 | V2-MFD − C HR@10 | V2-MFD − C NDCG@10 | P1a − V2-MFD HR@10 | P1a − V2-MFD NDCG@10 |
 |---|---|---|---|---|---|---|
@@ -1335,7 +1493,7 @@ P1a is above C on HR@1 on Instruments and Arts. Against C + codebook init (Arts)
 −0.0027 [−0.0045, −0.0010] NDCG@10. C's 3-seed means (HR@10 / NDCG@10): Instruments 0.1310 / 0.1006, Arts 0.1262 / 0.0898,
 Games 0.1007 / 0.0537.
 
-### 19.3 Validation at (iii)
+#### Validation at (iii)
 
 | dataset | model | chosen setting | HR@1 | HR@5 | HR@10 | NDCG@10 |
 |---|---|---|---|---|---|---|
@@ -1349,7 +1507,7 @@ Games 0.1007 / 0.0537.
 | | P1a | K100 w1/.5/.5 | 0.0224 | 0.0714 | 0.1138 | 0.0603 |
 | | C merged | — | 0.0234 | 0.0729 | 0.1154 | 0.0619 |
 
-### 19.4 Training, f accuracy, cost
+#### Training, f accuracy, cost
 
 | dataset | model | epochs (best) | steps | test f top-1 / top-20 | decoder passes | ms/user |
 |---|---|---|---|---|---|---|
@@ -1365,7 +1523,7 @@ Games 0.1007 / 0.0537.
 
 ms/user on an H200 unless noted. f picks among 256 codes, C's first level among 55–97, so the top-1 numbers are not comparable.
 
-### 19.5 Progression (test HR@10)
+#### Progression (test HR@10)
 
 | step | Instruments | Arts | Games |
 |---|---|---|---|

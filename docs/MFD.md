@@ -1,5 +1,9 @@
 # MFD: Modality-Factorized Decoding (old implementation)
 
+> **Current main method (2026-11-07): P1a** in `macrec/` (Amazon): MFD two-branch decoder + multi-view history +
+> codebook-initialised code embeddings + item-level encoder input. Reproduction recipe and numbers:
+> `docs/MFD_REPORT.md` §19; ablations §13–§18. This file describes the OLD GRID/Tmall implementation.
+
 What the GRID code does, cited to `legacy/grid/`. All paths are relative to it, and `mfd.py`
 below means `src/models/modules/semantic_id/mfd_generation_model.py`. For the port, see
 `PORTING.md`.
