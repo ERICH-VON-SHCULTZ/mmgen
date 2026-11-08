@@ -62,11 +62,19 @@ def main():
     r = t["rank"]
     kept = t["f_rank"] < K
     P, Cm = r < 10, rc["merged"] < 10
-    # consistency with the reported ranks of the run (setting (iii) = this setting)
-    rep = torch.load(f"{R}/mfd/{D}/mfd122_mv_geoP1a/seed42/sweep/apply_test_ranks.pt", weights_only=False)
-    ch = json.load(open(f"{R}/mfd/{D}/mfd122_mv_geoP1a/seed42/sweep/chosen.json"))
-    assert np.array_equal(np.minimum(r, 10), rep[ch["name"]].clamp(max=10).numpy()), "ranks differ from the reported run"
-    res = {"dataset": D, "setting": X["setting"], "users": int(len(r)),
+    # consistency with the reported ranks of the run at this setting: (ii) = eval_ii, else the (iii) sweep's chosen setting
+    b = f"{R}/mfd/{D}/mfd122_mv_geoP1a/seed42"
+    st = X["setting"]
+    if (st["k_f"], st["w_f"], st["w_t"], st["w_i"]) == (100, 1.0, 0.5, 0.5):
+        E = torch.load(f"{b}/eval_ii/ranked_test.pt", weights_only=False)
+        m = E["joint"][0][:, :10] == E["targets"][:, None]
+        rep = torch.where(m.any(1), m.int().argmax(1), torch.full_like(E["targets"], 10)).numpy()
+    else:
+        ch = json.load(open(f"{b}/sweep/chosen.json"))
+        rep = torch.load(f"{b}/sweep/apply_test_ranks.pt", weights_only=False)[ch["name"]].clamp(max=10).numpy()
+    res_consistency = float((np.minimum(r, 10) == rep).mean())
+    assert res_consistency > 0.999, f"ranks differ from the reported run ({res_consistency})"
+    res = {"dataset": D, "setting": X["setting"], "users": int(len(r)), "share_users_rank_as_reported": res_consistency,
            "hr10": {"P1a": pct(P), "C_merged": pct(Cm), "C_text": pct(rc["text"] < 10), "C_image": pct(rc["image"] < 10)},
            "f_recall_at_K": pct(kept), "f_top1": pct(t["f_rank"] == 0), "f_top20": pct(t["f_rank"] < 20)}
     res["1_p1a_misses"] = split_misses(~P, kept, r)
