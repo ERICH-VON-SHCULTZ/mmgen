@@ -310,9 +310,11 @@ def main():
     dm.install_geometry(tk, ckpt, "codebook")
     dm.install_struct(tk, "E2")
     dinfo = dm.install_dense(item_token_table(ns, tk), lam)
-    for mod in dm.modules():                                           # deterministic training-mode forward for the checks
-        if isinstance(mod, nn.Dropout):
-            mod.p = 0.0
+    for mod in dm.modules():                                           # deterministic training-mode forward for the checks:
+        if isinstance(mod, nn.Dropout):                                # nn.Dropout modules and T5Attention's float dropout
+            mod.p = 0.0                                                # (applied with F.dropout(p=self.dropout))
+        elif isinstance(getattr(mod, "dropout", None), float):
+            mod.dropout = 0.0
     items = dm.items_from_labels(labels)
     ok("P2_target_item_from_labels", items.tolist() == [int(k) for k in keys[:12]], items=items.tolist()[:4])
     ok("P2_item_vector_is_sum_of_5_code_embeddings",
@@ -328,6 +330,7 @@ def main():
        loss=o["loss"].item(), mfd=l_mfd.item(), p1a_loss=p1a.item(), dense=l_dense.item(), manual_dense=manual_dense.item())
     dm.eval()
     with torch.no_grad():
+        e2, m2_ = dm.struct_encode(x[:12], xm[:12])                    # eval-mode encoding for the bake / reload comparison
         ev = dm(input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)["loss"]
         ev1 = ItemMFDT5.forward(dm, input_ids=x[:12], attention_mask=xm[:12], decoder_input_ids=y, labels=labels)["loss"]
         lg0 = dm.dense_logits(dm.start_state(e2.last_hidden_state, m2_))
