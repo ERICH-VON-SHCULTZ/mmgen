@@ -23,6 +23,17 @@ Jobs: 21699582–21699586, 21712892–21712893 (GPU), CPU analyses via srun.
   training weight on f, (3) item-level structure in the encoder, (4) cheaper f selection by item mass (cost, not
   accuracy), (5) the small inference tweaks.
 
+**Outcome of the proposals (update 2026-11-07, `docs/MFD_REPORT.md` §16–§18; all on top of codebook init, seed 42).**
+- (2) More training weight on f: **tested, hurts.** f loss × 2 / × 3 on V2-MFD (Arts, §17 P1b/P1c): valid HR@10 −0.0032 /
+  −0.0079, and f top-1 falls too (0.110 → 0.112 / 0.106).
+- (3) Item-level encoder structure: chain decoder ties (§16); **on MFD it is the one change that worked** (§17 P1a, one
+  summed vector per history item): Arts +0.0035 valid / +0.0044 test HR@10, Games +0.0039 / +0.0071, Instruments −0.0013
+  valid / +0.0030 test; about 2× faster. §18 Task 2 rules out the longer schedule as the cause.
+- (1) Coarse-to-fine f factorisation and (4) f selection by item mass: not tested yet.
+- Part 1's finding holds after these changes: for users only C hits, the target's f is outside our top-10 f codes for
+  72% (Arts) / 82% (Instruments) of them while being scored, and our top 10 is not more concentrated under few f than
+  C's (§18 Task 1a), so the remaining gap is the ordering across f codes.
+
 ---
 
 ## Part 1. Where does C win?

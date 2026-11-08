@@ -550,7 +550,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `41c9f46`…`f6e42a7` | §15 variants V1–V4, §16 encoder structure code, §14 report |
 | `82ce9e5` | §15, §16 results |
 | `5135802`…`8378533` | §17 code (f weight, offset penalty, ItemMFDT5, C + codebook init), sanity fixes, §18 tools (top-N lists, top-10 diagnostics, schedule-check runs) |
-| (next) | §17, §18 results (`docs/MFD_REPORT.md`), `sec17_18.py` |
+| `325f5de` | §17, §18 results (`docs/MFD_REPORT.md`), `sec17_18.py` |
+| (next) | `docs/EXPLORATION.md`: outcome of the proposals |
 
 ---
 
