@@ -25,7 +25,7 @@ Jobs: 21699582–21699586, 21712892–21712893 (GPU), CPU analyses via srun.
 
 **Outcome of the proposals (update 2026-11-07, `docs/MFD_REPORT.md` §16–§18; all on top of codebook init, seed 42).**
 - (2) More training weight on f: **tested, hurts.** f loss × 2 / × 3 on V2-MFD (Arts, §17 P1b/P1c): valid HR@10 −0.0032 /
-  −0.0079, and f top-1 falls too (0.110 → 0.112 / 0.106).
+  −0.0079, and f top-1 does not rise (valid 0.128 → 0.125 / 0.121; test 0.110 → 0.112 / 0.106).
 - (3) Item-level encoder structure: chain decoder ties (§16); **on MFD it is the one change that worked** (§17 P1a, one
   summed vector per history item): Arts +0.0035 valid / +0.0044 test HR@10, Games +0.0039 / +0.0071, Instruments −0.0013
   valid / +0.0030 test; about 2× faster. §18 Task 2 rules out the longer schedule as the cause.

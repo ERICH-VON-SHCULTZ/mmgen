@@ -1130,7 +1130,7 @@ ms/user on an H200 except P1a's final evaluation (H100; P1a200 with the same arc
 
 **BEST = P1a.** It is the only change that beats V2-MFD on validation by more than 0.002 (+0.0035 [+0.0005, +0.0066]; test
 +0.0044 [+0.0015, +0.0072], NDCG@10 +0.0070 [+0.0052, +0.0086]). P1d ties (+0.0002). P1b, P1c and P1e lose; up-weighting f
-lowers f accuracy as well as HR@10. Only one kind of change qualified, so there was no combined run. P1a is also 2× faster
+does not even raise f accuracy (valid f top-1 0.1276 → 0.1249 / 0.1211; test 0.1102 → 0.1121 / 0.1055). Only one kind of change qualified, so there was no combined run. P1a is also 2× faster
 (one encoder position per item instead of per code).
 
 ### 17.2 Part 2: Instruments and Games
