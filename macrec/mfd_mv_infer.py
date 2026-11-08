@@ -12,6 +12,8 @@ Variants: 1a a = b = (1, 0, 0), w_t, w_i in GRID_W, K_f in GRID_K;   1b a = b = 
   Sanity: 1a at w = .5/.5, K = 100 must reproduce --check_ranks (the run's reported (ii) valid ranks).
 --mode apply (TEST, chosen configs only): the inference path a deployment would run (only the views and K_f the config
   needs), timed twice: views in separate calls and views stacked into one batch -> <out>/apply_test.json + ranks.
+  --variants 1c limits apply to the listed variants (seeds 43/44).
+--mode kf: the chosen 1c config at K_f in KF_GRID on VALID and TEST (stacked views, timed) -> <out>/kf.json + ranks (§20).
 """
 import argparse
 import itertools
@@ -31,6 +33,7 @@ VIEWS = ("full", "text", "image")
 GRID_W = (0.25, 0.5, 0.75, 1.0)
 GRID_K = (100, 200)
 GRID_A = (0.0, 0.25, 0.5, 1.0)
+KF_GRID = (20, 50, 100)
 BIG = 10 ** 6
 
 
@@ -204,7 +207,8 @@ def infer(model, cat, vb, cfg, T, I, stacked):
 def main():
     p = argparse.ArgumentParser()
     p = parse_global_args(p); p = parse_dataset_args(p); p = parse_test_args(p)
-    p.add_argument("--mode", choices=("sweep", "apply"), required=True)
+    p.add_argument("--mode", choices=("sweep", "apply", "kf"), required=True)
+    p.add_argument("--variants", default="1a,1b,1c")
     p.add_argument("--out_dir", required=True)
     p.add_argument("--check_ranks", default=None, help="sweep: reported (ii) valid ranks (eval_ii/ranked_valid.pt)")
     p.add_argument("--limit", type=int, default=0, help="smoke test only: first N users")
@@ -252,8 +256,39 @@ def main():
         json.dump({v: res[n] for v, n in chosen.items()}, open(f"{args.out_dir}/chosen.json", "w"), indent=1)
         torch.save({"configs": cfgs, "ranks": R}, f"{args.out_dir}/sweep_valid_ranks.pt")
         print("[sanity]", json.dumps(sanity)); print("[chosen]", json.dumps({v: res[n] for v, n in chosen.items()}))
+    elif args.mode == "kf":
+        base = json.load(open(f"{args.out_dir}/chosen.json"))["1c"]
+        base["a"], base["b"] = tuple(base["a"]), tuple(base["b"])
+        out, ranks = {}, {}
+        for split in ("valid", "test"):
+            ds, coll = load_split(args, split, tok)
+            vmap = view_maps(ds.indices)
+            for K in KF_GRID:
+                cfg = dict(base, K=K)
+                t_gpu, R = 0.0, []
+                with torch.no_grad():
+                    for vb, tgt in view_batches(ds, coll, vmap, args.test_batch_size, args.limit):
+                        tgt = tgt.cuda()
+                        torch.cuda.synchronize(); t0 = time.time()
+                        user, item, score = infer(model, cat, vb, cfg, T, I, True)
+                        torch.cuda.synchronize(); t_gpu += time.time() - t0
+                        B = len(tgt)
+                        hit = item == tgt[user]
+                        ts = torch.full((B,), float("-inf"), device="cuda"); ts[user[hit]] = score[hit]
+                        better = (score > ts[user]) | ((score == ts[user]) & (item < tgt[user]))
+                        r = torch.bincount(user[better], minlength=B)
+                        R.append(torch.where(torch.isfinite(ts), r, torch.full_like(r, BIG)).cpu())
+                R = torch.cat(R)
+                key = f"{split}_K{K}"
+                out[key] = dict(cfg, split=split, **metrics(R), ms_per_user=1000 * t_gpu / len(R), gpu=torch.cuda.get_device_name(0),
+                                batch_size=args.test_batch_size)
+                ranks[key] = R
+                print(key, json.dumps(out[key]), flush=True)
+        json.dump(out, open(f"{args.out_dir}/kf.json", "w"), indent=1)
+        torch.save(ranks, f"{args.out_dir}/kf_ranks.pt")
     else:
         chosen = json.load(open(f"{args.out_dir}/chosen.json"))
+        chosen = {k: v for k, v in chosen.items() if k in args.variants.split(",")}
         ds, coll = load_split(args, "test", tok)
         vmap = view_maps(ds.indices)
         out, ranks = {}, {}

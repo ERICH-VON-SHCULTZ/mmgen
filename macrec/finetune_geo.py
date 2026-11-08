@@ -87,8 +87,8 @@ def setup():
             if DENSE > 0:
                 import argparse
                 import mfd_data
-                a = argparse.Namespace(**{k: sys.argv[sys.argv.index("--" + k) + 1] for k in ("data_path", "dataset", "index_file")})
-                info["dense"] = model.install_dense(mfd_data.item_token_table(a, tok), DENSE)
+                data_ns = argparse.Namespace(**{k: sys.argv[sys.argv.index("--" + k) + 1] for k in ("data_path", "dataset", "index_file")})
+                info["dense"] = model.install_dense(mfd_data.item_token_table(data_ns, tok), DENSE)
             info["n_params"] = sum(p.numel() for p in model.parameters())
             state["model"], state["info"] = model, info
             if REPORT and int(os.environ.get("LOCAL_RANK", 0)) == 0:
