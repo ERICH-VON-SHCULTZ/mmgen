@@ -1406,6 +1406,19 @@ per user (`torch.cuda.synchronize` around each batch), on an otherwise idle H200
 **Note on the setting.** §17 reported (iii), the 108-setting grid chosen on validation. On Arts and Games (iii) = (ii). On
 Instruments (iii) chose w_f = 0.75 (test HR@10 0.1299); the main method uses (ii) as specified, test HR@10 **0.1291**.
 
+**Inference option 1c (adopted 2026-11-08, §20.2): views in the f term.** The history is also encoded in the text and image
+views (2 extra encoder + f passes; branch terms stay full-view): f term = log P_full(f) + α_text log P_text(f) + α_image log P_image(f),
+used both to pick the top-K_f codes and in the item score; α and w_t, w_i chosen per dataset on validation from
+α ∈ {0, .25, .5, 1}², w ∈ {.25, .5, .75, 1}², K_f ∈ {100, 200} (`macrec/mfd_mv_infer.py`, variant 1c):
+
+| dataset | K_f | w_t / w_i | α_text / α_image | test HR@10 / NDCG@10 (no ensemble → 1c) | ms/user H200 |
+|---|---|---|---|---|---|
+| Instruments | 100 | 1 / 1 | .5 / 0 | 0.1291 / 0.1006 → 0.1314 / 0.1021 | 14.8 → 15.0 |
+| Arts | 100 | 1 / .5 | 0 / .5 | 0.1227 / 0.0904 → 0.1240 / 0.0914 | 19.1 → 19.2 |
+| Games | 100 | 1 / .75 | .5 / .25 | 0.1009 / 0.0534 → 0.1012 / 0.0535 | 20.3 → 20.3 |
+
+The "no ensemble" row (setting (ii)) stays the plain P1a reference; the full ensemble (1b) was dropped for latency (44–60 ms/user).
+
 ### 19.8 Expected results (seed 42)
 
 | dataset | split | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | f coverage (K_f = 100) | f top-1 |

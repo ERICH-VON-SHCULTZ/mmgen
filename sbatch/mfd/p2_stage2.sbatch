@@ -27,7 +27,7 @@ O=$([ $W = P2a ] && echo P2b || echo P2a)
 echo "winner $W (filler $O)"
 cd $REPO
 P=$(sbatch --parsable --export=ALL,RUNS="geo:Instruments:mfd:$W geo:Games:mfd:$W geo:Instruments:mfd:$O geo:Games:mfd:$O" sbatch/mfd/pack_mfd_train.sbatch)
-L=$R/logs/round20_jobs_v2.txt; echo "stage2 winner $W pack $P" >> $L
+L=$R/logs/round20_jobs_v3.txt; echo "stage2 winner $W pack $P" >> $L
 for D in Instruments Games; do
   E=$(sbatch --parsable --dependency=afterok:$P --partition=a100_tandon,h100_tandon,h200_tandon --time=12:00:00 --export=ALL,D=$D,KIND=mfd,RUN=mfd122_mv_geo$W,CK=$R/mfd/$D/mfd122_mv_geo$W/seed42 sbatch/geo/eval_geo.sbatch)
   S=$(sbatch --parsable --dependency=afterok:$P --time=16:00:00 --export=ALL,D=$D,RUN=mfd122_mv_geo$W,STAGE=sweep sbatch/mfd/dense_eval.sbatch)
