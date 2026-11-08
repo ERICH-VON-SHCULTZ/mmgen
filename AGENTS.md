@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-07 (codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-08 (main method P1a §19, §20 Tasks 0–1; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -115,7 +115,13 @@ are reference-only, not part of the main line.
   setting (ii) K_f = 100, w = 1/.5/.5. Seed 42 test HR@10 / NDCG@10 vs C seed 42 merged: Instruments 0.1291 / 0.1006 vs 0.1301 /
   0.0998 (−0.0011 [−0.0044, +0.0022]), Arts 0.1227 / 0.0904 vs 0.1267 / 0.0897 (−0.0040 [−0.0071, −0.0009]), Games 0.1009 /
   0.0534 vs 0.1016 / 0.0544 (−0.0006, tie); 3 passes, 15–20 ms/user vs C's 35–43; same batch as C (1,024), ~half of C's steps.
-  V2-MFD and §13–§18 runs are ablations. §20 (in progress): error decomposition, test-time view ensemble, dense head, seeds 43/44.
+  V2-MFD and §13–§18 runs are ablations.
+- **§20 (2026-11-08, partly done), `docs/MFD_REPORT.md` §20:** Task 0: the loss to C is cross-f ranking, not f recall (target f kept
+  for 96–99% of the users C gets and we miss; in its own bucket's top 10 for 94–99%); oracle "true f gets the top f's log P(f)"
+  triples HR@10 (0.33–0.36), keeping the true f adds nothing. Task 1: test-time view ensemble in the f term only (1c), chosen on
+  valid, +0.0013 to +0.0023 test HR@10 on Instruments/Arts at no cost (Instruments 0.1314 / 0.1021 vs C 0.1301 / 0.0998, NDCG CI > 0),
+  nothing on Games; full ensemble (1b) costs 44–60 ms/user. Task 2 (dense head) and Task 3 (seeds 43/44) re-submitted after a
+  gate-check bug (`8e10f06`).
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -566,7 +572,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `5135802`…`8378533` | §17 code (f weight, offset penalty, ItemMFDT5, C + codebook init), sanity fixes, §18 tools (top-N lists, top-10 diagnostics, schedule-check runs) |
 | `325f5de` | §17, §18 results (`docs/MFD_REPORT.md`), `sec17_18.py` |
 | `abc953a`, `64d07ee` | `docs/EXPLORATION.md`: outcome of the proposals; wording |
-| (next) | `docs/MFD_REPORT.md` §19: results summary, P1a chosen on test |
+| `c96ef7f`…`d372ac0` | §19 results summary; main method P1a + reproduction section |
+| `b79db57`…`8e10f06` | §20 tools: expl_decomp, mfd_mv_infer, dense_head, dense_eval, timing job, P2 gate checks and fix |
+| (next) | §20 Tasks 0–1 results |
 
 ---
 

@@ -1426,7 +1426,7 @@ Instruments −0.0011 [−0.0044, +0.0022] / +0.0008 [−0.0009, +0.0025]; Arts 
 | dataset | epochs run | best epoch | best step | steps run | best validation loss | training wall time | decoder sequences / user | ms/user (test, batch 64) |
 |---|---|---|---|---|---|---|---|---|
 | Instruments | 57 | 47 | 11,656 | 14,136 | 2.1082 | 1.25 h | 5,225 | 14.8 (H200) |
-| Arts | 66 | 56 | 17,696 | 20,856 | 2.2712 | 2.84 h | 6,739 | 20.0 (H100, not comparable); H200: ARTS_H200 |
+| Arts | 66 | 56 | 17,696 | 20,856 | 2.2712 | 2.84 h | 6,739 | 19.1 (H200, job 22258506; the first evaluation's 20.0 was on an H100) |
 | Games | 75 | 65 | 46,995 | 54,225 | 2.1678 | 3.16 h | 7,028 | 20.3 (H200) |
 
 Wall time: H100, packed with 3–5 other trainings on the same GPU (so not a single-run time).
@@ -1532,3 +1532,125 @@ ms/user on an H200 unless noted. f picks among 256 codes, C's first level among 
 | → + codebook init (V2-MFD) | 0.1269 | 0.1184 | 0.0938 |
 | → + item-level encoder input (P1a) | **0.1299** | **0.1227** | **0.1009** |
 | C seed 42 merged | 0.1301 | 0.1267 | 0.1016 |
+
+## 20. Toward beating C: error decomposition, test-time view ensemble, dense head, seeds
+
+P1a seed 42 (§19), locked v1 1+2+2 SIDs, settings chosen on validation only, test evaluated once per selected config.
+Paired CIs: 2,000 bootstrap resamples of the same users, seed 0, 95% percentile.
+
+### 20.1 Task 0: where P1a loses to C (test, setting (ii), no training)
+
+`macrec/expl_decomp.py` scores every catalog item once (all f codes) and derives, per test user, the target's f rank, its
+rank in P1a's list, its rank within its own f bucket, the bucket size and two oracles; `sbatch/tools/expl_decomp_report.py`
+joins C's rebuilt lists, train popularity and history length (→ `mmgen_runs/expl/<D>/decomp.json`). P1a's ranks reproduce the
+reported (ii) ranks for 100% of users on all three datasets.
+
+**(1)–(2) Misses split by cause.** (a) = target's f not among the top-100 f codes; (b) = f kept, target ranked ≥ 10.
+
+| dataset | P1a misses: (a) / (b) | C-hit / P1a-miss users: (a) / (b) | P1a-hit / C-miss users | both hit / both miss |
+|---|---|---|---|---|
+| Instruments | 14,903: 26.0% / 74.0% | 414: 3.9% / 96.1% | 396 | 1,813 / 14,489 |
+| Arts | 19,450: 23.5% / 76.5% | 643: 1.7% / 98.3% | 555 | 2,166 / 18,807 |
+| Games | 37,993: 15.0% / 85.0% | 1,556: 1.0% / 99.0% | 1,530 | 2,736 / 36,437 |
+
+On the C-hit / P1a-miss users with f kept, the target is in the top 10 **of its own f bucket** for 99.0% / 94.2% / 96.2%
+(Instruments / Arts / Games), and its overall rank is 11–20 for 45% / 39% / 45%, 21–50 for 37% / 34% / 35%. The few whose
+f is not kept have f rank 100–150 (median 111 / 123 / 131).
+
+**(3) Oracles (test HR@10).**
+
+| dataset | P1a | true f always kept | true f given the top f's log P(f) | (HR@1: P1a → true f first) | target in top 10 of its own bucket (all users) |
+|---|---|---|---|---|---|
+| Instruments | 0.1291 | 0.1291 | **0.3582** | 0.0798 → 0.1976 | 0.738 |
+| Arts | 0.1227 | 0.1227 | **0.3329** | 0.0665 → 0.1678 | 0.642 |
+| Games | 0.1009 | 0.1009 | **0.3492** | 0.0200 → 0.1523 | 0.671 |
+
+Keeping the true f changes nothing (when it is outside the top 100 its log P(f) is too low for its items to reach the top 10);
+giving it the top f's probability nearly triples HR@10.
+
+**(4) Breakdowns of the C-hit / P1a-miss set** (count, share of the set; P1a / C HR@10 over all users in the bucket).
+
+| dataset | popularity quintile (train interactions of the target) | history length |
+|---|---|---|
+| Instruments | Q1–Q2 6 (1.4%); Q3 44 (10.6%); Q4 132 (31.9%; 0.092 / 0.098); Q5 232 (56.0%; 0.515 / 0.518) | 4–5: 214 (51.7%; 0.151 / 0.150); 6–10: 139; 11–19: 52 (0.081 / 0.091); 20: 9 |
+| Arts | Q1–Q2 43 (6.7%); Q3 79 (12.3%); Q4 158 (24.6%; 0.115 / 0.118); Q5 363 (56.5%; 0.440 / 0.454) | 4–5: 359 (55.8%; 0.143 / 0.149); 6–10: 211; 11–19: 62 (0.074 / 0.080); 20: 11 |
+| Games | Q1–Q2 154 (9.9%); Q3 240 (15.4%); Q4 433 (27.8%; 0.126 / 0.121); Q5 729 (46.9%; 0.277 / 0.290) | 4–5: 811 (52.1%; 0.106 / 0.110); 6–10: 517; 11–19: 159 (0.092 / 0.084); 20: 69 |
+
+Bucket size (items under the target's f, quartiles): the set is spread evenly (19–29% per quartile on every dataset); P1a and
+C have the same HR@10 within each quartile (largest gap Arts Q1 0.100 vs 0.112). The set mirrors where hits are possible at
+all: half of it is the most popular quintile, where both models hit 28–52%. P1a and C are tied within 0.003 in almost every
+popularity and history bucket; C's small edge is concentrated in the most popular quintile (Arts −0.015, Games −0.013) and
+in long histories on Instruments/Arts.
+
+**(5) Distinct f codes in the top 10** (mean; distribution mostly 7–10): P1a 8.69 / 7.40 / 7.33 vs C merged 8.59 / 7.52 / 7.55
+(Instruments / Arts / Games). No concentration difference (as §18).
+
+**Interpretation: it is an f-ranking problem, not f recall and not within-f ranking.** The target's f is almost always among
+the kept 100 codes for the users C gets and we miss (96–99%), and within its bucket the target is almost always in the top 10
+(94–99%). It loses because items under other, higher-probability f codes outrank it: the cross-f order set by log P(f)
+(plus the branch terms) is wrong. The oracle that only fixes the f probability triples HR@10; widening K_f does nothing.
+Better f *ordering* (not more f candidates and not better branch scores) is where a structural gain must come from.
+
+### 20.2 Task 1: test-time multi-view ensemble (no training)
+
+`macrec/mfd_mv_infer.py`: for each view v the history is encoded in that view;
+score = Σ_v a_v log P_v(f) + Σ_v b_v (w_t log P_v(text | f) + w_i log P_v(image | f)), a_full = b_full = 1, w_f = 1; candidate f =
+top-K_f by the f term; exact scoring under them. Grids on VALIDATION: w_t, w_i ∈ {.25, .5, .75, 1}, K_f ∈ {100, 200};
+1b: a = b = (1, a_t, a_i), a ∈ {0, .25, .5, 1}; 1c: a = (1, a_t, a_i), b = (1, 0, 0). Sanity: 1a at w = .5/.5, K = 100 reproduces
+P1a's reported validation ranks for 100% of users. Test once per chosen config, H200, batch 64; views timed in separate calls
+and stacked into one batch (same ranks, 100%).
+
+| dataset | variant | chosen on validation | valid HR@10 / NDCG@10 | test HR@1 / HR@5 / HR@10 / NDCG@5 / NDCG@10 | ms/user (separate / stacked) |
+|---|---|---|---|---|---|
+| Instruments | P1a (ii) | — | 0.1546 / 0.1197 | 0.0798 / 0.1074 / 0.1291 / 0.0936 / 0.1006 | 14.8 |
+| | 1a | K100 w_t 1, w_i .5 | 0.1553 / 0.1198 | 0.0805 / 0.1073 / 0.1289 / 0.0942 / 0.1012 | 15.0 / 14.8 |
+| | 1b | K100 w .5/.5, a_t .5, a_i 1 | 0.1576 / 0.1206 | 0.0802 / 0.1089 / 0.1310 / 0.0947 / 0.1018 | 44.6 / 44.3 |
+| | **1c** | K100 w 1/1, a_t .5, a_i 0 | 0.1566 / 0.1208 | 0.0806 / 0.1084 / **0.1314** / 0.0947 / **0.1021** | 15.0 / 14.9 |
+| Arts | P1a (ii) | — | 0.1417 / 0.1023 | 0.0665 / 0.0975 / 0.1227 / 0.0822 / 0.0904 | 19.1 |
+| | 1a | K100 w_t .75, w_i .25 | 0.1423 / 0.1027 | 0.0669 / 0.0981 / 0.1234 / 0.0826 / 0.0908 | 19.2 / 19.1 |
+| | **1b** | K100 w .75/.25, a .25/.25 | 0.1430 / 0.1028 | 0.0671 / 0.0987 / **0.1241** / 0.0830 / 0.0912 | 57.4 / 57.0 |
+| | 1c | K100 w 1/.5, a 0/.5 | 0.1429 / 0.1028 | 0.0674 / 0.0987 / 0.1240 / 0.0833 / 0.0914 | 19.2 / 19.1 |
+| Games | P1a (ii) | — | 0.1138 / 0.0603 | 0.0200 / 0.0618 / 0.1009 / 0.0409 / 0.0534 | 20.3 |
+| | 1a | = P1a (ii) | 0.1138 / 0.0603 | 0.0200 / 0.0618 / 0.1009 / 0.0409 / 0.0534 | 20.2 / 20.1 |
+| | 1b | K100 w .5/.5, a .5/.25 | 0.1145 / 0.0606 | 0.0203 / 0.0622 / 0.1004 / 0.0412 / 0.0534 | 60.4 / 60.0 |
+| | **1c** | K100 w 1/.75, a .5/.25 | 0.1150 / 0.0606 | 0.0202 / 0.0615 / **0.1012** / 0.0408 / 0.0535 | 20.3 / 20.1 |
+
+**Bold** = the variant with the best validation HR@10 on that dataset. Paired test differences (`mmgen_runs/geo/task1_ci.json`):
+
+| dataset | variant | − P1a (ii): HR@10 / NDCG@10 | − C merged: HR@10 / NDCG@10 |
+|---|---|---|---|
+| Instruments | 1a | −0.0002 [−0.0020, +0.0017] / +0.0006 [−0.0002, +0.0014] | −0.0012 [−0.0044, +0.0022] / +0.0014 [−0.0003, +0.0031] |
+| | 1b | +0.0019 [+0.0004, +0.0035] / +0.0012 [+0.0005, +0.0019] | +0.0009 [−0.0025, +0.0041] / **+0.0020 [+0.0003, +0.0038]** |
+| | 1c | **+0.0023 [+0.0007, +0.0040]** / +0.0015 [+0.0009, +0.0022] | +0.0013 [−0.0018, +0.0046] / **+0.0023 [+0.0006, +0.0040]** |
+| Arts | 1a | +0.0007 [−0.0005, +0.0020] / +0.0004 [−0.0001, +0.0010] | −0.0032 [−0.0063, −0.0002] / +0.0011 [−0.0006, +0.0030] |
+| | 1b | +0.0014 [−0.0000, +0.0028] / +0.0008 [+0.0002, +0.0014] | −0.0026 [−0.0055, +0.0005] / +0.0016 [−0.0002, +0.0034] |
+| | 1c | +0.0013 [−0.0000, +0.0027] / +0.0010 [+0.0005, +0.0016] | −0.0027 [−0.0056, +0.0005] / +0.0018 [−0.0001, +0.0036] |
+| Games | 1a | 0 / 0 (same config) | −0.0006 [−0.0033, +0.0018] / −0.0010 [−0.0024, +0.0003] |
+| | 1b | −0.0006 [−0.0016, +0.0005] / +0.0001 [−0.0004, +0.0005] | −0.0012 [−0.0038, +0.0012] / −0.0010 [−0.0024, +0.0004] |
+| | 1c | +0.0003 [−0.0006, +0.0012] / +0.0001 [−0.0002, +0.0005] | −0.0003 [−0.0030, +0.0022] / −0.0009 [−0.0023, +0.0004] |
+
+Reading:
+- Weight tuning alone (1a) does nothing (±0.0007). The view ensemble helps a little: +0.0013 to +0.0023 test HR@10 on
+  Instruments and Arts (CI > 0 on Instruments, touching 0 on Arts), nothing on Games.
+- **1c (views only in the f term) is as good as 1b at no cost** (+0.1 ms/user: the two extra encoder passes and f passes are
+  cheap; the branch passes dominate). 1b triples the cost (44–60 ms/user, above C's 43) and stacking the views into one
+  batch does not help (the work is the same number of decoder sequences).
+- That the f term is where the views help is consistent with 20.1 (the loss is in f ranking).
+- On Instruments 1c moves P1a above C on test (HR@10 +0.0013, CI includes 0; NDCG@10 +0.0023, CI > 0). On Arts the HR@10 gap
+  narrows to −0.0027 (CI touches 0). Games ties.
+
+### 20.3 H200 timings filled in
+
+Arts P1a at (ii) on an H200: **19.1 ms/user** (job 22258506; same HR@10). C seed 42 on Games on an H200: 21.7 + 21.8 =
+**43.5 ms/user** (job 22258507; same single-list HR@10 as reported). All ms/user in §19–§20 are now H200.
+
+### 20.4 Task 2 (dense head) and Task 3 (seeds 43/44): not run yet
+
+The first submission did not train. My P2 sanity checks (added to the shared gate, `geo_check.py`) failed because of two
+bugs in the checks, not in the model: T5's attention dropout is a float applied with `F.dropout`, so zeroing the
+`nn.Dropout` modules did not make the training-mode comparison deterministic, and the bake/reload comparison reused a
+training-mode encoding. The failed gate rewrote `geo/<D>/geo_check.json` with `all_pass: false`, so the P1a seed runs
+(Task 3), which require the same file, also refused to train. A direct state-dict comparison confirmed the dense head
+saves and reloads exactly. Checks fixed (commit `8e10f06`); gates 22302937–39, pack A 22302940 (Arts P2a/P2b + Arts P1a
+seeds 43/44), pack B 22302941 (Instruments and Games seeds 43/44), evaluations and dense sweeps chained
+(`mmgen_runs/logs/round20_jobs_v2.txt`).
