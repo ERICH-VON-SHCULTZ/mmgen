@@ -1,6 +1,6 @@
 # MFD stage 1 on Instruments: report
 
-> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16.**
+> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18.**
 
 Two-branch decoder (MFD) vs the MD chain-decoder control, same SID and training recipe.
 Instruments, MD-RQ-VAE 1+2+2 v1 SID, seed 42. Written 2026-10-31.
@@ -1092,3 +1092,198 @@ Reading:
 
 MFD cost: 3 decoder passes, 29.8 / 37.5 / 39.7 ms/user vs C's 2 × 5 passes (Instruments 43.3 ms/user). The gap to C on Arts
 shrinks from −0.0201 to −0.0083.
+
+## 17. Building on V2-MFD (codebook-initialised code embeddings): single changes, other datasets, C + codebook init
+
+Seed 42, locked v1 1+2+2 SIDs, nothing chosen on test. **V2-MFD** = MFD + seqrec_mv + codebook-initialised code embeddings
+(per-level learned projection + zero-init offset, tied in/out), one-hot targets (§15 V2). Settings: (i) K_f=20, w=1/1/1;
+(ii) K_f=100, w=1/.5/.5; (iii) the 108-setting grid chosen on validation (`mfd_sweep.py`). Paired CIs: 2,000 bootstrap resamples
+of the same users, seed 0, 95% percentile (`sbatch/tools/sec17_18.py` → `mmgen_runs/geo/sec17_18.json`). Runs:
+`mmgen_runs/mfd/<D>/mfd122_mv_geo<VAR>/seed42/`; C + codebook init `mmgen_runs/geo/Arts/c_geo/seed42/`.
+
+**Sanity checks (gate 21970758, all pass, `mmgen_runs/geo/Arts/geo_check.json`).** Config diff vs the V2-MFD dry run: only the
+intended argument differs for each run (`tools/geo_config_diff.py`). P1a: the encoder sequence length equals the number of
+history items, the MFD decoder rows are unchanged ([12, 2, 4, V]), and bake + reload changes no logit. P1b/P1c: the training
+loss equals the manual weighted sum (13.19987 vs 13.19987; 15.47034 vs 15.47034), and the validation loss is plain CE. P1d/P1e:
+the penalty is zero at init (loss 10.9294 with and without it). C + codebook init: only its geometry differs from C seed 42.
+Branch independence of P1a: the item encoder sums with `scatter_add`, which is not bit-deterministic on GPU, so the check
+now compares the other branch's change to the noise of a repeated forward pass: 1.14e-5 vs 1.05e-5, pass (commit 155eae3).
+
+Decisions in this section: early stopping stays on plain token CE (the f weight and the penalty act in training only); in
+P1a the text and image history views each sum their 3 codes; P1a's 400-epoch cap also stretches the cosine schedule, so P1a
+was not a pure single change. §18 Task 2 tests the schedule separately.
+
+### 17.1 Part 1: single changes on V2-MFD (Arts)
+
+Each run changes one thing on V2-MFD. Metrics at (iii); f accuracy = target's f in the decoder's first-step top-1 / top-20 (test).
+
+| run | change | chosen (iii) | valid HR@1 / HR@10 / NDCG@10 | test HR@1 / HR@10 / NDCG@10 | f top-1 / top-20 | epochs (best) | ms/user |
+|---|---|---|---|---|---|---|---|
+| V2-MFD | — | K100 w.75/.5/.5 | 0.0642 / 0.1382 / 0.0972 | 0.0569 / 0.1184 / 0.0834 | 0.1102 / 0.4245 | 49 (39) | 37.5 |
+| **P1a** | item-level encoder input, cap 400 epochs | K100 w1/.5/.5 | **0.0714 / 0.1417 / 0.1023** | **0.0665 / 0.1227 / 0.0904** | 0.1165 / 0.4319 | 66 (56) of 400 | 20.0 (H100) |
+| P1b | f loss × 2 | K100 w1/1/.5 | 0.0668 / 0.1350 / 0.0969 | 0.0582 / 0.1140 / 0.0822 | 0.1121 / 0.4145 | 47 (37) | 37.1 |
+| P1c | f loss × 3 | K100 w1/1/.5 | 0.0629 / 0.1303 / 0.0926 | 0.0565 / 0.1094 / 0.0791 | 0.1055 / 0.4002 | 49 (39) | 36.6 |
+| P1d | λ‖offset‖², λ = 1e-3 | K100 w1/.5/.5 | 0.0636 / 0.1384 / 0.0968 | 0.0563 / 0.1181 / 0.0829 | 0.1113 / 0.4251 | 51 (41) | 37.5 |
+| P1e | λ‖offset‖², λ = 1e-2 | K100 w1/.5/.5 | 0.0646 / 0.1364 / 0.0964 | 0.0590 / 0.1163 / 0.0834 | 0.1129 / 0.4250 | 51 (41) | 37.3 |
+
+ms/user on an H200 except P1a's final evaluation (H100; P1a200 with the same architecture: 19.0 ms on an H200). 3 decoder passes for all.
+
+**BEST = P1a.** It is the only change that beats V2-MFD on validation by more than 0.002 (+0.0035 [+0.0005, +0.0066]; test
++0.0044 [+0.0015, +0.0072], NDCG@10 +0.0070 [+0.0052, +0.0086]). P1d ties (+0.0002). P1b, P1c and P1e lose; up-weighting f
+lowers f accuracy as well as HR@10. Only one kind of change qualified, so there was no combined run. P1a is also 2× faster
+(one encoder position per item instead of per code).
+
+### 17.2 Part 2: Instruments and Games
+
+BEST per dataset = the higher validation HR@10 at (iii) of V2-MFD and P1a: **Instruments V2-MFD** (0.1567 vs 0.1553), **Arts
+P1a**, **Games P1a** (0.1138 vs 0.1099). Test HR@10 / NDCG@10; ms/user on an H200 unless noted.
+
+| dataset | chain control | MFD control (multi-view) | V2-MFD (iii) | P1a (iii) | plug-in 1+2+2 merged | C seed 42 merged | BEST − C (test HR@10; NDCG@10) |
+|---|---|---|---|---|---|---|---|
+| Instruments | 0.1181 / 0.0932 | 0.1237 / 0.0959 (ii) | **0.1269 / 0.0981** | 0.1299 / 0.1013 | 0.1246 / 0.0975 | 0.1301 / 0.0998 | V2: −0.0033 [−0.0064, +0.0000]; −0.0017 [−0.0034, +0.0001] |
+| Arts | 0.1059 / 0.0739 | 0.1064 / 0.0732 | 0.1184 / 0.0834 | **0.1227 / 0.0904** | 0.1172 / 0.0826 | 0.1267 / 0.0897 | P1a: −0.0040 [−0.0071, −0.0009]; +0.0007 [−0.0011, +0.0026] |
+| Games | 0.0885 / 0.0468 | 0.0908 / 0.0478 | 0.0938 / 0.0488 | **0.1009 / 0.0534** | not run | 0.1016 / 0.0544 | P1a: −0.0006 [−0.0033, +0.0018]; −0.0010 [−0.0024, +0.0003] |
+| decoder passes | 6 | 3 | 3 | 3 | 2 × 4 | 2 × 5 | |
+| ms/user | 25.3 / 24.9 / 24.5 | 29.4 / 37.2 / 94.6 ((iii) = K256) | 29.3 / 37.5 / 39.4 | 14.8 / 20.0 (H100) / 20.2 | — | 43.3 / 43.0 / 35.1 (H100) | |
+
+Other numbers:
+
+| dataset | run | valid HR@10 / NDCG@10 (iii) | test HR@1 | f top-1 / top-20 | epochs (best) | P1a − V2 (test HR@10; valid) | BEST − MFD control (test HR@10) |
+|---|---|---|---|---|---|---|---|
+| Instruments | V2-MFD | 0.1567 / 0.1187 | 0.0778 | 0.1040 / 0.3673 | 47 (37) | +0.0030 [−0.0001, +0.0061]; −0.0013 [−0.0044, +0.0016] | +0.0032 [+0.0000, +0.0064] |
+| Instruments | P1a | 0.1553 / 0.1199 | 0.0802 | 0.1052 / 0.3738 | 57 (47) of 400 | | |
+| Instruments | C merged | 0.1598 / 0.1206 | 0.0780 | | | | |
+| Games | V2-MFD | 0.1099 / 0.0578 | 0.0167 | 0.0806 / 0.4917 | 51 (41) | +0.0071 [+0.0048, +0.0094]; +0.0039 [+0.0014, +0.0063] | +0.0101 [+0.0076, +0.0124] |
+| Games | P1a | 0.1138 / 0.0603 | 0.0200 | 0.0825 / 0.4934 | 75 (65) of 400 | | |
+| Games | C merged | 0.1154 / 0.0619 | 0.0208 | | | | |
+
+(MFD control f top-1 / top-20: Instruments 0.0996 / 0.3567, Games 0.0800 / 0.4844. Arts BEST − MFD control: +0.0163 [+0.0130, +0.0195].)
+
+Reading:
+- Codebook init now helps on every dataset: V2-MFD is +0.0032 (Instruments), +0.0120 (Arts) and +0.0030 (Games) HR@10 over
+  the MFD control on test. In §15, AB2 (codebook init + soft f labels) did nothing on Instruments (0.1239). V2 alone on
+  Instruments was not run in §15; one seed cannot say whether the soft labels cost something there.
+- The item-level input (P1a) gains on all three datasets on test, but on validation only on Arts and Games. On Instruments
+  validation prefers V2-MFD by 0.0013 (CI includes 0). So Instruments' BEST is V2-MFD, although P1a is 0.0030 better on test.
+- Gap to C seed 42 merged, BEST on test: Instruments −0.0033 (CI touches 0), Arts −0.0040 (CI < 0), Games −0.0006 (tie).
+  On NDCG@10 BEST ties C on all three; Arts P1a is +0.0007 above C. With 3 decoder passes (C: 2 × 5), 14.8–37.5 ms/user vs 35–43.
+- Schedule: every V2-MFD run uses the 200-epoch cap, every P1a run the 400-epoch cap. §18 Task 2 shows the cap does not
+  matter on Arts (same validation result for both caps, for both inputs); it was not tested on Instruments or Games.
+
+### 17.3 Part 3: C + codebook init (Arts, one run)
+
+C seed 42 with codebook-initialised code embeddings for its text and image SIDs (C's own tokenizer codebooks, per-level
+projection + zero-init offset, as in V2), everything else identical to C seed 42 (config diff: only the geometry arguments).
+
+| list | C seed 42 test HR@1 / HR@10 / NDCG@10 | C + codebook init | first code top-1 / top-20 (test), C → C + init |
+|---|---|---|---|
+| text | 0.0589 / 0.1189 / 0.0846 | 0.0640 / 0.1255 / 0.0902 | 0.2164 / 0.8332 → 0.2263 / 0.8397 |
+| image | 0.0617 / 0.1235 / 0.0882 | 0.0634 / 0.1245 / 0.0898 | 0.1528 / 0.6412 → 0.1539 / 0.6406 |
+| merged | 0.0619 / 0.1267 / 0.0897 | **0.0660 / 0.1304 / 0.0931** | |
+
+Valid merged HR@10 / NDCG@10: 0.1457 / 0.1026 → 0.1490 / 0.1045. Epochs 124 (best 114, 41,292 steps) vs 120 (39,960).
+Paired, merged, C + init − C: test HR@10 +0.0037 [+0.0011, +0.0063], NDCG@10 +0.0035 [+0.0020, +0.0049]; valid HR@10 +0.0033
+[+0.0005, +0.0060]. **C gains too**, mostly on its text SID. If C keeps that gain, our Arts gap on HR@10 grows from −0.0040 to
+−0.0076 [−0.0107, −0.0048], and on NDCG@10 from +0.0007 (tie) to −0.0027 [−0.0045, −0.0010]. Codebook init is not specific to
+MFD: it helps C as well, though less than it helps us (+0.0037 vs +0.0120 for V2-MFD over the MFD control).
+
+## 18. Top-10 diversity and the LR-schedule check
+
+Seed 42, locked v1 1+2+2 SIDs, nothing chosen on test. Tools: `macrec/expl_topk.py` (top-300 lists at one setting, same
+scoring as `mfd_eval`; `sbatch/expl/expl.sbatch STEP=topk`), `sbatch/tools/expl_top10.py` (C lists rebuilt from the saved
+beams and asserted against the reported results; → `mmgen_runs/expl/<D>/top10.json`), `sbatch/tools/sec17_18.py`.
+
+### 18.1 Task 1a: is our top 10 more concentrated than C's? (test)
+
+Hypothesis: on Arts P1a beats C on HR@1 but trails on HR@10 because MFD's top 10 sits under few f codes. Models: P1a at (iii)
+(= (ii) on Arts: the grid chose K100 w1/.5/.5), V2-MFD at (iii), C seed 42 text / image / merged.
+
+**HR@k (test).**
+
+| dataset | list | HR@1 | HR@2 | HR@3 | HR@5 | HR@10 | NDCG@10 |
+|---|---|---|---|---|---|---|---|
+| Arts | P1a | **0.0665** | **0.0772** | **0.0848** | 0.0975 | 0.1227 | **0.0904** |
+| Arts | V2-MFD | 0.0569 | 0.0694 | 0.0787 | 0.0925 | 0.1184 | 0.0834 |
+| Arts | C text | 0.0589 | 0.0705 | 0.0794 | 0.0935 | 0.1189 | 0.0846 |
+| Arts | C image | 0.0617 | 0.0744 | 0.0829 | 0.0971 | 0.1235 | 0.0882 |
+| Arts | C merged | 0.0619 | 0.0742 | 0.0841 | **0.0993** | **0.1267** | 0.0897 |
+| Instruments | P1a (K100 w.75/.5/.5) | **0.0802** | **0.0900** | **0.0961** | **0.1071** | 0.1299 | **0.1013** |
+| Instruments | V2-MFD | 0.0778 | 0.0856 | 0.0913 | 0.1034 | 0.1269 | 0.0981 |
+| Instruments | C text | 0.0771 | 0.0854 | 0.0919 | 0.1029 | 0.1271 | 0.0978 |
+| Instruments | C image | 0.0781 | 0.0861 | 0.0922 | 0.1036 | 0.1271 | 0.0984 |
+| Instruments | C merged | 0.0780 | 0.0864 | 0.0936 | 0.1064 | **0.1301** | 0.0998 |
+
+On Arts P1a leads C merged up to k = 3 and falls behind by k = 5. C's merge adds +0.002 to +0.003 at k = 5–10 over its best single list.
+
+**Concentration of the top 10.** Each cell: mean distinct first codes / mean share of the top 10 under the code of the
+top-ranked item. f has 256 codes, C's first levels 55–97, so raw counts are not comparable across SIDs; the table counts every
+list under the same three partitions (our f, C's text first code, C's image first code).
+
+| dataset | list | by our f | by C text code | by C image code |
+|---|---|---|---|---|
+| Arts | P1a | 7.40 / 0.222 | 5.20 / 0.355 | 7.09 / 0.228 |
+| Arts | V2-MFD | 8.39 / 0.168 | 5.54 / 0.314 | 7.31 / 0.209 |
+| Arts | C merged | 7.52 / 0.203 | 4.73 / 0.387 | 7.00 / 0.220 |
+| Arts | C text / C image (own first code) | — | 4.54 / 0.412 | 6.85 / 0.232 |
+| Instruments | P1a | 9.34 / 0.123 | 6.70 / 0.222 | 8.19 / 0.168 |
+| Instruments | V2-MFD | 8.76 / 0.143 | 6.58 / 0.234 | 7.51 / 0.198 |
+| Instruments | C merged | 8.59 / 0.145 | 6.28 / 0.235 | 7.38 / 0.202 |
+| Instruments | C text / C image (own first code) | — | 6.22 / 0.250 | 7.50 / 0.204 |
+
+Overlap of our top 10 with C merged's top 10 (items): Arts P1a 3.68, V2-MFD 3.74; Instruments P1a 4.03, V2-MFD 4.08.
+
+**Users C merged hits in its top 10 and we miss.**
+
+| dataset | list | users | target's f among our top-10 f codes | target rank 11–20 | 21–50 | 51–100 | > 100 (scored) | target's f not kept |
+|---|---|---|---|---|---|---|---|---|
+| Arts | P1a | 643 | 27.7% | 38.3% | 33.0% | 13.7% | 13.4% | 1.7% |
+| Arts | V2-MFD | 670 | 33.4% | 37.6% | 29.3% | 14.2% | 15.1% | 3.9% |
+| Instruments | P1a | 406 | 18.0% | 42.6% | 34.5% | 10.6% | 8.4% | 3.9% |
+| Instruments | V2-MFD | 434 | 17.7% | 41.0% | 33.4% | 13.6% | 7.6% | 4.4% |
+
+**Result: the hypothesis is not supported.** Our top 10 is not more concentrated than C's. Under the same partition P1a and C
+merged are about equal on Arts (our f: 7.40 vs 7.52 distinct, slightly more concentrated; C's text code: 5.20 vs 4.73, more
+diverse), and on Instruments both of our models are more diverse than C on all three partitions. V2-MFD, the most diverse
+list on Arts, has the lowest HR@10. For about 72% (Arts) and 82% (Instruments) of the users we lose to C, the target's f is not
+among our top-10 f codes, but it was scored (f not kept: 2–4%), and 38–43% of these targets sit at rank 11–20. The loss is in
+the ordering across f codes, not in coverage or in too many items per f. A per-f cap would only move down items that share an
+f with higher-ranked ones.
+
+### 18.2 Task 1b: inference-only diversity fix — not run
+
+The rule was to run it only if 1a showed our top 10 clearly more concentrated than C's. 1a shows no concentration
+difference (Arts) or the opposite (Instruments), so 1b was skipped. The code is ready (`expl_top10.py --fix`: per-f cap
+m ∈ {1, 2, 3, 5}, soft penalty λ ∈ {0.05 … 3.0}, chosen on validation) but was not run on test.
+
+### 18.3 Task 2: does P1a's longer schedule explain its gain? (Arts)
+
+V2s = V2-MFD with P1a's schedule (cap 400 epochs, same cosine, same early stopping), everything else as V2-MFD. I also
+trained the converse, P1a200 = P1a with V2-MFD's 200-epoch cap, in the same pack (a lone run would have kept the GPU below
+the cluster's utilisation threshold), which completes a 2 × 2. Gate 22071894: only the epoch cap differs from each run's
+control. Pack 22071895 (H100), evals 22140091/2 (H200).
+
+| run | input | epoch cap | epochs (best) | (i) test HR@10 | (ii) valid / test HR@10 | (iii) chosen | (iii) valid HR@10 / NDCG@10 | (iii) test HR@1 / HR@10 / NDCG@10 | f top-1 / top-20 |
+|---|---|---|---|---|---|---|---|---|---|
+| V2-MFD | codes | 200 | 49 (39) | 0.1132 | 0.1369 / 0.1177 | K100 w.75/.5/.5 | 0.1382 / 0.0972 | 0.0569 / 0.1184 / 0.0834 | 0.1102 / 0.4245 |
+| V2s | codes | 400 | 51 (41) | 0.1129 | 0.1381 / 0.1176 | K50 w.75/.5/.5 | 0.1383 / 0.0968 | 0.0585 / 0.1183 / 0.0840 | 0.1101 / 0.4245 |
+| P1a200 | items | 200 | 64 (54) | 0.1205 | 0.1415 / 0.1230 | K100 w1/.5/.5 | 0.1415 / 0.1021 | 0.0669 / 0.1230 / 0.0909 | 0.1183 / 0.4341 |
+| P1a | items | 400 | 66 (56) | 0.1185 | 0.1417 / 0.1227 | K100 w1/.5/.5 | 0.1417 / 0.1023 | 0.0665 / 0.1227 / 0.0904 | 0.1165 / 0.4319 |
+
+Paired at (iii): V2s − V2-MFD valid +0.0002 [−0.0022, +0.0026], test −0.0000 [−0.0025, +0.0025]; P1a200 − P1a valid −0.0002
+[−0.0029, +0.0025], test +0.0003 [−0.0022, +0.0028]; P1a − V2s valid +0.0033 [+0.0003, +0.0064], test +0.0044 [+0.0015, +0.0073].
+
+**Reading: the item-level input explains the gain, not the schedule.** With the 400-epoch cap V2-MFD stays at V2-MFD's level
+(it stops at epoch 51 anyway). P1a with the 200-epoch cap reaches P1a's level. Early stopping ends every run long before
+either cap, so the stretched cosine schedule only changes the learning rate slightly over the epochs actually trained.
+For §17 Part 2: all V2-MFD runs used the 200-epoch cap and all P1a runs the 400-epoch cap. On Arts this does not matter;
+on Instruments and Games it was not tested.
+
+### 18.4 Summary
+
+1. Our top 10 is not more concentrated than C's (equal on Arts, more diverse on Instruments). The HR@1-vs-HR@10 pattern on
+   Arts comes from ordering across f codes; Task 1b was not triggered.
+2. P1a's schedule does not matter; its item-level input does (+0.0033 valid, +0.0044 test vs V2-MFD with the same schedule).
+3. §17 Part 2: BEST (chosen on validation) is V2-MFD on Instruments and P1a on Arts and Games. BEST − C seed 42 merged, test
+   HR@10: −0.0033 [−0.0064, +0.0000], −0.0040 [−0.0071, −0.0009], −0.0006 [−0.0033, +0.0018]; NDCG@10 ties C on all three,
+   with 3 decoder passes and 15–38 ms/user vs C's 2 × 5 passes and 35–43 ms/user.
+4. Codebook init also helps C on Arts (+0.0037 merged HR@10, CI > 0); against C + init the Arts gap is −0.0076.

@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-05 (codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-07 (codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -104,6 +104,15 @@ are reference-only, not part of the main line.
 - **Item-level encoder structure done (2026-11-05, chain, seed 42), `docs/MFD_REPORT.md` §16:** E1 slot + recency embeddings worse
   (valid −0.0067 / −0.0022); E2 one summed vector per item ties (+0.0002 / −0.0007; Arts NDCG +0.0034 on test) with 5× fewer
   positions. MFD extension not triggered. 5 history items reach the 20-item result. Runs: `mmgen_runs/struct/<D>/`.
+- **V2-MFD follow-ups done (2026-11-07, seed 42), `docs/MFD_REPORT.md` §17:** single changes on V2-MFD (MFD mv + codebook init) on
+  Arts: item-level encoder input (P1a, `enc_struct.ItemMFDT5`) +0.0035 valid / +0.0044 test HR@10 (CIs > 0); f loss × 2 / × 3 and the
+  offset penalty do not help. BEST chosen on validation: Instruments V2-MFD, Arts and Games P1a. Test HR@10 / NDCG@10, BEST vs C seed 42
+  merged: Instruments 0.1269 / 0.0981 vs 0.1301 / 0.0998 (−0.0033 [−0.0064, +0.0000]), Arts 0.1227 / 0.0904 vs 0.1267 / 0.0897
+  (−0.0040, CI < 0; NDCG ties), Games 0.1009 / 0.0534 vs 0.1016 / 0.0544 (tie); 3 decoder passes, 15–38 ms/user. C + codebook init
+  (Arts, `geo/Arts/c_geo`) gains too: merged 0.1304 / 0.0931 (+0.0037, CI > 0). Tables + CIs: `sbatch/tools/sec17_18.py`.
+- **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
+  losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
+  400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
 - **Exploration (2026-11-03), `docs/EXPLORATION.md`:** inference-only analysis of how the SID is used. C beats us where
   its coarse, content-coherent first code is right and our fine f is not (item text-NN shares C's text L1 77%, our f 32%);
   no inference re-scoring gains > 0.0015 valid HR@10; ranked proposals (coarse-to-fine f factorisation, f-loss weight,
@@ -151,6 +160,7 @@ mmgen/
 │   ├── geo_embed.py, finetune_geo.py, geo_check.py, geo_dryrun.py, geo_diag.py   codebook-geometry-aware T5 (§14): embeddings P·c+delta / shuffled control / soft f labels, bake to plain T5; entry; sanity checks; dry run; diagnostics
 │   ├── enc_struct.py, finetune_struct.py, struct_dryrun.py, eval_struct.py, struct_check.py   item-level encoder structure (§16): StructT5 (E1, E2), training / dry-run / eval entries, sanity checks
 │   ├── expl_first_step.py, expl_infer.py, expl_group.py   exploration (docs/EXPLORATION.md): per-user first-step ranks, MFD re-scoring checks (valid), f-region check
+│   ├── expl_topk.py       §18: top-300 list of an MFD run at one setting + target's rank in the full scored list
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
 │   ├── first_token_acc.py first-decoding-step accuracy (target's first token top-1 / top-20) for seqrec + seqimage lists
@@ -221,7 +231,8 @@ mmgen/
     ├── mfd/mt_gate.sbatch, eval_mt.sbatch, mt_paired.sbatch   task-mix gate (dry runs + task checks + config diff), eval (i)/(ii)/(iii), paired CIs (tools/mfd_mt_*.py)
     ├── geo/run_geo_train.sh, geo_gate.sbatch, eval_geo.sbatch   geometry runs (KIND chain|mfd, VAR A|C|AB1|AB2; pack entry geo:<D>:<kind>:<var>), gate (sanity 1-3), eval + diagnostics; tools/geo_config_diff.py, geo_chain_paired.py, geo_data_check.py (next-f signal: codebook distance vs co-occurrence; soft-label T table; CPU)
     ├── struct/run_struct_train.sh, struct_gate.sbatch, eval_struct.sbatch   §16 runs (VAR E1|E2; pack entry struct:<D>:<var>), gate, eval + history truncation; tools/struct_config_diff.py; tools/geo_sec15_16.py = §15/§16 tables and paired CIs (CPU)
-    ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU)
+    ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
+    │                              tools/expl_top10.py = §18 top-10 diagnostics (HR@k, concentration, overlap, misses; --fix = per-f cap / penalty); tools/sec17_18.py = §17/§18 tables + paired CIs
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```
 
@@ -434,9 +445,11 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | MFD 1+2+2 + C's task mix A / B / C (K_f=100, w=1/.5/.5) | 3 | 0.1227 / 0.0949, 0.1202 / 0.0933, 0.1245 / 0.0962 | — | — |
 | MFD 1+2+2 + multi-view aug, K_f=100, w=1/.5/.5 (Games row new) | 3 | 0.1237 / 0.0959 | 0.1066 / 0.0729 | 0.0908 / 0.0478 |
 | + codebook init + soft f (AB2) / codebook init only (V2) | 3 | 0.1239 / 0.0962, — | 0.1180 / 0.0827, 0.1177 / 0.0833 | 0.0962 / 0.0508, — |
+| V2-MFD at (iii) / + item-level encoder P1a at (iii) (§17; **bold** = chosen on valid) | 3 | **0.1269 / 0.0981**, 0.1299 / 0.1013 | 0.1184 / 0.0834, **0.1227 / 0.0904** | 0.0938 / 0.0488, **0.1009 / 0.0534** |
+| C seed 42 + codebook init, merged (§17 Part 3) | 5 | — | 0.1304 / 0.0931 | — |
 | MD 1+2+2 chain + E1 / E2 (item-level encoder, §16) | 6 | 0.1157 / 0.0902, 0.1177 / 0.0929 | 0.1018 / 0.0706, 0.1064 / 0.0772 | — |
 | Plug-in shared-f merged, 1+2+2 / 1+3+3 | 4 / 5 | 0.1201 / 0.0946, 0.1199 / 0.0934 | — | — |
-| C seed 42 merged (paired reference for the plug-in; `docs/PLUGIN_REPORT.md`) | 5 | 0.1301 / 0.0998 | 0.1267 / 0.0897 | — |
+| C seed 42 merged (paired reference for the plug-in; `docs/PLUGIN_REPORT.md`) | 5 | 0.1301 / 0.0998 | 0.1267 / 0.0897 | 0.1016 / 0.0544 |
 | C / D, best single list (3 seeds) | 5 | 0.1287 / 0.0988, 0.1302 / 0.0997 | 0.1217 / 0.0871, 0.1218 / 0.0861 | 0.0970 / 0.0514, 0.0976 / 0.0513 |
 
 Earlier per-seed notes:
@@ -535,7 +548,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `79e5937`… | geometry data check; exploration tools |
 | `c41a87a`…`48a2ce6` | `docs/EXPLORATION.md` |
 | `41c9f46`…`f6e42a7` | §15 variants V1–V4, §16 encoder structure code, §14 report |
-| (next) | §15, §16 results |
+| `82ce9e5` | §15, §16 results |
+| `5135802`…`8378533` | §17 code (f weight, offset penalty, ItemMFDT5, C + codebook init), sanity fixes, §18 tools (top-N lists, top-10 diagnostics, schedule-check runs) |
+| (next) | §17, §18 results (`docs/MFD_REPORT.md`), `sec17_18.py` |
 
 ---
 
