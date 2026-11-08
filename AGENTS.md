@@ -110,6 +110,11 @@ are reference-only, not part of the main line.
   merged: Instruments 0.1269 / 0.0981 vs 0.1301 / 0.0998 (−0.0033 [−0.0064, +0.0000]), Arts 0.1227 / 0.0904 vs 0.1267 / 0.0897
   (−0.0040, CI < 0; NDCG ties), Games 0.1009 / 0.0534 vs 0.1016 / 0.0544 (tie); 3 decoder passes, 15–38 ms/user. C + codebook init
   (Arts, `geo/Arts/c_geo`) gains too: merged 0.1304 / 0.0931 (+0.0037, CI > 0). Tables + CIs: `sbatch/tools/sec17_18.py`.
+- **Headline MFD (2026-11-07, `docs/MFD_REPORT.md` §19): P1a (V2-MFD + item-level encoder) on all three datasets, chosen on
+  TEST by user decision** (on Instruments validation preferred V2-MFD; Arts/Games P1a is also the validation choice). Test
+  HR@10 / NDCG@10 vs C seed 42 merged: Instruments 0.1299 / 0.1013 vs 0.1301 / 0.0998 (−0.0002 [−0.0036, +0.0031]; +0.0015),
+  Arts 0.1227 / 0.0904 vs 0.1267 / 0.0897 (−0.0040 [−0.0071, −0.0009]; +0.0007), Games 0.1009 / 0.0534 vs 0.1016 / 0.0544
+  (−0.0006; −0.0010): ties C except Arts HR@10, 3 passes, 15–20 ms/user vs 35–43. Needs seeds 43/44 with P1a fixed in advance.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -445,7 +450,7 @@ user).** Full tables, controls and cost: `docs/MDRQVAE_REPORT.md` §5, §5.1, §
 | MFD 1+2+2 + C's task mix A / B / C (K_f=100, w=1/.5/.5) | 3 | 0.1227 / 0.0949, 0.1202 / 0.0933, 0.1245 / 0.0962 | — | — |
 | MFD 1+2+2 + multi-view aug, K_f=100, w=1/.5/.5 (Games row new) | 3 | 0.1237 / 0.0959 | 0.1066 / 0.0729 | 0.0908 / 0.0478 |
 | + codebook init + soft f (AB2) / codebook init only (V2) | 3 | 0.1239 / 0.0962, — | 0.1180 / 0.0827, 0.1177 / 0.0833 | 0.0962 / 0.0508, — |
-| V2-MFD at (iii) / + item-level encoder P1a at (iii) (§17; **bold** = chosen on valid) | 3 | **0.1269 / 0.0981**, 0.1299 / 0.1013 | 0.1184 / 0.0834, **0.1227 / 0.0904** | 0.0938 / 0.0488, **0.1009 / 0.0534** |
+| V2-MFD at (iii) / + item-level encoder P1a at (iii) (§17; **bold** = chosen on valid; headline §19 = P1a everywhere, chosen on test) | 3 | **0.1269 / 0.0981**, 0.1299 / 0.1013 | 0.1184 / 0.0834, **0.1227 / 0.0904** | 0.0938 / 0.0488, **0.1009 / 0.0534** |
 | C seed 42 + codebook init, merged (§17 Part 3) | 5 | — | 0.1304 / 0.0931 | — |
 | MD 1+2+2 chain + E1 / E2 (item-level encoder, §16) | 6 | 0.1157 / 0.0902, 0.1177 / 0.0929 | 0.1018 / 0.0706, 0.1064 / 0.0772 | — |
 | Plug-in shared-f merged, 1+2+2 / 1+3+3 | 4 / 5 | 0.1201 / 0.0946, 0.1199 / 0.0934 | — | — |
@@ -551,7 +556,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `82ce9e5` | §15, §16 results |
 | `5135802`…`8378533` | §17 code (f weight, offset penalty, ItemMFDT5, C + codebook init), sanity fixes, §18 tools (top-N lists, top-10 diagnostics, schedule-check runs) |
 | `325f5de` | §17, §18 results (`docs/MFD_REPORT.md`), `sec17_18.py` |
-| (next) | `docs/EXPLORATION.md`: outcome of the proposals |
+| `abc953a`, `64d07ee` | `docs/EXPLORATION.md`: outcome of the proposals; wording |
+| (next) | `docs/MFD_REPORT.md` §19: results summary, P1a chosen on test |
 
 ---
 

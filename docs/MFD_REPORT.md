@@ -1,6 +1,6 @@
 # MFD stage 1 on Instruments: report
 
-> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18.**
+> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18; results summary with P1a on all datasets (chosen on test): §19.**
 
 Two-branch decoder (MFD) vs the MD chain-decoder control, same SID and training recipe.
 Instruments, MD-RQ-VAE 1+2+2 v1 SID, seed 42. Written 2026-10-31.
@@ -1286,4 +1286,91 @@ on Instruments and Games it was not tested.
 3. §17 Part 2: BEST (chosen on validation) is V2-MFD on Instruments and P1a on Arts and Games. BEST − C seed 42 merged, test
    HR@10: −0.0033 [−0.0064, +0.0000], −0.0040 [−0.0071, −0.0009], −0.0006 [−0.0033, +0.0018]; NDCG@10 ties C on all three,
    with 3 decoder passes and 15–38 ms/user vs C's 2 × 5 passes and 35–43 ms/user.
+   (Superseded as the headline by §19: P1a on all three datasets, chosen on test.)
 4. Codebook init also helps C on Arts (+0.0037 merged HR@10, CI > 0); against C + init the Arts gap is −0.0076.
+
+## 19. Results summary: P1a on all three datasets (chosen on test)
+
+**Selection note (user decision, 2026-11-07).** The headline model is **P1a on every dataset, chosen by test results**.
+P1a is above V2-MFD on test on all three datasets. On Arts and Games it is also the validation choice (§17.2); on Instruments
+validation preferred V2-MFD (0.1567 vs 0.1553, CI includes 0), so the Instruments P1a number is chosen on test and is
+slightly optimistic. P1a is also what a recipe fixed on Arts validation (§17 Part 1) gives everywhere. Settings inside
+each run are still chosen on validation at (iii). The final comparison against C needs seeds 43/44 with P1a fixed in advance.
+Seed 42, locked v1 1+2+2 SIDs; numbers from `mmgen_runs/geo/sec17_18.json` and C's result files.
+
+### 19.1 Test
+
+| dataset | model | HR@1 | HR@5 | HR@10 | NDCG@10 |
+|---|---|---|---|---|---|
+| Instruments | chain decoder (control) | 0.0751 | 0.0984 | 0.1181 | 0.0932 |
+| | MFD control (multi-view, (ii)) | 0.0756 | 0.1024 | 0.1237 | 0.0959 |
+| | V2-MFD | 0.0778 | 0.1034 | 0.1269 | 0.0981 |
+| | **P1a** | **0.0802** | **0.1071** | 0.1299 | **0.1013** |
+| | C text / image | 0.0771 / 0.0781 | 0.1029 / 0.1036 | 0.1271 / 0.1271 | 0.0978 / 0.0984 |
+| | **C merged** | 0.0780 | 0.1064 | **0.1301** | 0.0998 |
+| Arts | chain decoder (control) | 0.0488 | 0.0833 | 0.1059 | 0.0739 |
+| | MFD control (multi-view) | 0.0477 | 0.0820 | 0.1064 | 0.0732 |
+| | V2-MFD | 0.0569 | 0.0925 | 0.1184 | 0.0834 |
+| | **P1a** | **0.0665** | 0.0975 | 0.1227 | **0.0904** |
+| | C text / image | 0.0589 / 0.0617 | 0.0935 / 0.0971 | 0.1189 / 0.1235 | 0.0846 / 0.0882 |
+| | **C merged** | 0.0619 | **0.0993** | **0.1267** | 0.0897 |
+| | C + codebook init, merged (§17.3) | 0.0660 | 0.1022 | 0.1304 | 0.0931 |
+| Games | chain decoder (control) | 0.0169 | 0.0548 | 0.0885 | 0.0468 |
+| | MFD control (multi-view) | 0.0172 | 0.0565 | 0.0908 | 0.0478 |
+| | V2-MFD | 0.0167 | 0.0579 | 0.0938 | 0.0488 |
+| | **P1a** | 0.0200 | 0.0618 | 0.1009 | 0.0534 |
+| | C text / image | 0.0198 / 0.0193 | 0.0607 / 0.0599 | 0.0978 / 0.0971 | 0.0520 / 0.0517 |
+| | **C merged** | **0.0208** | **0.0639** | **0.1016** | **0.0544** |
+
+### 19.2 Paired test differences vs C seed 42 merged (2,000 resamples, 95% CI)
+
+| dataset | P1a − C HR@10 | P1a − C NDCG@10 | V2-MFD − C HR@10 | V2-MFD − C NDCG@10 | P1a − V2-MFD HR@10 | P1a − V2-MFD NDCG@10 |
+|---|---|---|---|---|---|---|
+| Instruments | −0.0002 [−0.0036, +0.0031] | +0.0015 [−0.0003, +0.0032] | −0.0033 [−0.0064, +0.0000] | −0.0017 [−0.0034, +0.0001] | +0.0030 [−0.0001, +0.0061] | +0.0032 [+0.0016, +0.0049] |
+| Arts | −0.0040 [−0.0071, −0.0009] | +0.0007 [−0.0011, +0.0026] | −0.0083 [−0.0113, −0.0053] | −0.0062 [−0.0080, −0.0045] | +0.0044 [+0.0015, +0.0072] | +0.0070 [+0.0052, +0.0086] |
+| Games | −0.0006 [−0.0033, +0.0018] | −0.0010 [−0.0024, +0.0003] | −0.0077 [−0.0103, −0.0053] | −0.0056 [−0.0069, −0.0042] | +0.0071 [+0.0048, +0.0094] | +0.0045 [+0.0033, +0.0057] |
+
+P1a ties C on HR@10 on Instruments and Games and on NDCG@10 on all three; the only significant gap is Arts HR@10 (−0.0040).
+P1a is above C on HR@1 on Instruments and Arts. Against C + codebook init (Arts): −0.0076 [−0.0107, −0.0048] HR@10,
+−0.0027 [−0.0045, −0.0010] NDCG@10. C's 3-seed means (HR@10 / NDCG@10): Instruments 0.1310 / 0.1006, Arts 0.1262 / 0.0898,
+Games 0.1007 / 0.0537.
+
+### 19.3 Validation at (iii)
+
+| dataset | model | chosen setting | HR@1 | HR@5 | HR@10 | NDCG@10 |
+|---|---|---|---|---|---|---|
+| Instruments | V2-MFD | K100 w1/.5/.5 | 0.0870 | 0.1301 | 0.1567 | 0.1187 |
+| | P1a | K100 w.75/.5/.5 | 0.0901 | 0.1314 | 0.1553 | 0.1199 |
+| | C merged | — | 0.0885 | 0.1327 | 0.1598 | 0.1206 |
+| Arts | V2-MFD | K100 w.75/.5/.5 | 0.0642 | 0.1104 | 0.1382 | 0.0972 |
+| | P1a | K100 w1/.5/.5 | 0.0714 | 0.1120 | 0.1417 | 0.1023 |
+| | C merged | — | 0.0681 | 0.1163 | 0.1457 | 0.1026 |
+| Games | V2-MFD | K100 w1/.5/.5 | 0.0203 | 0.0692 | 0.1099 | 0.0578 |
+| | P1a | K100 w1/.5/.5 | 0.0224 | 0.0714 | 0.1138 | 0.0603 |
+| | C merged | — | 0.0234 | 0.0729 | 0.1154 | 0.0619 |
+
+### 19.4 Training, f accuracy, cost
+
+| dataset | model | epochs (best) | steps | test f top-1 / top-20 | decoder passes | ms/user |
+|---|---|---|---|---|---|---|
+| Instruments | V2-MFD | 47 (37) | 11,656 | 0.1040 / 0.3673 | 3 | 29.3 |
+| | P1a | 57 (47) | 14,136 | 0.1052 / 0.3738 | 3 | 14.8 |
+| | C | 102 (92) | 26,622 | — | 2 × 5 | 43.3 |
+| Arts | V2-MFD | 49 (39) | 15,484 | 0.1102 / 0.4245 | 3 | 37.5 |
+| | P1a | 66 (56) | 20,856 | 0.1165 / 0.4319 | 3 | 20.0 (H100; 19.0 for P1a200 on H200) |
+| | C | 120 (110) | 39,960 | first code text 0.2164 / 0.8332, image 0.1528 / 0.6412 | 2 × 5 | 43.0 |
+| Games | V2-MFD | 51 (41) | 36,873 | 0.0806 / 0.4917 | 3 | 39.4 |
+| | P1a | 75 (65) | 54,225 | 0.0825 / 0.4934 | 3 | 20.2 |
+| | C | 149 (139) | 111,750 | — | 2 × 5 | 35.1 (H100) |
+
+ms/user on an H200 unless noted. f picks among 256 codes, C's first level among 55–97, so the top-1 numbers are not comparable.
+
+### 19.5 Progression (test HR@10)
+
+| step | Instruments | Arts | Games |
+|---|---|---|---|
+| chain decoder | 0.1181 | 0.1059 | 0.0885 |
+| → MFD + multi-view history | 0.1237 | 0.1064 | 0.0908 |
+| → + codebook init (V2-MFD) | 0.1269 | 0.1184 | 0.0938 |
+| → + item-level encoder input (P1a) | **0.1299** | **0.1227** | **0.1009** |
+| C seed 42 merged | 0.1301 | 0.1267 | 0.1016 |
