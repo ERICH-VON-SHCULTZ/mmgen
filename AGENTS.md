@@ -166,6 +166,7 @@ mmgen/
 │   ├── enc_struct.py, finetune_struct.py, struct_dryrun.py, eval_struct.py, struct_check.py   item-level encoder structure (§16): StructT5 (E1, E2), training / dry-run / eval entries, sanity checks
 │   ├── expl_first_step.py, expl_infer.py, expl_group.py   exploration (docs/EXPLORATION.md): per-user first-step ranks, MFD re-scoring checks (valid), f-region check
 │   ├── expl_topk.py       §18: top-300 list of an MFD run at one setting + target's rank in the full scored list
+│   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
 │   ├── first_token_acc.py first-decoding-step accuracy (target's first token top-1 / top-20) for seqrec + seqimage lists
@@ -236,7 +237,8 @@ mmgen/
     ├── mfd/mt_gate.sbatch, eval_mt.sbatch, mt_paired.sbatch   task-mix gate (dry runs + task checks + config diff), eval (i)/(ii)/(iii), paired CIs (tools/mfd_mt_*.py)
     ├── geo/run_geo_train.sh, geo_gate.sbatch, eval_geo.sbatch   geometry runs (KIND chain|mfd, VAR A|C|AB1|AB2; pack entry geo:<D>:<kind>:<var>), gate (sanity 1-3), eval + diagnostics; tools/geo_config_diff.py, geo_chain_paired.py, geo_data_check.py (next-f signal: codebook distance vs co-occurrence; soft-label T table; CPU)
     ├── struct/run_struct_train.sh, struct_gate.sbatch, eval_struct.sbatch   §16 runs (VAR E1|E2; pack entry struct:<D>:<var>), gate, eval + history truncation; tools/struct_config_diff.py; tools/geo_sec15_16.py = §15/§16 tables and paired CIs (CPU)
-    ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
+    ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
+    ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
     │                              tools/expl_top10.py = §18 top-10 diagnostics (HR@k, concentration, overlap, misses; --fix = per-f cap / penalty); tools/sec17_18.py = §17/§18 tables + paired CIs
     ├── md/repro_v1.sbatch         reproduction check of the v1 sets (MODE=full retrain | reassign = stage 2 on the locked tokenizer)
 ```

@@ -6,6 +6,7 @@
 #   STEP=infer D=<D>   Part 3 re-scoring checks on mfd122_mv, VALIDATION only (macrec/expl_infer.py)
 #                      -> mmgen_runs/expl/<D>/infer_valid.json
 #   STEP=topk D=<D> RUN= TAG= KF= WF= WT= WI=   top-300 list of an MFD run at one setting (macrec/expl_topk.py, MFD_REPORT §18)
+#   STEP=decomp D=<D> RUN= TAG= KF= WF= WT= WI=   per-user error decomposition + oracles (macrec/expl_decomp.py, MFD_REPORT §20 Task 0)
 #   STEP=firstc D=<D>  first-code rank of C + codebook init vs C (valid, test; MFD_REPORT §17 Part 3)
 #   STEP=group D=<D>   coarse regions of f (k-means of the f codebook vs random groups): does mfd122_mv's f mass find
 #                      the right region? (macrec/expl_group.py) -> mmgen_runs/expl/<D>/group.json
@@ -48,6 +49,9 @@ if [ $STEP = first ]; then
 elif [ $STEP = topk ]; then       # §18: top-300 lists at one setting; RUN, TAG, KF, WF, WT, WI from the environment
   python -u expl_topk.py \$C --ckpt_path $RUNS/mfd/$D/$RUN/seed42 --index_file $MD --image_index_file $MD --k_f $KF --w_f $WF --w_t $WT --w_i $WI \
     --out_file $O/topk_$TAG.pt
+elif [ $STEP = decomp ]; then     # §20 Task 0: every item scored, normal list + oracles per test user
+  python -u expl_decomp.py \$C --ckpt_path $RUNS/mfd/$D/$RUN/seed42 --index_file $MD --image_index_file $MD --k_f $KF --w_f $WF --w_t $WT --w_i $WI \
+    --splits test --out_file $O/decomp_$TAG.pt
 elif [ $STEP = firstc ]; then    # §17 Part 3: first-code rank of C + codebook init, valid and test
   for SP in valid test; do
     python -u expl_first_step.py \$C --ckpt_path $RUNS/geo/$D/c_geo/seed42 --index_file .index_lemb_mql.json --image_index_file .index_vitemb_mql.json --split \$SP --out_file $O/first_C_geo_\$SP.pt
