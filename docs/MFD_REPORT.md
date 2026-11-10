@@ -1657,13 +1657,137 @@ Reading:
 Arts P1a at (ii) on an H200: **19.1 ms/user** (job 22258506; same HR@10). C seed 42 on Games on an H200: 21.7 + 21.8 =
 **43.5 ms/user** (job 22258507; same single-list HR@10 as reported). All ms/user in §19–§20 are now H200.
 
-### 20.4 Task 2 (dense head) and Task 3 (seeds 43/44): not run yet
+### 20.4 First submission of Tasks 2–3 did not train (fixed)
 
 The first submission did not train. My P2 sanity checks (added to the shared gate, `geo_check.py`) failed because of two
 bugs in the checks, not in the model: T5's attention dropout is a float applied with `F.dropout`, so zeroing the
 `nn.Dropout` modules did not make the training-mode comparison deterministic, and the bake/reload comparison reused a
 training-mode encoding. The failed gate rewrote `geo/<D>/geo_check.json` with `all_pass: false`, so the P1a seed runs
 (Task 3), which require the same file, also refused to train. A direct state-dict comparison confirmed the dense head
-saves and reloads exactly. Checks fixed (commit `8e10f06`); gates 22302937–39, pack A 22302940 (Arts P2a/P2b + Arts P1a
-seeds 43/44), pack B 22302941 (Instruments and Games seeds 43/44), evaluations and dense sweeps chained
-(`mmgen_runs/logs/round20_jobs_v2.txt`).
+saves and reloads exactly. Checks fixed (commit `8e10f06`); a second failure in the P2 dry run (a variable in
+`finetune_geo.GeoTrainer` shadowed the trainer's `*args`) was fixed in `bedea2f`. Resubmitted as one dependency chain
+(`mmgen_runs/logs/round20_jobs_v3.txt`): gates 22304038/39/41 (all pass), pack A 22304043 (Arts P2a/P2b + Arts P1a
+seeds 43/44), pack B 22304044 (Instruments/Games seeds 43/44), then eval, sweeps and H200 test applies.
+
+**Status (2026-11-09).** Done: Task 3 (all datasets), Task 2 on Arts (λ choice), K_f check, Task 0 extension on Arts.
+Pending: Task 2 on Instruments and Games with the chosen λ = 0.1 (pack 22407737 → eval 22407738/41, dense sweep 22407739/42,
+apply 22407740/43; `round20_jobs_v2.txt`). Numbers below: `sbatch/tools/round20_collect.py` (CPU job
+`sbatch/mfd/round20_collect.sbatch`, D=, VARS="P2a P2b") → `mmgen_runs/geo/round20_<D>.json`; it asserts every rank file
+against the reported metrics and C's per-seed lists against C's results files.
+
+### 20.5 Task 3: P1a and P1a + 1c over seeds 42/43/44 (test)
+
+Plain P1a = setting (ii). P1a + 1c = the 1c config chosen on **each seed's own validation** (grid of §19.7). C = MQL4GRec
+merged, D = MACRec paper setting (merged), each 3 seeds. HR@10 / NDCG@10, mean ± std (ddof 1):
+
+| | Instruments | Arts | Games |
+|---|---|---|---|
+| P1a | 0.1293 ± .0003 / 0.1010 ± .0003 | 0.1233 ± .0006 / 0.0909 ± .0005 | 0.1004 ± .0005 / 0.0531 ± .0003 |
+| **P1a + 1c** | **0.1305 ± .0008 / 0.1017 ± .0004** | **0.1243 ± .0005 / 0.0917 ± .0002** | 0.1001 ± .0009 / 0.0530 ± .0005 |
+| C | 0.1310 ± .0012 / 0.1006 ± .0008 | 0.1262 ± .0012 / 0.0898 ± .0011 | 0.1007 ± .0008 / 0.0537 ± .0007 |
+| D | 0.1310 ± .0009 / 0.1011 ± .0009 | 0.1255 ± .0027 / 0.0893 ± .0021 | 0.1020 ± .0019 / 0.0539 ± .0010 |
+
+Per seed (test HR@10 / NDCG@10; paired CI vs **C of the same seed**, users aligned by dataset index):
+
+| dataset | seed | P1a | P1a + 1c | C | 1c config (w_t/w_i, α_t/α_i) | P1a+1c − C HR@10 | P1a+1c − C NDCG@10 | 1c − P1a HR@10 | best epoch |
+|---|---|---|---|---|---|---|---|---|---|
+| Instruments | 42 | 0.1291 / 0.1006 | 0.1314 / 0.1021 | 0.1301 / 0.0998 | 1/1, .5/0 | +0.0013 [−.0018, +.0046] | +0.0023 [+.0006, +.0040] | +0.0023 [+.0007, +.0040] | 47 |
+| | 43 | 0.1297 / 0.1012 | 0.1301 / 0.1016 | 0.1324 / 0.1013 | .75/.75, 0/.25 | −0.0023 [−.0054, +.0009] | +0.0003 [−.0014, +.0021] | +0.0004 [−.0012, +.0018] | 44 |
+| | 44 | 0.1292 / 0.1011 | 0.1299 / 0.1014 | 0.1304 / 0.1008 | 1/1, 0/1 | −0.0005 [−.0039, +.0027] | +0.0006 [−.0013, +.0024] | +0.0007 [−.0007, +.0020] | 49 |
+| Arts | 42 | 0.1227 / 0.0904 | 0.1240 / 0.0914 | 0.1267 / 0.0897 | 1/.5, 0/.5 | −0.0027 [−.0056, +.0005] | +0.0018 [−.0001, +.0036] | +0.0013 [−.0000, +.0027] | 56 |
+| | 43 | 0.1239 / 0.0910 | 0.1249 / 0.0918 | 0.1270 / 0.0909 | 1/.5, 0/.25 | −0.0021 [−.0049, +.0009] | +0.0009 [−.0010, +.0027] | +0.0010 [−.0006, +.0025] | 50 |
+| | 44 | 0.1232 / 0.0913 | 0.1240 / 0.0918 | 0.1248 / 0.0888 | 1/.75, .5/.25 | −0.0009 [−.0039, +.0023] | +0.0030 [+.0012, +.0048] | +0.0008 [−.0005, +.0019] | 56 |
+| Games | 42 | 0.1009 / 0.0534 | 0.1012 / 0.0535 | 0.1016 / 0.0544 | 1/.75, .5/.25 | −0.0003 [−.0030, +.0022] | −0.0009 [−.0023, +.0004] | +0.0003 [−.0006, +.0012] | 65 |
+| | 43 | 0.1002 / 0.0528 | 0.0995 / 0.0525 | 0.1000 / 0.0530 | 1/.75, .5/0 | −0.0005 [−.0030, +.0019] | −0.0005 [−.0018, +.0009] | −0.0007 [−.0019, +.0005] | 66 |
+| | 44 | 0.1000 / 0.0530 | 0.0997 / 0.0529 | 0.1004 / 0.0538 | 1/.75, .25/.5 | −0.0007 [−.0033, +.0018] | −0.0008 [−.0022, +.0005] | −0.0004 [−.0013, +.0005] | 66 |
+
+Plain P1a vs C, HR@10: Instruments −0.0011 / −0.0026 / −0.0012, Arts −0.0040 / −0.0031 / −0.0017 (CI < 0 for seeds 42, 43),
+Games −0.0006 / +0.0002 / −0.0003. K_f = 100 for every chosen 1c. ms/user (H200, batch 64): 15.0–15.3 / 19.2–19.5 / 20.3.
+
+Reading:
+- **P1a is seed-stable** (HR@10 std 0.0003–0.0006, half of C's).
+- **P1a + 1c ties C on HR@10 on every dataset and seed** (all CIs include 0): mean gap −0.0005 Instruments, −0.0019 Arts,
+  −0.0006 Games. **On NDCG@10 P1a + 1c is above C on Instruments and Arts** (mean +0.0011 / +0.0019; CI > 0 for Instruments
+  42 and Arts 44) and slightly below on Games (−0.0007, CIs include 0).
+- **1c helps on Instruments and Arts, not Games:** +0.0004 to +0.0023 HR@10 on all six Instruments/Arts seeds (CI > 0 only for
+  Instruments 42), −0.0007 to +0.0003 on Games.
+- **The chosen α is not stable across seeds** (e.g. Instruments α_text/α_image = .5/0, 0/.25, 0/1). 1c is a small, noisy
+  gain from adding the view f-distributions, not a tuned setting that transfers; per-seed validation selection is required.
+- With seeds, the seed-42 Instruments win over C (§20.2) does not hold: seeds 43/44 are below C on HR@10 (within noise).
+
+### 20.6 K_f check for P1a + 1c (seed 42, no training)
+
+The chosen 1c config of §19.7 at K_f ∈ {20, 50, 100} (`mfd_mv_infer.py --mode kf`; jobs 22303966/69/72, H200, batch 64).
+HR@10 / NDCG@10, ms/user:
+
+| dataset | K_f | valid | test | ms/user (test) |
+|---|---|---|---|---|
+| Instruments | 20 | 0.1538 / 0.1198 | 0.1280 / 0.1008 | 3.5 |
+| | 50 | 0.1560 / 0.1206 | 0.1314 / 0.1021 | 8.0 |
+| | 100 | 0.1566 / 0.1208 | 0.1314 / 0.1021 | 14.9 |
+| Arts | 20 | 0.1416 / 0.1024 | 0.1225 / 0.0908 | 4.4 |
+| | 50 | 0.1428 / 0.1028 | 0.1240 / 0.0914 | 10.1 |
+| | 100 | 0.1429 / 0.1028 | 0.1240 / 0.0914 | 19.2 |
+| Games | 20 | 0.1140 / 0.0602 | 0.1001 / 0.0531 | 4.2 |
+| | 50 | 0.1150 / 0.0606 | 0.1012 / 0.0535 | 10.2 |
+| | 100 | 0.1150 / 0.0606 | 0.1012 / 0.0535 | 20.1 |
+
+Reading: K_f = 50 is within 0.0006 valid HR@10 of K_f = 100 everywhere and equal on test to four decimals, at about half the
+time (8–10 vs 15–20 ms/user, i.e. 4–5× cheaper than C's 43). K_f = 20 loses 0.0028 valid HR@10 on Instruments. As agreed, the
+faster setting K_f = 50 is the one to report (TODO 20.9: paired CI K50 vs K100 from `kf_ranks.pt`; switch §19.7 to K_f = 50).
+
+### 20.7 Task 2: dense item-level head (Arts done; Instruments/Games pending)
+
+P2a / P2b = P1a + dense head with loss weight λ = 0.1 / 0.5 (`macrec/dense_head.py`), seed 42. Joint validation grid
+(`macrec/dense_eval.py`): rule A/B × w_d ∈ {0, .25, .5, 1, 2} × α_text, α_image ∈ {0, .25, .5}, w = 1/.5/.5, K_f = 100. Every
+config chosen on validation applied once to test (H200). **λ = 0.1 wins on Arts validation** (best fused 0.1415 vs 0.1365;
+`mmgen_runs/geo/p2_lambda_choice.json`) and is used on Instruments and Games.
+
+Arts (test HR@10 / NDCG@10; CIs on HR@10):
+
+| run | best / stopped epoch | dense alone, valid / test HR@10 | test w_d = 0 | test, selected (w_d = .5, rule A, α = 0) | selected − same run w_d = 0 | − P1a (ii) | − P1a + 1c | − C |
+|---|---|---|---|---|---|---|---|---|
+| P2a (λ .1) | 64 / 74 | 0.1286 / 0.1114 | 0.1225 / 0.0904 | 0.1225 / 0.0902 | −0.0001 [−.0018, +.0016] | −0.0003 [−.0032, +.0026] | −0.0016 [−.0046, +.0013] | −0.0042 [−.0074, −.0010] |
+| P2b (λ .5) | 63 / 73 | 0.1309 / 0.1134 | 0.1170 / 0.0863 | 0.1190 / 0.0882 | +0.0021 [+.0005, +.0036] | −0.0037 [−.0067, −.0009] | −0.0050 [−.0080, −.0021] | −0.0077 [−.0108, −.0045] |
+
+ms/user 19.0 (both, H200) vs P1a 19.1. P1a seed 42 for reference: best epoch 56, stopped 66.
+
+Reading:
+- **No gain on Arts.** λ = 0.1 leaves the model at P1a (w_d = 0: −0.0002 vs P1a) and the dense term adds nothing on test
+  (+0.0018 valid → −0.0001 test). λ = 0.5 costs the base model 0.0058 HR@10; the dense term recovers about a third.
+- **The dense head alone is a decent retriever** (test HR@10 0.111–0.113, from one decoder step) but correlated with what
+  the fused score already has.
+- **With 1c:** the joint grid chose α = 0 for both runs, so dense + 1c = dense alone; the views do not stack on the dense head.
+- **Rule B = rule A** for the selected config: adding w_d · logsumexp of the dense probabilities per f never changes which
+  100 f codes are kept.
+
+Instruments / Games (λ = 0.1): **TODO (pending jobs above)** — fill: best epoch; dense alone valid/test; test at w_d = 0 and
+selected; dense alone vs with 1c; CIs vs same run w_d = 0, P1a, P1a + 1c, C; ms/user.
+
+### 20.8 Task 0 extension: what the dense term rescues (Arts, test)
+
+Per-user diagnostics of the selected dense config (`dense_eval --mode apply`): target f rank by the selection term and by
+the full-view log P(f), dense-only rank of the target.
+
+| user set | users | rescued (hit with dense) | f rank (full) of rescued, median / top-1 share | rescued with dense-only rank < 10 | target f moved up by the selection term |
+|---|---|---|---|---|---|
+| P2a: C hit, P2a w_d = 0 miss | 689 | 65 | 4 / 22% | 80% | 0% |
+| P2a: C hit, P1a seed 42 miss (§20.1 set) | 643 | 185 | 3 / 27% | 71% | 0% |
+| P2b: C hit, P2b w_d = 0 miss | 734 | 64 | 5 / 28% | 81% | 0% |
+
+Across all users P2a's dense term turns 176 hits into misses (≈ the rescues; net −0.0001). The 643-user row mixes the dense
+term with P2a ≠ P1a (different training), so its 185 is not the dense term's effect alone.
+
+Reading: **the dense term does not fix cross-f ranking by moving the target's f up** (rule A keeps the selection; rule B never
+moves it either). It rescues users by reordering items across the kept f codes, mostly targets the dense head alone already
+ranks in its top 10 and whose f is not the top f. That is the error Task 0 found, but the reordering swaps out as many hits
+as it rescues. TODO: same table on Instruments and Games.
+
+### 20.9 Remaining / TODO
+
+- [ ] Task 2 on Instruments and Games (λ = 0.1): fill 20.7 and 20.8 (`round20_collect.sbatch D=<D> VARS=P2a`).
+- [ ] K_f: paired CI K_f = 50 vs 100 on test (all datasets); then switch §19.7/§19.8 and the AGENTS.md headline to K_f = 50
+      with its H200 ms/user.
+- [ ] baselines_all.json: add P1a and P1a + 1c 3-seed rows (`collect_baselines.py` or a separate entry).
+- [ ] AGENTS.md §1 / §7: Task 3 means, Task 2 outcome, K_f choice.
+- [ ] Decide on Task 2 after Instruments/Games: if no dataset gains, the dense head stays out of the main method.

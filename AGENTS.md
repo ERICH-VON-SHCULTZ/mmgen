@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-08 (main method P1a §19, §20 Tasks 0–1; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-09 (main method P1a §19, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -120,8 +120,13 @@ are reference-only, not part of the main line.
   for 96–99% of the users C gets and we miss; in its own bucket's top 10 for 94–99%); oracle "true f gets the top f's log P(f)"
   triples HR@10 (0.33–0.36), keeping the true f adds nothing. Task 1: test-time view ensemble in the f term only (1c), chosen on
   valid, +0.0013 to +0.0023 test HR@10 on Instruments/Arts at no cost (Instruments 0.1314 / 0.1021 vs C 0.1301 / 0.0998, NDCG CI > 0),
-  nothing on Games; full ensemble (1b) costs 44–60 ms/user. Task 2 (dense head) and Task 3 (seeds 43/44) re-submitted after a
-  gate-check bug (`8e10f06`).
+  nothing on Games; full ensemble (1b) costs 44–60 ms/user. **1c adopted as an inference option (§19.7).**
+  **Task 3 (seeds 42/43/44, §20.5)**, test HR@10 / NDCG@10 mean ± std: P1a+1c Instruments 0.1305 ± .0008 / 0.1017, Arts 0.1243 ±
+  .0005 / 0.0917, Games 0.1001 ± .0009 / 0.0530 vs C 0.1310 / 0.1006, 0.1262 / 0.0898, 0.1007 / 0.0537: ties C on HR@10 for every
+  seed (paired CIs vs C of the same seed include 0), above C on NDCG@10 on Instruments/Arts; 1c's α is not stable across seeds.
+  **K_f (§20.6):** K_f = 50 equals K_f = 100 on test at half the time (8–10 ms/user) → report K_f = 50 (CI pending).
+  **Task 2 (dense head, §20.7–20.8):** Arts: λ = 0.1 chosen on valid, no test gain (−0.0001 vs its own w_d = 0); λ = 0.5 hurts;
+  the dense term reorders items across f codes, never moves the target f up. Instruments/Games λ = 0.1 pending (§20.9 TODO list).
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -250,6 +255,7 @@ mmgen/
     ├── mfd/mv_infer.sbatch        §20 Task 1 (STAGE=sweep on valid | apply on test, H200 | kf = K_f 20/50/100 for the chosen 1c; VARIANTS=, LIMIT=N smoke test)
     ├── mfd/dense_eval.sbatch      §20 Task 2 fused evaluation (STAGE=sweep | apply; dense alone and with the 1c views, joint alpha x w_d grid)
     ├── mfd/p2_stage2.sbatch       §20 Task 2 stage 2 (CPU): lambda chosen on Arts validation -> Instruments/Games pack, eval and dense eval
+    ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
     │                              tools/expl_top10.py = §18 top-10 diagnostics (HR@k, concentration, overlap, misses; --fix = per-f cap / penalty); tools/sec17_18.py = §17/§18 tables + paired CIs
@@ -575,7 +581,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `abc953a`, `64d07ee` | `docs/EXPLORATION.md`: outcome of the proposals; wording |
 | `c96ef7f`…`d372ac0` | §19 results summary; main method P1a + reproduction section |
 | `b79db57`…`8e10f06` | §20 tools: expl_decomp, mfd_mv_infer, dense_head, dense_eval, timing job, P2 gate checks and fix |
-| (next) | §20 Tasks 0–1 results |
+| `fec088b` | §20 Tasks 0–1 results; 1c adopted (§19.7) |
+| (next) | §20.5–20.9: Task 3 seeds, K_f check, Task 2 Arts, Task 0 dense extension; `round20_collect` |
 
 ---
 
