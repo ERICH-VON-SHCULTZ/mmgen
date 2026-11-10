@@ -1,6 +1,6 @@
 # MFD stage 1 on Instruments: report
 
-> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18; main method P1a, reproduction and results summary: §19; error decomposition, test-time view ensemble, dense head, seeds: §20.**
+> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18; main method P1a, reproduction and results summary: §19; error decomposition, test-time view ensemble, dense head, seeds: §20; training-side view methods: §21.**
 
 Two-branch decoder (MFD) vs the MD chain-decoder control, same SID and training recipe.
 Instruments, MD-RQ-VAE 1+2+2 v1 SID, seed 42. Written 2026-10-31.
@@ -1419,6 +1419,11 @@ used both to pick the top-K_f codes and in the item score; α and w_t, w_i chose
 
 The "no ensemble" row (setting (ii)) stays the plain P1a reference; the full ensemble (1b) was dropped for latency (44–60 ms/user).
 
+**K_f = 50 (adopted 2026-11-09, §20.6).** Rule: the smallest K_f within 0.001 validation HR@10 of the best K_f in {20, 50, 100}.
+K_f = 50 qualifies on all three datasets (valid gap to K_f = 100: Instruments 0.0006, Arts 0.0001, Games 0.0000; K_f = 20 misses
+by 0.0028 / 0.0013 / 0.0010). Same test HR@10 / NDCG@10 as K_f = 100 to four decimals for P1a + 1c, at 8.0 / 10.1 / 10.2 ms/user
+(H200) instead of 14.9 / 19.2 / 20.1. From §21 on, every MFD evaluation uses K_f = 50.
+
 ### 19.8 Expected results (seed 42)
 
 | dataset | split | HR@1 | HR@5 | HR@10 | NDCG@5 | NDCG@10 | f coverage (K_f = 100) | f top-1 |
@@ -1786,8 +1791,70 @@ as it rescues. TODO: same table on Instruments and Games.
 ### 20.9 Remaining / TODO
 
 - [ ] Task 2 on Instruments and Games (λ = 0.1): fill 20.7 and 20.8 (`round20_collect.sbatch D=<D> VARS=P2a`).
-- [ ] K_f: paired CI K_f = 50 vs 100 on test (all datasets); then switch §19.7/§19.8 and the AGENTS.md headline to K_f = 50
-      with its H200 ms/user.
+- [x] K_f = 50 adopted by the validation rule (§19.7); paired CI K_f = 50 vs 100 on test still to add (`kf_ranks.pt`).
 - [ ] baselines_all.json: add P1a and P1a + 1c 3-seed rows (`collect_baselines.py` or a separate entry).
 - [ ] AGENTS.md §1 / §7: Task 3 means, Task 2 outcome, K_f choice.
 - [ ] Decide on Task 2 after Instruments/Games: if no dataset gains, the dense head stays out of the main method.
+
+## 21. Training-side view methods to absorb the 1c gain (Arts screen, then Instruments)
+
+Goal: get 1c's gain (or more) from training, with plain full-view inference at no extra cost. Base = P1a §19 at K_f = 50.
+Round 20's remaining jobs are untouched; round 21 writes only `r21_*` files.
+
+### 21.1 Runs (Arts, seed 42) and implementation
+
+Code: `macrec/r21_views.py` (datasets, collator, `GroupedItemMFDT5`), `macrec/finetune_r21.py` (entry = P1a's
+`finetune_geo.py --mfd --geo codebook --item_enc` with one change swapped in), `sbatch/r21/run_r21_train.sh` (VAR G0, A01, A05,
+B01, B05, C033, C060 -> `mmgen_runs/mfd/<D>/r21_<VAR>/seed42`). Commit `60b73f8`.
+
+| run | change on top of P1a | batch per optimizer step | steps / epoch (Arts / Instruments; P1a 316 / 248) |
+|---|---|---|---|
+| G0 | one example = one pair with its 3 views in the same step; loss = sum over the 3 views of P1a's loss | 341 pairs x 3 = 1,023 sequences, accumulation 1 | 316 / 249 |
+| A01, A05 | G0 + β KL(stopgrad(p̄) ‖ p_full), p̄ = mean of the 3 views' f distributions, β = 0.1 / 0.5 | as G0 | 316 / 249 |
+| B01, B05 | G0 + β · mean over view pairs of the symmetric KL, gradients to both sides, β = 0.1 / 0.5 | as G0 | 316 / 249 |
+| C033, C060 | P1a's layout (3 independent examples per pair per epoch), each history item draws its view: full with p_full = 1/3 / 0.6, else text / image with equal probability, redrawn every build | 256 x 4 = 1,024 (= P1a) | 316 / 248 |
+
+Choices where the spec did not fit the code exactly (stated, then continued):
+- **Batch for grouped runs:** 1,024 is not a multiple of 3, so a step is 341 pairs = 1,023 sequences in one micro-batch
+  (accumulation 1 instead of P1a's 256 x 4; same AdamW, LR, schedule). Steps per epoch match P1a on Arts (316); on Instruments
+  they are 249 vs 248 (+0.4%, ceil(84,890 / 341)); 342 or 343 pairs would match 248 but break 1,024 more. Every view still
+  appears once per pair per epoch (3 encoder sequences per pair).
+- **"Sum over views":** G0's loss is 3 x P1a's token-mean CE on the same 3P rows (checked). AdamW is invariant to that factor
+  except through epsilon; β is relative to the summed CE, as specified.
+- **f distribution:** softmax over the 256 `<s0_*>` codes of the text-branch logits at position 0 (the logits the f loss uses,
+  restricted to the shared codes, as inference's log P(f)); all 256 codes are used in both datasets.
+- **Early stopping:** the spec says patience 10 on validation HR@10; P1a actually stops on **validation loss** (patience 10,
+  best checkpoint by validation loss, full-view validation set), so every run keeps P1a's criterion. The extra terms are
+  training-only: validation loss = P1a's MFD CE (checked), so the criterion is comparable across runs.
+- **1c grid at K_f = 50:** round 20's grid (w_t, w_i in {.25, .5, .75, 1}, α in {0, .25, .5, 1}² minus (0, 0)) with K_f fixed at
+  the main setting 50 instead of {100, 200}. The P1a reference row is re-evaluated with the same script (plain and 1c at K_f = 50).
+
+Gate (`sbatch/r21/r21_gate.sbatch`, jobs 22481497 Arts / 22481498 Instruments, all pass; `geo/<D>/r21_check.json`): grouped
+layout equals MVMFDDataset's three views row for row; G0 loss = 3 x P1a loss; eval loss = P1a's; A / B loss − G0 = β x KL
+recomputed independently; A sends no gradient to the text / image views' f logits, B to all three; C's item-level view rates
+0.335 / 0.335 / 0.329 (p_full 1/3) and 0.600 / 0.197 / 0.203 (0.6), redrawn every build, target = full SID; validation = full
+view; steps per epoch as above. Config diff of every dry run vs P1a's dry run (`geo/gate/<D>/r21_config_diff.json`): only the
+batch / accumulation (grouped), the examples counter and the model class differ.
+
+Evaluation (`macrec/r21_eval.py`, `sbatch/r21/r21_eval.sbatch`, H200, batch 64): plain = setting (ii) at K_f = 50; 1c chosen on
+validation; f diagnostics (true-f top-1, mean / median rank, recall@10) on valid and test; sanity: plain valid ranks from the
+deployment path = exact ranks (smoke test 22481496: 1.0). Collection + CIs: `sbatch/tools/r21_collect.py` -> `geo/r21_<D>.json`.
+
+Jobs (`mmgen_runs/logs/round21_jobs.txt`): P1a reference evals 22482988 (Arts) / 22482989 (Instruments); Arts packs 22482990
+(G0 A01 A05 B01) and 22482991 (B05 C033 C060); Arts evals 22482992–98; stage 2 22482999 (Arts collection, best run per family by
+Arts valid HR@10 with plain inference -> `geo/r21_family_choice.json`, then Instruments pack + evals + collection).
+
+### 21.2 Arts results
+
+**TODO (pending):** table: run, plain test HR@10 / NDCG@10, +1c test HR@10 / NDCG@10, CIs vs P1a plain, P1a + 1c and C, f top-1,
+true-f median rank (valid and test), best epoch, steps, wall-clock, ms/user. P1a reference row first.
+
+### 21.3 Instruments results
+
+**TODO (pending, runs chosen per family by 21.2).**
+
+### 21.4 Interpretation and promotion
+
+**TODO.** Questions: does any method reach or beat P1a + 1c with plain inference; does 1c still add on top; do the f
+diagnostics move with HR@10; is G0 different from P1a (if yes, A and B are read against G0). Promotion bar: Arts valid HR@10
+≥ P1a plain + 0.002 with plain inference, holding on Instruments.

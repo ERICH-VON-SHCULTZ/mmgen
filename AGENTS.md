@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-09 (main method P1a §19, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-09 (main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending, §21 training-side view methods running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -127,6 +127,10 @@ are reference-only, not part of the main line.
   **K_f (§20.6):** K_f = 50 equals K_f = 100 on test at half the time (8–10 ms/user) → report K_f = 50 (CI pending).
   **Task 2 (dense head, §20.7–20.8):** Arts: λ = 0.1 chosen on valid, no test gain (−0.0001 vs its own w_d = 0); λ = 0.5 hurts;
   the dense term reorders items across f codes, never moves the target f up. Instruments/Games λ = 0.1 pending (§20.9 TODO list).
+- **Main setting K_f = 50 (2026-11-09, §19.7):** smallest K_f within 0.001 valid HR@10 of the best; all evaluations from §21 on.
+- **§21 (2026-11-09, running), `docs/MFD_REPORT.md` §21:** training-side view methods on P1a, Arts seed 42 then Instruments: G0 grouped
+  views, A ensemble-teacher KL (β .1/.5), B mutual view KL (β .1/.5), C item-level random views (p_full 1/3, .6); plain K_f = 50 and
+  +1c, f diagnostics. Code `macrec/r21_*.py`, `finetune_r21.py`, `sbatch/r21/`; jobs in `mmgen_runs/logs/round21_jobs.txt`.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -181,6 +185,7 @@ mmgen/
 │   ├── mfd_mv_infer.py    §20 Task 1: test-time multi-view ensemble (variants 1a/1b/1c; valid sweep, test apply with timing)
 │   ├── dense_head.py      §20 Task 2: DenseItemMFDT5 = P1a + dense item-level head (decoder start state x summed code embeddings), loss in training only
 │   ├── dense_eval.py      §20 Task 2: fused score P1a + w_d log-softmax(dense), f-selection rules A/B, valid sweep / test apply
+│   ├── r21_views.py, finetune_r21.py, r21_eval.py, r21_check.py   §21: grouped views / ensemble-teacher KL / mutual view KL (GroupedItemMFDT5) and item-level random views; entry on top of finetune_geo.py; K_f = 50 eval (plain, 1c, f diagnostics); sanity checks
 │   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -255,6 +260,7 @@ mmgen/
     ├── mfd/mv_infer.sbatch        §20 Task 1 (STAGE=sweep on valid | apply on test, H200 | kf = K_f 20/50/100 for the chosen 1c; VARIANTS=, LIMIT=N smoke test)
     ├── mfd/dense_eval.sbatch      §20 Task 2 fused evaluation (STAGE=sweep | apply; dense alone and with the 1c views, joint alpha x w_d grid)
     ├── mfd/p2_stage2.sbatch       §20 Task 2 stage 2 (CPU): lambda chosen on Arts validation -> Instruments/Games pack, eval and dense eval
+    ├── r21/run_r21_train.sh, r21_gate.sbatch, pack_r21_train.sbatch, r21_eval.sbatch, r21_stage2.sbatch, r21_collect.sbatch   §21 runs (VAR G0|A01|A05|B01|B05|C033|C060; P1aref = dry-run reference), gate (macrec/r21_check.py + tools/r21_config_diff.py; writes only r21_* files), packs, H200 eval (K_f 50 plain + 1c + f diagnostics), Arts -> Instruments family choice (tools/r21_family_choice.py), CIs (tools/r21_collect.py -> geo/r21_<D>.json)
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
@@ -582,7 +588,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `c96ef7f`…`d372ac0` | §19 results summary; main method P1a + reproduction section |
 | `b79db57`…`8e10f06` | §20 tools: expl_decomp, mfd_mv_infer, dense_head, dense_eval, timing job, P2 gate checks and fix |
 | `fec088b` | §20 Tasks 0–1 results; 1c adopted (§19.7) |
-| (next) | §20.5–20.9: Task 3 seeds, K_f check, Task 2 Arts, Task 0 dense extension; `round20_collect` |
+| `b951848` | §20.5–20.9: Task 3 seeds, K_f check, Task 2 Arts, Task 0 dense extension; `round20_collect` |
+| `60b73f8` | §21 code: r21 views / entry / eval / checks, gate, packs, eval, collection, stage 2 |
+| (next) | K_f = 50 main setting; §21 setup (results pending) |
 
 ---
 
