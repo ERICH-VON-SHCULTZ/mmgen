@@ -8,6 +8,8 @@ Every other argument is finetune_geo.py's (the exact P1a command; batch / accumu
 compute: grouped runs use 341 pairs x 3 views = 1,023 sequences per optimizer step, accumulation 1).
 After training: best checkpoint baked and saved as P1a's (finetune_geo.bake_and_save), stats get the r21 settings and
 optimizer steps per epoch.
+Every run (also C) logs the gradient norm of EVERY optimizer step (the value accelerate's clip_grad_norm_ returns, before
+clipping at max_grad_norm) -> <output_dir>/grad_norms.json and stats r21.clip (steps, clipped share, quantiles).
 """
 import json
 import os
@@ -62,14 +64,32 @@ if __name__ == "__main__":
             super().__init__(*a, **k)
             if grouped:
                 info.update(k["model"].install_r21(k["tokenizer"], MODE, BETA))
+            clip = self.accelerator.clip_grad_norm_
+
+            def logged_clip(params, max_norm, *ca, **ck):
+                n = clip(params, max_norm, *ca, **ck)
+                NORMS.append(float(n))
+                CLIP["max_norm"] = float(max_norm)
+                return n
+            self.accelerator.clip_grad_norm_ = logged_clip
+            info["max_grad_norm"] = self.args.max_grad_norm
             print("[finetune_r21]", json.dumps(info), flush=True)
 
+    NORMS, CLIP = [], {}
     finetune_ext.StatsTrainer = R21Trainer
     stats = sys.argv[sys.argv.index("--stats_file") + 1] if "--stats_file" in sys.argv else None
     out_dir = sys.argv[sys.argv.index("--output_dir") + 1]
     runpy.run_path(os.path.join(here, "finetune_mfd.py"), run_name="__main__")
     if int(os.environ.get("LOCAL_RANK", 0)) == 0 and "model" in state:
         diff = finetune_geo.bake_and_save(state, out_dir)
+        if NORMS:
+            json.dump(NORMS, open(os.path.join(out_dir, "grad_norms.json"), "w"))
+            srt = sorted(NORMS)
+            q = lambda x: srt[min(len(srt) - 1, int(x * len(srt)))]
+            info["clip"] = {"steps": len(NORMS), "max_grad_norm": CLIP.get("max_norm"),
+                            "clipped_share": sum(n > CLIP.get("max_norm", float("inf")) for n in NORMS) / len(NORMS),
+                            "norm_min": srt[0], "norm_median": q(0.5), "norm_p10": q(0.1), "norm_p90": q(0.9), "norm_max": srt[-1]}
+            print("[finetune_r21] clipping", json.dumps(info["clip"]), flush=True)
         if stats:
             s = json.load(open(stats))
             s["geo"] = state["info"] | {"bake_max_logit_diff": diff}

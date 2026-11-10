@@ -2,12 +2,14 @@
 
  1 grouped layout: GroupedMVDataset has one example per pair; GroupedCollator puts the full / text / image view of pair
    k in rows 3k..3k+2 with the same decoder rows; view strings = mfd_data.view_maps (5 / 3 / 3 code tokens per item)
- 2 G0 loss = 3 x P1a's loss (ItemMFDT5) on the same 3P rows; model.eval() loss = P1a's (validation loss / early stopping)
+ 2 G0 loss = P1a's loss (ItemMFDT5) on the same 3P rows (mean over views = P1a's scale); model.eval() loss = P1a's (validation loss / early stopping)
  3 A / B loss - G0 loss = beta x the KL term recomputed independently from the eval-mode logits (dropout off)
  4 stop-gradient: A's KL sends no gradient to the text / image views' f logits, B's sends gradient to all three
  5 f distribution = softmax over the 256 <s0_*> codes at the text branch's position 0 (the f loss's logits)
  6 C: item-level view rates ~ p_full / (1 - p_full) / 2 each over 20k item draws; redrawn per build; target = full SID;
    validation stays the full view (MFDDataset)
+ 8 clipping: HF's training loop clips through self.accelerator.clip_grad_norm_ (the call finetune_r21.py wraps to log every
+   step's norm) and P1a's dry run has max_grad_norm 1.0
  7 matched compute: optimizer steps per epoch of grouped (341 pairs, accumulation 1) and C (256 x 4) vs P1a's train_stats
 Model checks use P1a seed 42's trained checkpoint. C uses P1a's exact layout, so its steps equal P1a's.
 Usage: python r21_check.py --data_path .. --dataset D --p1a_ckpt .. --out_file ..
@@ -89,7 +91,7 @@ def main():
         l_eval, l_eval_p1a = model(**bb).loss.item(), p1a(**bb).loss.item()
         logits = model(**bb).logits
         model.train()
-    check("2_G0_is_3x_P1a_loss", abs(l_g0 - 3 * l_p1a) < 1e-4 * max(1, l_g0), g0=l_g0, p1a=l_p1a)
+    check("2_G0_is_P1a_loss", abs(l_g0 - l_p1a) < 1e-5 * max(1, l_g0), g0=l_g0, p1a=l_p1a)
     check("2_eval_loss_is_P1a", abs(l_eval - l_eval_p1a) < 1e-5, eval=l_eval, p1a=l_eval_p1a)
     lp = logits[:, 0, 0, fcols].float().log_softmax(-1).view(-1, 3, len(fcols))
     P = lp.exp()
@@ -136,6 +138,13 @@ def main():
     check("7_steps_per_epoch", abs(g_spe - p1a_spe) <= 1, p1a=p1a_spe, grouped=g_spe, grouped_minus_p1a=g_spe - p1a_spe,
           C="= P1a by construction (same 3n examples, 256 x 4; checked in 6: len == 3n)",
           grouped_sequences_per_step=3 * PAIRS_PER_STEP, C_sequences_per_step=1024)
+    # 8 clipping hook
+    import inspect
+    import transformers
+    src = inspect.getsource(transformers.Trainer._inner_training_loop)
+    ta = json.load(open(f"{a.p1a_ckpt}/../../../../geo/gate/r21_dryrun/{a.dataset}/P1aref/dryrun.json"))["training_args"]
+    check("8_clip_hook", "self.accelerator.clip_grad_norm_(" in src and ta["max_grad_norm"] == 1.0,
+          transformers=transformers.__version__, p1a_max_grad_norm=ta["max_grad_norm"])
     res["all_pass"] = ok
     json.dump(res, open(a.out_file, "w"), indent=1, default=str)
     print("ALL PASS" if ok else "SOME CHECK FAILED")

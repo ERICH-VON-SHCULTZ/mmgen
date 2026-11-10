@@ -2,9 +2,10 @@
 
 G0  grouped views: one training example = one (history, target) pair carrying its three history views (full / text /
     image, mfd_data.VIEWS), encoded in the same step (GroupedMVDataset + GroupedCollator: rows 3k, 3k+1, 3k+2 of a batch
-    are the full / text / image view of pair k, same target). Loss = sum over the 3 views of P1a's loss (the mean CE over
-    the 5 targets f, t1, t2, i1, i2), averaged over pairs = 3 x P1a's token-mean CE on the same 3P sequences.
-A   G0 + beta * KL( stopgrad(pbar) || p_full ),  pbar = (p_full + p_text + p_image) / 3 (probability space), T = 1.
+    are the full / text / image view of pair k, same target). Loss = MEAN over the 3 views of P1a's loss (the mean CE over
+    the 5 targets f, t1, t2, i1, i2), averaged over pairs = P1a's token-mean CE on the same 3P sequences (P1a's loss scale:
+    P1a clips gradients at max_grad_norm 1.0, so the loss scale is not free).
+A   G0 (mean over views) + beta * KL( stopgrad(pbar) || p_full ),  pbar = (p_full + p_text + p_image) / 3 (probability space), T = 1.
 B   G0 + beta * mean over the 3 view pairs (u, v) of [KL(p_u || p_v) + KL(p_v || p_u)] / 2, gradients to both sides.
 C   P1a's layout (3 independent examples per pair per epoch, shuffled): every history item independently shows the full
     view (5 codes) with probability p_full, else the text or the image view (equal probability); redrawn every time
@@ -95,7 +96,7 @@ def aux_loss(lpf, mode):
 
 
 class GroupedItemMFDT5(ItemMFDT5):
-    """P1a's model; in training with grouped batches (mode G0/A/B) the loss is G0's sum over views + beta * aux."""
+    """P1a's model; in training with grouped batches (mode G0/A/B) the loss is the mean over views of P1a's loss + beta * aux."""
     r21_mode, r21_beta = None, 0.0
 
     def install_r21(self, tokenizer, mode, beta):
@@ -117,7 +118,7 @@ class GroupedItemMFDT5(ItemMFDT5):
         R = lg.shape[0]
         assert R % 3 == 0, R
         assert torch.equal(labels[0::3], labels[1::3]) and torch.equal(labels[0::3], labels[2::3]), "rows 3k..3k+2 = one pair"
-        ce = 3 * F.cross_entropy(lg.reshape(-1, lg.size(-1)).float(), labels.reshape(-1), ignore_index=-100)
+        ce = F.cross_entropy(lg.reshape(-1, lg.size(-1)).float(), labels.reshape(-1), ignore_index=-100)
         loss, aux = ce, torch.zeros((), device=lg.device)
         if self.r21_mode in ("A", "B"):
             aux = aux_loss(f_logprobs_train(lg, self.r21_fcols).view(R // 3, 3, -1), self.r21_mode)
@@ -125,6 +126,6 @@ class GroupedItemMFDT5(ItemMFDT5):
         g = self.r21_log
         g["steps"] += 1; g["ce"] += ce.item(); g["aux"] += aux.item()
         if g["steps"] % 200 == 0:
-            print(f"[r21] micro-batches {g['steps']}: mean CE(sum over views) {g['ce'] / 200:.4f}, mean aux {g['aux'] / 200:.4f}", flush=True)
+            print(f"[r21] micro-batches {g['steps']}: mean CE (mean over views) {g['ce'] / 200:.4f}, mean aux {g['aux'] / 200:.4f}", flush=True)
             g["ce"] = g["aux"] = 0.0
         return Seq2SeqLMOutput(loss=loss, logits=lg)
