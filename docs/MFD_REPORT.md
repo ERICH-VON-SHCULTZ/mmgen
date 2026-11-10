@@ -1366,7 +1366,8 @@ target is always the full SID. Validation and test use the full view only (one e
 | dropout | 0.1 (T5 config) |
 | epoch cap | 400 (the cosine schedule is laid out over 400 epochs; §18 Task 2: a 200-epoch cap gives the same result) |
 | evaluation / saving | every epoch (from epoch 1), `save_total_limit` 1 |
-| early stopping | validation loss (token cross-entropy of the full-view validation set, the MFD loss), patience 10 |
+| early stopping | **validation loss** (token cross-entropy of the full-view validation set, the MFD loss), patience 10; best checkpoint by validation loss (not HR@10) |
+| gradient clipping | max_grad_norm 1.0 (HF default); active on every logged step (logged norm min / median: Arts 1.62 / 2.66, Instruments 2.02 / 2.43; 417 / 282 logged steps, every 50th) |
 | checkpoint selection | `load_best_model_at_end`: the lowest validation loss |
 | seed | 42 (`--seed`, HF `set_seed`) |
 | other | history ≤ 20, `--prompt_num 4` (passed for parity; MFD inputs have no prompt), 2 dataloader workers |
@@ -1809,8 +1810,8 @@ B01, B05, C033, C060 -> `mmgen_runs/mfd/<D>/r21_<VAR>/seed42`). Commit `60b73f8`
 
 | run | change on top of P1a | batch per optimizer step | steps / epoch (Arts / Instruments; P1a 316 / 248) |
 |---|---|---|---|
-| G0 | one example = one pair with its 3 views in the same step; loss = sum over the 3 views of P1a's loss | 341 pairs x 3 = 1,023 sequences, accumulation 1 | 316 / 249 |
-| A01, A05 | G0 + β KL(stopgrad(p̄) ‖ p_full), p̄ = mean of the 3 views' f distributions, β = 0.1 / 0.5 | as G0 | 316 / 249 |
+| G0 | one example = one pair with its 3 views in the same step; loss = mean over the 3 views of P1a's loss (= P1a's scale) | 341 pairs x 3 = 1,023 sequences, accumulation 1 | 316 / 249 |
+| A01, A05 | G0 (mean) + β KL(stopgrad(p̄) ‖ p_full), p̄ = mean of the 3 views' f distributions, β = 0.1 / 0.5 | as G0 | 316 / 249 |
 | B01, B05 | G0 + β · mean over view pairs of the symmetric KL, gradients to both sides, β = 0.1 / 0.5 | as G0 | 316 / 249 |
 | C033, C060 | P1a's layout (3 independent examples per pair per epoch), each history item draws its view: full with p_full = 1/3 / 0.6, else text / image with equal probability, redrawn every build | 256 x 4 = 1,024 (= P1a) | 316 / 248 |
 
@@ -1819,8 +1820,14 @@ Choices where the spec did not fit the code exactly (stated, then continued):
   (accumulation 1 instead of P1a's 256 x 4; same AdamW, LR, schedule). Steps per epoch match P1a on Arts (316); on Instruments
   they are 249 vs 248 (+0.4%, ceil(84,890 / 341)); 342 or 343 pairs would match 248 but break 1,024 more. Every view still
   appears once per pair per epoch (3 encoder sequences per pair).
-- **"Sum over views":** G0's loss is 3 x P1a's token-mean CE on the same 3P rows (checked). AdamW is invariant to that factor
-  except through epsilon; β is relative to the summed CE, as specified.
+- **Loss scale (changed before any training, commit `d9cc025`):** the first version summed the three views' losses (3 x P1a's
+  scale), on the argument that AdamW ignores the scale. That fails under gradient clipping, and P1a clips at max_grad_norm
+  1.0 on **every** logged step (logged pre-clip norms 1.62–6.24 on Arts, 2.02–6.37 on Instruments; 100% of 417 / 282 logged
+  steps, every 50th step). G0 / A / B therefore use the **mean over the three views** (G0 loss = P1a's loss on the same
+  sequences, checked in the gate), with β applied on top of that mean. (Since P1a's norms are always above 1, a 3x scale would
+  also have clipped on every step, but the mean keeps G0 a clean control by construction.) Every round-21 run logs the
+  pre-clip gradient norm of every optimizer step (`<run>/grad_norms.json`, `train_stats.json` r21.clip: clipped share,
+  quantiles); reported per run in 21.2 / 21.3.
 - **f distribution:** softmax over the 256 `<s0_*>` codes of the text-branch logits at position 0 (the logits the f loss uses,
   restricted to the shared codes, as inference's log P(f)); all 256 codes are used in both datasets.
 - **Early stopping:** the spec says patience 10 on validation HR@10; P1a actually stops on **validation loss** (patience 10,
@@ -1829,8 +1836,9 @@ Choices where the spec did not fit the code exactly (stated, then continued):
 - **1c grid at K_f = 50:** round 20's grid (w_t, w_i in {.25, .5, .75, 1}, α in {0, .25, .5, 1}² minus (0, 0)) with K_f fixed at
   the main setting 50 instead of {100, 200}. The P1a reference row is re-evaluated with the same script (plain and 1c at K_f = 50).
 
-Gate (`sbatch/r21/r21_gate.sbatch`, jobs 22481497 Arts / 22481498 Instruments, all pass; `geo/<D>/r21_check.json`): grouped
-layout equals MVMFDDataset's three views row for row; G0 loss = 3 x P1a loss; eval loss = P1a's; A / B loss − G0 = β x KL
+Gate (`sbatch/r21/r21_gate.sbatch`; first run 22481497 / 22481498 with the summed loss, re-run 22484120 Arts / 22484121
+Instruments after the change; `geo/<D>/r21_check.json`): grouped layout equals MVMFDDataset's three views row for row; G0 loss =
+P1a loss; HF's loop clips through the wrapped `accelerator.clip_grad_norm_` and P1a's max_grad_norm is 1.0; eval loss = P1a's; A / B loss − G0 = β x KL
 recomputed independently; A sends no gradient to the text / image views' f logits, B to all three; C's item-level view rates
 0.335 / 0.335 / 0.329 (p_full 1/3) and 0.600 / 0.197 / 0.203 (0.6), redrawn every build, target = full SID; validation = full
 view; steps per epoch as above. Config diff of every dry run vs P1a's dry run (`geo/gate/<D>/r21_config_diff.json`): only the
@@ -1840,14 +1848,15 @@ Evaluation (`macrec/r21_eval.py`, `sbatch/r21/r21_eval.sbatch`, H200, batch 64):
 validation; f diagnostics (true-f top-1, mean / median rank, recall@10) on valid and test; sanity: plain valid ranks from the
 deployment path = exact ranks (smoke test 22481496: 1.0). Collection + CIs: `sbatch/tools/r21_collect.py` -> `geo/r21_<D>.json`.
 
-Jobs (`mmgen_runs/logs/round21_jobs.txt`): P1a reference evals 22482988 (Arts) / 22482989 (Instruments); Arts packs 22482990
-(G0 A01 A05 B01) and 22482991 (B05 C033 C060); Arts evals 22482992–98; stage 2 22482999 (Arts collection, best run per family by
+Jobs (`mmgen_runs/logs/round21_jobs.txt`): P1a reference evals 22482988 (Arts) / 22482989 (Instruments); Arts packs 22484129
+(G0 A01 A05 B01) and 22484130 (B05 C033 C060), after the Arts gate; Arts evals after each pack; stage 2 22484147 (the first
+submission 22482990–99 was cancelled before any pack started) (Arts collection, best run per family by
 Arts valid HR@10 with plain inference -> `geo/r21_family_choice.json`, then Instruments pack + evals + collection).
 
 ### 21.2 Arts results
 
 **TODO (pending):** table: run, plain test HR@10 / NDCG@10, +1c test HR@10 / NDCG@10, CIs vs P1a plain, P1a + 1c and C, f top-1,
-true-f median rank (valid and test), best epoch, steps, wall-clock, ms/user. P1a reference row first.
+true-f median rank (valid and test), best epoch, steps, wall-clock, ms/user, clipped-step share. P1a reference row first.
 
 ### 21.3 Instruments results
 

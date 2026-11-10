@@ -51,7 +51,13 @@ def main():
             continue
         b, E, rk = load(run)
         st = json.load(open(f"{b}/train_stats.json"))
-        row = {"valid": E["valid"], "test": E["test"],
+        clip = (st.get("r21") or {}).get("clip")
+        if clip is None:                                        # P1a: only every logging_steps-th norm is logged
+            ts = json.load(open(f"{b}/trainer_state.json"))
+            gn = [h["grad_norm"] for h in ts["log_history"] if "grad_norm" in h]
+            clip = {"steps": len(gn), "logged_every": ts.get("logging_steps"), "max_grad_norm": 1.0,
+                    "clipped_share": float(np.mean(np.array(gn) > 1.0)), "norm_min": min(gn), "norm_median": float(np.median(gn))}
+        row = {"clip": clip, "valid": E["valid"], "test": E["test"],
                "train": {k: st.get(k) for k in ("best_epoch", "epochs_run", "global_steps", "train_wall_seconds", "peak_gpu_mem_gb", "gpu",
                                                  "train_examples_per_epoch")} | {"steps_per_epoch": st["global_steps"] / st["epochs_run"],
                                                                                   "r21": st.get("r21")},
@@ -72,7 +78,7 @@ def main():
               "1c", f4(t["1c"]["hr10"]), f4(t["1c"]["ndcg10"]), "| plain vs P1a", ci(row["ci_test"]["plain"]["vs_P1a_plain"]),
               "vs P1a+1c", ci(row["ci_test"]["plain"]["vs_P1a_1c"]), "vs C", ci(row["ci_test"]["plain"]["vs_C"]),
               "| f top1 v/t", f4(v["f"]["f_top1"]), f4(t["f"]["f_top1"]), "median", v["f"]["f_rank_median"], t["f"]["f_rank_median"],
-              "| best ep", row["train"]["best_epoch"], "steps/ep", round(row["train"]["steps_per_epoch"], 1))
+              "| clipped", round(row["clip"]["clipped_share"], 3), "| best ep", row["train"]["best_epoch"], "steps/ep", round(row["train"]["steps_per_epoch"], 1))
 
 
 if __name__ == "__main__":

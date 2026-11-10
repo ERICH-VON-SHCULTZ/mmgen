@@ -590,7 +590,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `fec088b` | §20 Tasks 0–1 results; 1c adopted (§19.7) |
 | `b951848` | §20.5–20.9: Task 3 seeds, K_f check, Task 2 Arts, Task 0 dense extension; `round20_collect` |
 | `60b73f8` | §21 code: r21 views / entry / eval / checks, gate, packs, eval, collection, stage 2 |
-| (next) | K_f = 50 main setting; §21 setup (results pending) |
+| `7113441`, `d9cc025` | K_f = 50 main setting, §21 setup; grouped loss = mean over views (clipping), per-step grad-norm logging |
+| (next) | §19.5 clipping row, §21 loss-scale note, clip share in r21_collect |
 
 ---
 
