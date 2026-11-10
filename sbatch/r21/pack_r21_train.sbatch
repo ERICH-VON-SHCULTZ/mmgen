@@ -1,14 +1,15 @@
 #!/bin/bash
 # Round-21 trainings CONCURRENTLY on one GPU (GPU-utilisation policy, see sbatch/mfd/pack_mfd_train.sbatch); one frozen
-# copy of macrec/ and run_r21_train.sh made at job start. RUNS entries: <D>:<VAR>[:<SEED>] (VAR as run_r21_train.sh).
+# copy of macrec/ and run_r21_train.sh made at job start. 12 CPUs / 80 GB / 16 h (2026-11-10: the 24 / 160 GB / 48 h request sat
+# pending for over a day on a full cluster; 4 runs x 2 loader workers fit, and P1a trains in under 3 h alone). RUNS entries: <D>:<VAR>[:<SEED>] (VAR as run_r21_train.sh).
 # Submit: sbatch --dependency=afterok:<gate> --export=ALL,RUNS="Arts:G0 Arts:A01 Arts:A05 Arts:B01" sbatch/r21/pack_r21_train.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=a100_tandon,h100_tandon
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH -c 24
-#SBATCH --mem=160GB
-#SBATCH --time=48:00:00
+#SBATCH -c 12
+#SBATCH --mem=80GB
+#SBATCH --time=16:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=mmgen_r21_pack
 #SBATCH --output=/scratch/yw8866/mmgen_runs/logs/%x_%j.out

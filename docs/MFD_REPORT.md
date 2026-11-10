@@ -1855,12 +1855,28 @@ Arts valid HR@10 with plain inference -> `geo/r21_family_choice.json`, then Inst
 
 ### 21.2 Arts results
 
-**TODO (pending):** table: run, plain test HR@10 / NDCG@10, +1c test HR@10 / NDCG@10, CIs vs P1a plain, P1a + 1c and C, f top-1,
-true-f median rank (valid and test), best epoch, steps, wall-clock, ms/user, clipped-step share. P1a reference row first.
+**Reference row (done: job 22482988, H200; `geo/r21_Arts.json`).** P1a seed 42 re-evaluated with `r21_eval.py` at K_f = 50:
+
+| run | valid HR@10 plain / 1c | test plain HR@10 / NDCG@10 | test +1c HR@10 / NDCG@10 (1c config) | plain − P1a+1c (HR@10) | plain − C | 1c − C | f top-1 v / t | true-f rank median (mean) v / t | f recall@10 v / t | best ep / steps | clipped | ms/user plain / 1c |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| P1a (ref) | 0.1415 / 0.1428 | 0.1227 / 0.0904 | 0.1241 / 0.0914 (w 1/.5, α .25/.25) | −0.0014 [−.0027, −.0001] | −0.0040 [−.0071, −.0009]; NDCG +0.0007 [−.0011, +.0026] | −0.0026 [−.0056, +.0005]; NDCG +0.0017 [−.0001, +.0036] | 0.131 / 0.117 | 24 (49.7) / 28 (53.4) | 0.347 / 0.320 | 56 / 20,856 | 100% of logged steps | 10.1 / 10.3 |
+
+K_f = 50 reproduces P1a's K_f = 100 test numbers exactly (0.1227 / 0.0904). The promotion bar on Arts is therefore **valid HR@10
+≥ 0.1435** (P1a plain 0.1415 + 0.002), plain inference.
+
+Runs G0, A01, A05, B01, B05, C033, C060: **TODO (pending)**. Packs 22547247 / 22547248 (resubmitted 2026-11-10 with 12 CPUs /
+80 GB / 16 h: the 24 CPU / 160 GB / 48 h request had not started in over a day on a full cluster), evals after each pack,
+stage 2 22547256.
 
 ### 21.3 Instruments results
 
-**TODO (pending, runs chosen per family by 21.2).**
+**Reference row (done: job 22482989, H200; `geo/r21_Instruments.json`):**
+
+| run | valid HR@10 plain / 1c | test plain HR@10 / NDCG@10 | test +1c HR@10 / NDCG@10 (1c config) | plain − P1a+1c (HR@10) | plain − C | 1c − C | f top-1 v / t | true-f rank median (mean) v / t | f recall@10 v / t | best ep / steps | clipped | ms/user plain / 1c |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| P1a (ref) | 0.1545 / 0.1563 | 0.1291 / 0.1006 | 0.1314 / 0.1018 (w 1/1, α 1/0) | −0.0022 [−.0036, −.0009] | −0.0010 [−.0044, +.0023]; NDCG +0.0008 [−.0009, +.0025] | +0.0012 [−.0021, +.0047]; NDCG +0.0021 [+.0003, +.0038] | 0.123 / 0.105 | 33 (53.9) / 36 (57.6) | 0.294 / 0.264 | 47 / 14,136 | 100% of logged steps | 8.0 / 8.1 |
+
+Round-21 runs (the per-family winners from 21.2): **TODO (submitted by stage 2).**
 
 ### 21.4 Interpretation and promotion
 
