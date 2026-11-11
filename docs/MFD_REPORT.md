@@ -1898,9 +1898,63 @@ one micro-batch of 1,023 rows, see the true mean gradient (norm ~0.8) and are mo
 - **G0 vs P1a, and therefore A / B vs P1a, mix two changes:** views grouped in one step and the unclipped optimisation (and
   G0 / A / B stop later: best epoch 68–75 vs 56).
 - A regime-matched grouped control (85 pairs = 255 rows x 4 micro-batches, the same accumulation path as P1a, 1,020 rows per
-  step) would separate them; **not run** (decision pending, see 21.4).
+  step) separates them: §21.3.
 
-### 21.3 Instruments results
+### 21.3 Clipping-regime controls (Arts and Instruments, seed 42)
+
+Decision (2026-11-11): the transformers 4.47 accumulation behaviour is **not** fixed globally (P1a, C and every baseline share
+it, so comparisons with C stay valid); it is documented as a gotcha (AGENTS.md §6) and for the paper's appendix. Two grouped
+runs in P1a's exact accumulation path: **G0acc** (= G0) and **A01acc** (= A01), 85 pairs x 3 rows = 255 rows per micro-batch x 4
+micro-batches = 1,020 rows per optimizer step (P1a: 1,024), mean-over-views loss per micro-batch, summed over the 4 micro-batches by
+the Trainer exactly as P1a's. Steps per epoch: Arts ceil(107,566 / 85) = 1,266 micro-batches -> 316–317 (P1a 316); Instruments
+999 -> 249–250 (P1a 248); exact numbers from train_stats below. Contrasts (paired, test, plain; valid difference alongside):
+- grouping effect: **G0acc − P1a**;
+- clipping / optimiser effect: **G0 − G0acc**;
+- teacher-KL effect in P1a's regime: **A01acc − G0acc** (and in the one-micro-batch regime: A01 − G0, §21.2).
+
+Code `9d189dd` (run_r21_train.sh VAR G0acc / A01acc), gate re-run 22679927 (Arts) / 22679928 (Instruments): new checks 7b (steps
+per epoch at 85 x 4) and 9 (AC rows / loss); the gate now replaces `r21_check.json` only when every check passes and merges
+`r21_config_diff.json` per run, so a gate run can no longer block queued runs. Pack 22679930 (Arts + Instruments G0acc, A01acc),
+evals Arts 22679936 / 22679938, Instruments 22679937 / 22679949; collections 22679950 (Arts), 22679951 (Instruments, after the
+round-21 Instruments evals too).
+
+**TODO (pending): table per dataset: G0, G0acc, A01, A01acc, P1a with plain / +1c, the three contrasts, clipped share and median
+pre-clip norm, best epoch.**
+
+### 21.4 A + C combos (Arts, seed 42)
+
+A (ensemble-teacher KL) and C (item-level random views) together, in P1a's regime (85 pairs x 4). Grouped rows per pair: [full view
+(the student, = inference), item-random view, item-random view], random rows redrawn per build; loss = mean over the 3 rows of the
+MFD loss + 0.1 KL(stopgrad(p̄) ‖ p_full), p̄ = mean of the 3 rows' f distributions (`r21_views.GroupedRandDataset`, `--r21_mode AC`).
+**AC1**: random rows p_full = 1/3 (as C033); **AC0**: p_full = 0 (each item text-only or image-only, 50/50). Gate check 9: row 0 =
+full view, per-item view rates, redraws, loss − G0 = β KL. Evaluation as §21.2; CIs vs P1a, C033, A01, A01acc and C. Chained to
+Instruments seed 42 only if a combo beats **both** C033 (0.1427) and A01 (0.1435) on Arts validation HR@10 (plain)
+(`tools/r21_combo_choice.py`). Jobs: pack 22679968 (nice 200), evals 22679969 / 22679970, collection 22679971, combo stage 22679972.
+
+**TODO (pending).**
+
+### 21.5 Three seeds on Arts: A01 and C033
+
+A01 (exact screened config: grouped, one micro-batch of 1,023 rows) and C033 (P1a regime) at seeds 43 / 44, plus P1a seeds 43 / 44
+re-evaluated with `r21_eval.py` so every reference row uses the same evaluation (plain K_f = 50, +1c chosen on each seed's own
+validation). Table (`tools/r21_seeds.py` -> `geo/r21_seeds_Arts.json`): mean ± std over 42/43/44 of P1a, P1a+1c, A01, A01+1c, C033,
+C033+1c, C merged, D; per seed paired CIs vs C of the same seed and vs P1a (plain, +1c) of the same seed. Jobs: pack 22679953
+(nice 100), evals 22679961–66 (incl. P1a 43 / 44), table 22679967.
+
+**TODO (pending).**
+
+### 21.6 Where do A01 and C033 gain? (no training)
+
+Per test user, plain K_f = 50 (`macrec/r21_gain_diag.py`, sanity: ranks = r21_eval's): log P(true f), margin log P(true f) −
+log P(top f), true-f rank, and the target's rank split into candidates from OTHER f buckets above it (n_other) and from its OWN
+bucket (n_within). Report (`tools/r21_gain_report.py` -> `geo/r21_gain_Arts.json`): mean log P(true f), mean / median margin for
+P1a, G0, A01, C033 (+ G0acc, A01acc, AC1, AC0 when trained); users rescued (P1a miss -> hit) and lost (hit -> miss), each split
+into f crossing the K_f cut / rank change mostly across buckets (|Δn_other| > |Δn_within|) / mostly within the own bucket / tie.
+Jobs: 22679929 (P1a, G0, A01, C033), 22679952 (G0acc, A01acc), 22679973 (AC1, AC0).
+
+**TODO (pending).**
+
+### 21.7 Instruments results (round-21 family winners + regime controls)
 
 **Reference row (done: job 22482989, H200; `geo/r21_Instruments.json`):**
 
@@ -1910,7 +1964,7 @@ one micro-batch of 1,023 rows, see the true mean gradient (norm ~0.8) and are mo
 
 Round-21 runs (the per-family winners from 21.2): **TODO (submitted by stage 2).**
 
-### 21.4 Interpretation and promotion
+### 21.8 Interpretation and promotion
 
 **Arts (Instruments pending).**
 - **Plain inference reaches P1a + 1c:** A01 and C033 are +0.0019 / +0.0020 test HR@10 over P1a + 1c (CIs include 0) and
@@ -1921,7 +1975,7 @@ Round-21 runs (the per-family winners from 21.2): **TODO (submitted by stage 2).
 - **G0 alone ≈ P1a** (valid −0.0001, test +0.0009, CIs include 0), but in a different clipping regime (above), so "grouping
   has no effect" is not established; A and B are read against G0.
 - **Promotion bar (Arts valid ≥ 0.1435):** A01 0.14348 (bar 0.14349: misses by 1e-5, i.e. at the bar); C033 0.1427 (misses
-  by 0.0008). Neither clears it strictly on validation; both clear it on test. Instruments decides (21.3).
+  by 0.0008). Neither clears it strictly on validation; both clear it on test. Instruments decides (21.7).
 
 **TODO (after Instruments):** final answers to: does any method reach or beat P1a + 1c with plain inference; does 1c still add on top; do the f
 diagnostics move with HR@10; is G0 different from P1a (if yes, A and B are read against G0). Promotion bar: Arts valid HR@10

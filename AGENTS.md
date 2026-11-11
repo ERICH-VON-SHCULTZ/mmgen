@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-09 (main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending, §21 training-side view methods running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-11 (main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -134,6 +134,11 @@ are reference-only, not part of the main line.
   **Arts done (2026-11-11, §21.2):** plain test HR@10 / NDCG@10: A01 0.1260 / 0.0920, C033 0.1261 / 0.0931 vs P1a 0.1227 / 0.0904 (+0.0033,
   CI > 0) and P1a+1c 0.1241 (+0.002, CI includes 0); both tie C on HR@10, beat it on NDCG@10; valid 0.1435 / 0.1427 vs bar 0.1435.
   Grouped runs (G0/A/B) are in a different clipping regime than P1a (accumulation, see §6 gotcha). Instruments (G0 A01 B01 C033) queued.
+  **Follow-up (2026-11-11, running; jobs in `round21_jobs.txt`):** §21.3 regime controls G0acc / A01acc (85 pairs x 4 = P1a's
+  accumulation path; Arts + Instruments); §21.4 A+C combos AC1 / AC0 (Arts; Instruments only if they beat C033 and A01 on valid);
+  §21.5 A01 / C033 seeds 43/44 + P1a 43/44 re-eval (Arts); §21.6 gain diagnostic (log P(true f), margin, across- vs within-bucket
+  rescues). Accumulation behaviour deliberately NOT fixed globally (C and baselines share it). Round-20 dense pack resubmitted at
+  nice 10000 (lowest priority).
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -188,7 +193,7 @@ mmgen/
 │   ├── mfd_mv_infer.py    §20 Task 1: test-time multi-view ensemble (variants 1a/1b/1c; valid sweep, test apply with timing)
 │   ├── dense_head.py      §20 Task 2: DenseItemMFDT5 = P1a + dense item-level head (decoder start state x summed code embeddings), loss in training only
 │   ├── dense_eval.py      §20 Task 2: fused score P1a + w_d log-softmax(dense), f-selection rules A/B, valid sweep / test apply
-│   ├── r21_views.py, finetune_r21.py, r21_eval.py, r21_check.py   §21: grouped views / ensemble-teacher KL / mutual view KL (GroupedItemMFDT5) and item-level random views; entry on top of finetune_geo.py; K_f = 50 eval (plain, 1c, f diagnostics); sanity checks
+│   ├── r21_views.py, finetune_r21.py, r21_eval.py, r21_check.py, r21_gain_diag.py   §21: grouped views / ensemble-teacher KL / mutual view KL (GroupedItemMFDT5), item-level random views, A+C combo rows (GroupedRandDataset); gain diagnostic; entry on top of finetune_geo.py; K_f = 50 eval (plain, 1c, f diagnostics); sanity checks
 │   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -263,7 +268,8 @@ mmgen/
     ├── mfd/mv_infer.sbatch        §20 Task 1 (STAGE=sweep on valid | apply on test, H200 | kf = K_f 20/50/100 for the chosen 1c; VARIANTS=, LIMIT=N smoke test)
     ├── mfd/dense_eval.sbatch      §20 Task 2 fused evaluation (STAGE=sweep | apply; dense alone and with the 1c views, joint alpha x w_d grid)
     ├── mfd/p2_stage2.sbatch       §20 Task 2 stage 2 (CPU): lambda chosen on Arts validation -> Instruments/Games pack, eval and dense eval
-    ├── r21/run_r21_train.sh, r21_gate.sbatch, pack_r21_train.sbatch, r21_eval.sbatch, r21_stage2.sbatch, r21_collect.sbatch   §21 runs (VAR G0|A01|A05|B01|B05|C033|C060; P1aref = dry-run reference), gate (macrec/r21_check.py + tools/r21_config_diff.py; writes only r21_* files), packs, H200 eval (K_f 50 plain + 1c + f diagnostics), Arts -> Instruments family choice (tools/r21_family_choice.py), CIs (tools/r21_collect.py -> geo/r21_<D>.json)
+    ├── r21/run_r21_train.sh, r21_gate.sbatch, pack_r21_train.sbatch, r21_eval.sbatch, r21_stage2.sbatch, r21_collect.sbatch   §21 runs (VAR G0|A01|A05|B01|B05|C033|C060|G0acc|A01acc|AC1|AC0; P1aref = dry-run reference; pack entry <D>:<VAR>[:<SEED>]), gate (macrec/r21_check.py + tools/r21_config_diff.py; writes only r21_* files), packs, H200 eval (K_f 50 plain + 1c + f diagnostics), Arts -> Instruments family choice (tools/r21_family_choice.py), CIs (tools/r21_collect.py -> geo/r21_<D>.json)
+    ├── r21/r21_gain.sbatch, r21_combo_stage.sbatch, r21_tool.sbatch   §21.6 gain diagnostic (macrec/r21_gain_diag.py + tools/r21_gain_report.py), §21.4 combo -> Instruments stage (tools/r21_combo_choice.py), any §21 CPU tool (e.g. TOOL="r21_seeds.py Arts" = §21.5 3-seed table)
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
@@ -595,7 +601,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `b951848` | §20.5–20.9: Task 3 seeds, K_f check, Task 2 Arts, Task 0 dense extension; `round20_collect` |
 | `60b73f8` | §21 code: r21 views / entry / eval / checks, gate, packs, eval, collection, stage 2 |
 | `7113441`, `d9cc025` | K_f = 50 main setting, §21 setup; grouped loss = mean over views (clipping), per-step grad-norm logging |
-| (next) | §19.5 clipping row, §21 loss-scale note, clip share in r21_collect |
+| `b823838`…`574381c` | §19.5 clipping row; §21.2 Arts results; accumulation/clipping gotcha |
+| `9d189dd` | §21 follow-up code: G0acc/A01acc, AC combos, gate checks, gain diagnostic, 3-seed / pairwise tools |
+| (next) | §21.3–21.6 setup and job chains (results pending) |
 
 ---
 
