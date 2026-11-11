@@ -2,7 +2,8 @@
 # Gate of the round-21 runs (docs/MFD_REPORT.md §21): macrec/r21_check.py (layout, loss identities, stop-gradient, view
 # rates, matched steps; on P1a seed 42's checkpoint) -> geo/<D>/r21_check.json, then dry runs of P1aref and every VAR
 # (sbatch/r21/run_r21_train.sh DRYRUN=1) and tools/r21_config_diff.py -> geo/gate/<D>/r21_config_diff.json. No training.
-# Writes only r21_* files (never geo_check.json / geo_config_diff.json, which round-20 jobs read).
+# Writes only r21_* files (never geo_check.json / geo_config_diff.json, which round-20 jobs read). r21_check.json is replaced
+# only when every check passes, and r21_config_diff.json is merged per run, so a failing gate never blocks queued runs.
 # Submit: sbatch --export=ALL,D=Arts sbatch/r21/r21_gate.sbatch   (VARS default: all seven)
 #SBATCH --account=torch_pr_69_tandon_advanced
 #SBATCH --partition=a100_tandon,h100_tandon,h200_tandon
@@ -24,7 +25,7 @@ OVERLAY=/scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3   # always :ro in job
 export WANDB_MODE=offline WANDB_DIR=$RUNS/wandb             # dry runs never train
 export HF_HOME=/scratch/yw8866/hf_cache USE_TF=0 TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 export TMPDIR=/scratch/yw8866/tmp/slurm_$SLURM_JOB_ID; mkdir -p "$TMPDIR"; export TRITON_CACHE_DIR=$TMPDIR/triton
-D=${D:-Arts}; VARS=${VARS:-"G0 A01 A05 B01 B05 C033 C060"}
+D=${D:-Arts}; VARS=${VARS:-"G0 A01 A05 B01 B05 C033 C060 G0acc A01acc AC1 AC0"}
 M=$TMPDIR/macrec; mkdir -p $M; cp $REPO/macrec/*.py $M/; cp -r $REPO/macrec/config $M/
 RR=$TMPDIR/run_r21_train.sh; cp $REPO/sbatch/r21/run_r21_train.sh $RR
 T=$TMPDIR/tools; mkdir -p $T; cp $REPO/sbatch/tools/r21_config_diff.py $REPO/sbatch/tools/plugin_config_diff.py $T/
@@ -35,7 +36,8 @@ set -euo pipefail
 source /ext3/env.sh && conda activate py310
 cd $M
 python -u r21_check.py --data_path $RUNS/data --dataset $D --p1a_ckpt $RUNS/mfd/$D/mfd122_mv_geoP1a/seed42 \
-  --out_file $RUNS/geo/$D/r21_check.json > $RUNS/geo/$D/r21_check.log 2>&1 || { tail -20 $RUNS/geo/$D/r21_check.log; echo 'R21 CHECK FAILED'; exit 1; }
+  --out_file $RUNS/geo/$D/r21_check.new.json > $RUNS/geo/$D/r21_check.log 2>&1 || { tail -20 $RUNS/geo/$D/r21_check.log; echo 'R21 CHECK FAILED (r21_check.json left as it was)'; exit 1; }
+mv $RUNS/geo/$D/r21_check.new.json $RUNS/geo/$D/r21_check.json        # replaced only when every check passes
 tail -1 $RUNS/geo/$D/r21_check.log
 for V in P1aref $VARS; do M=$M D=$D VAR=\$V SEED=42 DRYRUN=1 bash $RR; done
 cd $T && python r21_config_diff.py $D $VARS

@@ -8,6 +8,9 @@
  5 f distribution = softmax over the 256 <s0_*> codes at the text branch's position 0 (the f loss's logits)
  6 C: item-level view rates ~ p_full / (1 - p_full) / 2 each over 20k item draws; redrawn per build; target = full SID;
    validation stays the full view (MFDDataset)
+ 9 AC (§21.4): GroupedRandDataset rows = [full view, item-random, item-random] with the right per-item view rates (p_full
+   1/3 and 0), redrawn per build; mode A on an AC batch: loss - G0 loss = beta x KL(stopgrad(pbar) || p_row0)
+ 7b acc layout (G0acc / A01acc / AC*): 85 pairs per micro-batch x 4: optimizer steps per epoch vs P1a's (tolerance 2)
  8 clipping: HF's training loop clips through self.accelerator.clip_grad_norm_ (the call finetune_r21.py wraps to log every
    step's norm) and P1a's dry run has max_grad_norm 1.0
  7 matched compute: optimizer steps per epoch of grouped (341 pairs, accumulation 1) and C (256 x 4) vs P1a's train_stats
@@ -138,6 +141,50 @@ def main():
     check("7_steps_per_epoch", abs(g_spe - p1a_spe) <= 1, p1a=p1a_spe, grouped=g_spe, grouped_minus_p1a=g_spe - p1a_spe,
           C="= P1a by construction (same 3n examples, 256 x 4; checked in 6: len == 3n)",
           grouped_sequences_per_step=3 * PAIRS_PER_STEP, C_sequences_per_step=1024)
+    acc_micro = math.ceil(n / 85)
+    check("7b_steps_per_epoch_acc", min(abs(math.ceil(acc_micro / 4) - p1a_spe), abs(acc_micro // 4 - p1a_spe)) <= 2, p1a=p1a_spe,
+          micro_batches=acc_micro, steps_floor=acc_micro // 4, steps_ceil=math.ceil(acc_micro / 4), rows_per_step=4 * 85 * 3)
+    # 9 AC
+    for pf in (1 / 3, 0.0):
+        A = r21_views.GroupedRandDataset(args, "train", pf)
+        j = max(range(n), key=lambda i: len(A.inter_data[i]["inters"]))
+        h = A.inter_data[j]["inters"]
+        ex = A[j]
+        full_ok = ex["input_ids"][0] == "".join(A.vmap["full"][x] for x in h)
+        cnt = {"full": 0, "text": 0, "image": 0}
+        builds = set()
+        for _ in range(300):
+            e = A[j]
+            builds.add(tuple(e["input_ids"][1:]))
+            for row in e["input_ids"][1:]:
+                toks = tok.tokenize(row)
+                k = 0
+                for x in h:                                         # walk the row item by item (5 or 3 tokens)
+                    full5 = tok.tokenize(A.vmap["full"][x])
+                    if toks[k:k + 5] == full5:
+                        cnt["full"] += 1; k += 5
+                    elif toks[k:k + 3] == tok.tokenize(A.vmap["text"][x]):
+                        cnt["text"] += 1; k += 3
+                    else:
+                        assert toks[k:k + 3] == tok.tokenize(A.vmap["image"][x]), (row, x)
+                        cnt["image"] += 1; k += 3
+                assert k == len(toks)
+        tot = sum(cnt.values())
+        share = {k: v / tot for k, v in cnt.items()}
+        cond = full_ok and abs(share["full"] - pf) < 0.03 and abs(share["text"] - share["image"]) < 0.05 and len(builds) > 100 \
+            and ex["labels"] == A.sid2item[A.inter_data[j]["item"]] and len(A) == n
+        check(f"9_AC_rows_p{pf:.2f}", cond, row0_full=full_ok, share=share, distinct_builds_of_300=len(builds), items=len(h))
+    acb = {k: v.to(dev) for k, v in coll([r21_views.GroupedRandDataset(args, "train", 1 / 3)[i] for i in idx]).items()}
+    model.install_r21(tok, "G0", 0.0)
+    with torch.no_grad():
+        g0 = model(**acb).loss.item()
+        model.eval(); lg = model(**acb).logits; model.train()
+        model.install_r21(tok, "A", 0.1)
+        la = model(**acb).loss.item()
+    lpa = lg[:, 0, 0, fcols].float().log_softmax(-1).view(-1, 3, len(fcols))
+    pb = lpa.exp().mean(1)
+    kla = (pb * (pb.log() - lpa[:, 0])).sum(-1).mean().item()
+    check("9_AC_loss_is_G0_plus_beta_KL", abs(la - g0 - 0.1 * kla) < 1e-4 * max(1, la), loss=la, g0=g0, kl=kla, beta=0.1)
     # 8 clipping hook
     import inspect
     import transformers
@@ -148,6 +195,8 @@ def main():
     res["all_pass"] = ok
     json.dump(res, open(a.out_file, "w"), indent=1, default=str)
     print("ALL PASS" if ok else "SOME CHECK FAILED")
+    if not ok:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

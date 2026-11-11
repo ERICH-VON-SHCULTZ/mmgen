@@ -3,6 +3,7 @@ one of the r21_views.py methods swapped in:
   --r21_mode G0|A|B   grouped views (GroupedMVDataset + GroupedCollator, model r21_views.GroupedItemMFDT5)
   --r21_beta BETA     A / B: weight of the KL term
   --r21_mode C        item-level random views (ItemRandViewDataset), --r21_p_full P; model and loss = P1a
+  --r21_mode AC       §21.4: grouped [full, random, random] rows (GroupedRandDataset, --r21_p_full P in [0, 1)) + A's KL (--r21_beta)
   --dump_file PATH    dry run: resolved config dumped at trainer.train() (config_dryrun), no training
 Every other argument is finetune_geo.py's (the exact P1a command; batch / accumulation set by the caller to match
 compute: grouped runs use 341 pairs x 3 views = 1,023 sequences per optimizer step, accumulation 1).
@@ -30,9 +31,12 @@ def pop(name, default=None):
 
 MODE = pop("--r21_mode")
 BETA = float(pop("--r21_beta", 0.0))
-P_FULL = float(pop("--r21_p_full", 0.0))
-assert MODE in ("G0", "A", "B", "C"), MODE
-assert (MODE in ("A", "B")) == (BETA > 0) and (MODE == "C") == (P_FULL > 0)
+P_FULL = pop("--r21_p_full")
+P_FULL = None if P_FULL is None else float(P_FULL)
+assert MODE in ("G0", "A", "B", "C", "AC"), MODE
+assert (MODE in ("A", "B", "AC")) == (BETA > 0)
+assert (MODE == "C" and P_FULL is not None and 0 < P_FULL < 1) or (MODE == "AC" and P_FULL is not None and 0 <= P_FULL < 1) \
+    or (MODE in ("G0", "A", "B") and P_FULL is None)
 assert "--item_enc" in sys.argv and "--mfd" in sys.argv and "--dense_lambda" not in sys.argv, "r21 runs are P1a + one change"
 
 if __name__ == "__main__":
@@ -44,13 +48,19 @@ if __name__ == "__main__":
     import finetune_ext
     import mfd_data
     import r21_views
-    grouped = MODE in ("G0", "A", "B")
+    grouped = MODE in ("G0", "A", "B", "AC")
+    model_mode = "A" if MODE == "AC" else MODE                     # AC = A's KL on [full, random, random] rows
     if grouped:
         enc_struct.ItemMFDT5 = r21_views.GroupedItemMFDT5          # finetune_geo.setup() reads it at call time
         mfd_data.MFDCollator = r21_views.GroupedCollator            # finetune_mfd.py imports it at run time
 
     def load_r21(args):
-        train = r21_views.GroupedMVDataset(args, "train") if grouped else r21_views.ItemRandViewDataset(args, "train", P_FULL)
+        if MODE == "AC":
+            train = r21_views.GroupedRandDataset(args, "train", P_FULL)
+        elif grouped:
+            train = r21_views.GroupedMVDataset(args, "train")
+        else:
+            train = r21_views.ItemRandViewDataset(args, "train", P_FULL)
         return ConcatDataset([train]), ConcatDataset([mfd_data.MFDDataset(args, "valid")])
     mfd_data.load_mfd_datasets = load_r21
 
@@ -63,7 +73,7 @@ if __name__ == "__main__":
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             if grouped:
-                info.update(k["model"].install_r21(k["tokenizer"], MODE, BETA))
+                info.update(k["model"].install_r21(k["tokenizer"], model_mode, BETA))
             clip = self.accelerator.clip_grad_norm_
 
             def logged_clip(params, max_norm, *ca, **ck):

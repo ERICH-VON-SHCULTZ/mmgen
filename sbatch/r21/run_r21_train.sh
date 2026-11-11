@@ -5,6 +5,9 @@
 #        A01 / A05   G0 + ensemble-teacher KL, beta 0.1 / 0.5    (--r21_mode A --r21_beta 0.1|0.5; same batch as G0)
 #        B01 / B05   G0 + mutual view KL, beta 0.1 / 0.5         (--r21_mode B --r21_beta 0.1|0.5; same batch as G0)
 #        C033 / C060 item-level random views, p_full 1/3 / 0.6   (--r21_mode C --r21_p_full ..; P1a's batch 256 x 4)
+#   §21.3 / §21.4, in P1a's accumulation / clipping regime (85 pairs x 3 rows = 255 rows per micro-batch x 4 = 1,020 rows per step):
+#        G0acc / A01acc   G0 / A01 with that layout
+#        AC1 / AC0        rows [full, item-random, item-random] + A's KL, beta 0.1; random rows p_full 1/3 / 0 (--r21_mode AC)
 #        P1aref      DRYRUN only: the exact P1a command (finetune_geo.py), reference of the config gate
 # Every other argument = P1a (sbatch/geo/run_geo_train.sh KIND=mfd VAR=P1a): codebook init, item-level encoder, MFD, seqrec_mv,
 # LR 5e-4 cosine, warmup 0.01, wd 0.01, 400 epochs, early stopping patience 10 on validation loss.
@@ -21,10 +24,14 @@ case $VAR in
   A05)  R21="--r21_mode A --r21_beta 0.5" ;;
   B01)  R21="--r21_mode B --r21_beta 0.1" ;;
   B05)  R21="--r21_mode B --r21_beta 0.5" ;;
+  G0acc)  R21="--r21_mode G0"; BS=85; GA=4 ;;
+  A01acc) R21="--r21_mode A --r21_beta 0.1"; BS=85; GA=4 ;;
+  AC1)  R21="--r21_mode AC --r21_beta 0.1 --r21_p_full 0.3333333333333333"; BS=85; GA=4 ;;
+  AC0)  R21="--r21_mode AC --r21_beta 0.1 --r21_p_full 0"; BS=85; GA=4 ;;
   C033) R21="--r21_mode C --r21_p_full 0.3333333333333333"; BS=256; GA=4 ;;
   C060) R21="--r21_mode C --r21_p_full 0.6"; BS=256; GA=4 ;;
   P1aref) R21=""; BS=256; GA=4; [ "$DRYRUN" = 1 ] || { echo "P1aref is dry-run only"; exit 1; } ;;
-  *) echo "VAR must be G0, A01, A05, B01, B05, C033, C060 or P1aref"; exit 1 ;;
+  *) echo "VAR must be G0, A01, A05, B01, B05, C033, C060, G0acc, A01acc, AC1, AC0 or P1aref"; exit 1 ;;
 esac
 NAME=r21_$VAR; [ $VAR = P1aref ] && NAME=P1aref
 OUT=$RUNS/mfd/$D/$NAME/seed$SEED
@@ -44,7 +51,7 @@ cat > $OUT/run_config.json <<JSON
 {"dataset":"$D","run":"$NAME","variant":"$VAR","r21_args":"$R21","geo_args":"--geo codebook --item_enc","seed":$SEED,"index_file":"$IDX",
  "v1_index_sha256":"$(cut -d' ' -f1 $V1/index.sha256)","tokenizer_ckpt":"$TOKCK","tokenizer_sha256":"$(sha256sum < $TOKCK | cut -d' ' -f1)",
  "entry":"$([ $VAR = P1aref ] && echo finetune_geo.py || echo finetune_r21.py)","tasks":"seqrec_mv","model_class":"plain",
- "per_device_batch_size":$BS,"gradient_accumulation_steps":$GA,"sequences_per_step":$([ $BS = 341 ] && echo 1023 || echo 1024),
+ "per_device_batch_size":$BS,"gradient_accumulation_steps":$GA,"sequences_per_step":$([ $BS = 341 ] && echo 1023 || { [ $BS = 85 ] && echo 1020 || echo 1024; }),
  "learning_rate":"5e-4","weight_decay":0.01,"epochs":$EPOCHS,"patient":10,"lr_scheduler":"cosine",
  "warmup_ratio":0.01,"max_his_len":20,"prompt_num":4,"dataloader_num_workers":2,"control":"mfd/$D/mfd122_mv_geoP1a/seed$SEED",
  "git_commit":"$(cd $REPO && git rev-parse HEAD)","job_id":"${SLURM_JOB_ID:-}"}

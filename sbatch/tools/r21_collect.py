@@ -3,6 +3,9 @@ Per run with <run>/r21_eval/eval.json (macrec/r21_eval.py): valid / test metrics
 valid), f diagnostics, paired CIs on test vs P1a seed 42 plain, P1a seed 42 + 1c (both from P1a's own r21_eval, the
 reference row) and C merged seed 42 (users aligned by dataset index, 2,000 resamples, seed 0, 95% percentile);
 training: best epoch, epochs and steps run, steps per epoch, wall-clock, peak memory, GPU.
+Pairwise contrasts (PAIRS, when both runs exist): paired CIs on test (plain and +1c) and the valid difference, e.g. the §21.3
+regime controls (G0acc - P1a grouping, G0 - G0acc clipping / optimiser, A01acc - G0acc teacher KL in P1a's regime) and the
+§21.4 combos vs P1a, C033, A01, A01acc.
 Usage: python r21_collect.py <D> [run ...] (default: every mfd/<D>/r21_*/seed42 with an eval) -> mmgen_runs/geo/r21_<D>.json
 """
 import glob
@@ -19,6 +22,9 @@ from round20_collect import c_lists_seed, rank_of  # noqa: E402
 
 R = "/scratch/yw8866/mmgen_runs"
 REF = "mfd122_mv_geoP1a"
+PAIRS = [("r21_G0acc", REF), ("r21_G0", "r21_G0acc"), ("r21_A01acc", "r21_G0acc"), ("r21_A01", "r21_G0"), ("r21_A01acc", REF),
+         ("r21_A01", "r21_A01acc"), ("r21_C033", REF)] + \
+        [(ac, b) for ac in ("r21_AC1", "r21_AC0") for b in (REF, "r21_C033", "r21_A01", "r21_A01acc")] + [("r21_AC1", "r21_AC0")]
 
 
 def met(r):
@@ -44,12 +50,14 @@ def main():
                 assert abs(E[s][k]["hr10"] - (rk[s][k] < 10).mean()) < 1e-6, (run, s, k)
         return b, E, rk
     _, Eref, Rref = load(REF)
-    out = {"dataset": D, "C_seed42_test": met(C), "runs": {}}
+    out = {"dataset": D, "C_seed42_test": met(C), "runs": {}, "pairs": {}}
+    RK = {REF: Rref}
     for run in [REF] + [r for r in runs if r != REF]:
         if not os.path.exists(f"{R}/mfd/{D}/{run}/seed42/r21_eval/eval.json"):
             out["runs"][run] = {"missing": True}
             continue
         b, E, rk = load(run)
+        RK[run] = rk
         st = json.load(open(f"{b}/train_stats.json"))
         clip = (st.get("r21") or {}).get("clip")
         if clip is None:                                        # P1a: only every logging_steps-th norm is logged
@@ -67,6 +75,10 @@ def main():
             row["ci_test"][k] = {"vs_P1a_plain": paired(r, Rref["test"]["plain"], boot), "vs_P1a_1c": paired(r, Rref["test"]["1c"], boot),
                                  "vs_C": paired(r, C, boot)}
         out["runs"][run] = row
+    for a, b in PAIRS:
+        if a in RK and b in RK:
+            out["pairs"][f"{a} - {b}"] = {k: paired(RK[a]["test"][k], RK[b]["test"][k], boot) for k in ("plain", "1c")} | {
+                "valid_hr10_diff": {k: float((RK[a]["valid"][k] < 10).mean() - (RK[b]["valid"][k] < 10).mean()) for k in ("plain", "1c")}}
     json.dump(out, open(f"{R}/geo/r21_{D}.json", "w"), indent=1, default=str)
     f4 = lambda x: f"{x:.4f}"
     ci = lambda p: f"{p['hr10']['diff']:+.4f} [{p['hr10']['ci95'][0]:+.4f}, {p['hr10']['ci95'][1]:+.4f}]"
@@ -79,6 +91,13 @@ def main():
               "vs P1a+1c", ci(row["ci_test"]["plain"]["vs_P1a_1c"]), "vs C", ci(row["ci_test"]["plain"]["vs_C"]),
               "| f top1 v/t", f4(v["f"]["f_top1"]), f4(t["f"]["f_top1"]), "median", v["f"]["f_rank_median"], t["f"]["f_rank_median"],
               "| clipped", round(row["clip"]["clipped_share"], 3), "| best ep", row["train"]["best_epoch"], "steps/ep", round(row["train"]["steps_per_epoch"], 1))
+    print_pairs(out)
+
+
+def print_pairs(out):
+    for k, v in out["pairs"].items():
+        p = v["plain"]["hr10"]
+        print(f"[pair] {k}: plain test HR@10 {p['diff']:+.4f} [{p['ci95'][0]:+.4f}, {p['ci95'][1]:+.4f}], valid {v['valid_hr10_diff']['plain']:+.4f}")
 
 
 if __name__ == "__main__":

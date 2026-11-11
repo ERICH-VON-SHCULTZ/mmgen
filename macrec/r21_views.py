@@ -10,6 +10,8 @@ B   G0 + beta * mean over the 3 view pairs (u, v) of [KL(p_u || p_v) + KL(p_v ||
 C   P1a's layout (3 independent examples per pair per epoch, shuffled): every history item independently shows the full
     view (5 codes) with probability p_full, else the text or the image view (equal probability); redrawn every time
     the example is built. Model and loss = P1a (ItemRandViewDataset only).
+AC  (§21.4) grouped like G0, rows [full view, item-level random view, item-level random view] (GroupedRandDataset; p_full of
+    the random rows 1/3 or 0) + A's KL with the full row as the student; run in P1a's regime (85 pairs x 4 micro-batches).
 p_v = the decoder's softmax over the shared codes (<s0_*> tokens) at the position that predicts f (text branch, position
 0: the logits the f loss uses; f is counted once). The extra terms are added only in training (model.training); evaluation
 loss, early stopping and the saved model are P1a's (validation = full view, MFDDataset). The terms are averaged over pairs.
@@ -21,7 +23,7 @@ from transformers.modeling_outputs import Seq2SeqLMOutput
 from enc_struct import ItemMFDT5
 from mfd_data import VIEWS, MFDCollator, MFDDataset, view_maps
 
-MODES = ("G0", "A", "B", "C")
+MODES = ("G0", "A", "B", "C", "AC")
 
 
 class GroupedMVDataset(MFDDataset):
@@ -62,6 +64,29 @@ class ItemRandViewDataset(MFDDataset):
         d = self.inter_data[index % len(self.inter_data)]
         views = self.draw(len(d["inters"]))
         return dict(input_ids="".join(self.vmap[v][h] for v, h in zip(views, d["inters"])), labels=self.sid2item[d["item"]])
+
+
+class GroupedRandDataset(MFDDataset):
+    """AC: one example per pair: [full view, item-random view, item-random view]; each random row draws every item's view
+    independently (full with p_full, else text / image with equal probability), redrawn every build."""
+    task = "mfd_grouped_rand"
+
+    def __init__(self, args, mode="train", p_full=1 / 3):
+        assert mode == "train" and 0 <= p_full < 1
+        super().__init__(args, mode)
+        self.task = "seqrec_grouped_rand"
+        self.vmap = view_maps(self.indices)
+        self.p_full = p_full
+
+    draw = ItemRandViewDataset.draw
+
+    def __getitem__(self, index):
+        d = self.inter_data[index]
+        h = d["inters"]
+        rows = ["".join(self.vmap[VIEWS[0]][x] for x in h)]
+        for _ in range(2):
+            rows.append("".join(self.vmap[v][x] for v, x in zip(self.draw(len(h)), h)))
+        return dict(input_ids=rows, labels=self.sid2item[d["item"]])
 
 
 class GroupedCollator(MFDCollator):
