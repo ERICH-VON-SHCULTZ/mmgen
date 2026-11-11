@@ -131,6 +131,9 @@ are reference-only, not part of the main line.
 - **§21 (2026-11-09, running), `docs/MFD_REPORT.md` §21:** training-side view methods on P1a, Arts seed 42 then Instruments: G0 grouped
   views, A ensemble-teacher KL (β .1/.5), B mutual view KL (β .1/.5), C item-level random views (p_full 1/3, .6); plain K_f = 50 and
   +1c, f diagnostics. Code `macrec/r21_*.py`, `finetune_r21.py`, `sbatch/r21/`; jobs in `mmgen_runs/logs/round21_jobs.txt`.
+  **Arts done (2026-11-11, §21.2):** plain test HR@10 / NDCG@10: A01 0.1260 / 0.0920, C033 0.1261 / 0.0931 vs P1a 0.1227 / 0.0904 (+0.0033,
+  CI > 0) and P1a+1c 0.1241 (+0.002, CI includes 0); both tie C on HR@10, beat it on NDCG@10; valid 0.1435 / 0.1427 vs bar 0.1435.
+  Grouped runs (G0/A/B) are in a different clipping regime than P1a (accumulation, see §6 gotcha). Instruments (G0 A01 B01 C033) queued.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -426,6 +429,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | the chain eval's `save_seqrec_20.json` stores users in sampler order, not dataset order | align by `all_users` (= dataset index), as `sbatch/tools/mfd_paired.py` does |
 | `pack_train.sbatch` (24 CPUs, long time limit) is rejected on h200_tandon ("partition not valid for this job") | train with `--partition=a100_tandon,h100_tandon --gres=gpu:1`; H200 only for evals |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
+| transformers 4.47.0 does **not** divide the loss by `gradient_accumulation_steps` (accelerate's division is disabled in `create_accelerator_and_postprocess`; `training_step` does not divide), so 256 x 4 runs backprop the SUM of 4 micro-batch means (~4 x the gradient) and are clipped at max_grad_norm 1.0 on every step (P1a pre-clip median 2.7) | all runs in this repo share it, so comparisons between 256 x 4 runs are fair; a run with a different accumulation (e.g. §21's grouped runs, 1 micro-batch, median 0.76, 12–14% clipped) is in a different optimisation regime — match the accumulation, not just the rows per step (`docs/MFD_REPORT.md` §21.2) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
 | `evaluation_strategy=` is deprecated | works in transformers 4.47; **do not upgrade transformers past 4.47** |

@@ -1864,9 +1864,41 @@ Arts valid HR@10 with plain inference -> `geo/r21_family_choice.json`, then Inst
 K_f = 50 reproduces P1a's K_f = 100 test numbers exactly (0.1227 / 0.0904). The promotion bar on Arts is therefore **valid HR@10
 ≥ 0.1435** (P1a plain 0.1415 + 0.002), plain inference.
 
-Runs G0, A01, A05, B01, B05, C033, C060: **TODO (pending)**. Packs 22547247 / 22547248 (resubmitted 2026-11-10 with 12 CPUs /
-80 GB / 16 h: the 24 CPU / 160 GB / 48 h request had not started in over a day on a full cluster), evals after each pack,
-stage 2 22547256.
+**All Arts runs (done 2026-11-11; packs 22547247 / 22547248, evals 22547249–55, H200; `geo/r21_Arts.json`).** Test CIs are on
+HR@10 with plain inference unless stated; "clipped" = share of optimizer steps whose pre-clip gradient norm > 1.0 (every step
+logged for round-21 runs; every 50th for P1a).
+
+| run | valid HR@10 plain / 1c | test plain HR@10 / NDCG@10 | test +1c HR@10 / NDCG@10 (1c config) | plain − P1a plain | plain − P1a+1c | plain − C | 1c − C | f top-1 v / t | true-f rank median (mean) v / t | f recall@10 v / t | best ep / steps / train h | clipped (median norm) | ms/user plain / 1c |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| P1a (ref) | 0.1415 / 0.1428 | 0.1227 / 0.0904 | 0.1241 / 0.0914 (w 1/.5, α .25/.25) | 0 | −0.0014 [−.0027, −.0001] | −0.0040 [−.0071, −.0009] | −0.0026 [−.0056, +.0005] | 0.131 / 0.117 | 24 (49.7) / 28 (53.4) | 0.347 / 0.320 | 56 / 20,856 / 2.84 | 1.000 (2.66) | 10.1 / 10.3 |
+| G0 | 0.1414 / 0.1433 | 0.1237 / 0.0906 | 0.1234 / 0.0907 (w 1/1, α .5/.25) | +0.0009 [−.0018, +.0036] | −0.0004 [−.0030, +.0023] | −0.0030 [−.0060, +.0000] | −0.0032 [−.0062, −.0001] | 0.132 / 0.118 | 24 (49.3) / 28 (52.9) | 0.347 / 0.323 | 68 / 24,648 / 1.20 | 0.135 (0.77) | 10.1 / 10.3 |
+| **A01** | **0.1435** / 0.1458 | **0.1260 / 0.0920** | 0.1268 / 0.0921 (w 1/.25, α 0/.25) | **+0.0033 [+.0005, +.0059]** | +0.0019 [−.0008, +.0046] | −0.0007 [−.0038, +.0026] | +0.0001 [−.0030, +.0032] | 0.134 / 0.119 | 23 (48.6) / 27 (52.4) | 0.352 / 0.328 | 75 / 26,860 / 1.32 | 0.122 (0.76) | 10.1 / 10.2 |
+| A05 | 0.1403 / 0.1419 | 0.1246 / 0.0906 | 0.1248 / 0.0909 (w 1/.5, α .5/0) | +0.0019 [−.0009, +.0045] | +0.0005 [−.0023, +.0032] | −0.0021 [−.0051, +.0010] | −0.0019 [−.0049, +.0010] | 0.132 / 0.119 | 23 (48.1) / 26 (51.8) | 0.351 / 0.325 | 75 / 26,860 / 1.32 | 0.116 (0.76) | 10.1 / 10.2 |
+| B01 | 0.1418 / 0.1430 | 0.1239 / 0.0908 | 0.1247 / 0.0912 (w 1/.5, α .25/.25) | +0.0012 [−.0014, +.0040] | −0.0001 [−.0028, +.0026] | −0.0028 [−.0057, +.0003] | −0.0020 [−.0051, +.0010] | 0.131 / 0.119 | 23 (48.2) / 27 (51.9) | 0.353 / 0.326 | 75 / 26,860 / 1.32 | 0.119 (0.76) | 10.1 / 10.3 |
+| B05 | 0.1364 / 0.1383 | 0.1187 / 0.0857 | 0.1192 / 0.0862 (w 1/.25, α .25/0) | −0.0040 [−.0068, −.0013] | −0.0054 [−.0083, −.0025] | −0.0080 [−.0111, −.0048] | −0.0075 [−.0106, −.0044] | 0.122 / 0.109 | 24 (48.2) / 28 (52.1) | 0.342 / 0.314 | 75 / 26,860 / 0.88 | 0.112 (0.75) | 10.4 / 10.5 |
+| **C033** | **0.1427** / 0.1456 | **0.1261 / 0.0931** | 0.1268 / 0.0938 (w 1/.75, α 0/.5) | **+0.0033 [+.0006, +.0060]** | +0.0020 [−.0008, +.0047] | −0.0006 [−.0037, +.0025] | +0.0001 [−.0029, +.0032] | 0.132 / 0.120 | 24 (49.9) / 28 (53.1) | 0.348 / 0.325 | 58 / 21,488 / 1.13 | 1.000 (2.67) | 10.0 / 10.2 |
+| C060 | 0.1399 / 0.1423 | 0.1232 / 0.0908 | 0.1249 / 0.0918 (w 1/.5, α 0/.25) | +0.0005 [−.0023, +.0033] | −0.0009 [−.0036, +.0019] | −0.0035 [−.0066, −.0003] | −0.0018 [−.0049, +.0013] | 0.130 / 0.119 | 24 (50.5) / 29 (53.7) | 0.344 / 0.321 | 50 / 18,960 / 1.06 | 1.000 (2.79) | 10.0 / 10.1 |
+
+Test NDCG@10 with plain inference vs P1a / vs C: A01 +0.0016 [+.0001, +.0031] / +0.0024 [+.0005, +.0041]; C033 +0.0027
+[+.0012, +.0043] / +0.0035 [+.0016, +.0053]; G0 +0.0002 / +0.0010, A05 +0.0002 / +0.0010, B01 +0.0004 / +0.0011, C060 +0.0004 /
++0.0011 (all CIs include 0); B05 −0.0047 / −0.0040 (CIs < 0). Train hours of packed runs are contended wall-clock (4 or 3 runs
+per GPU) and not comparable with P1a's (alone). Per-family choice for Instruments (`geo/r21_family_choice.json`): G0, A01 (0.1435
+vs A05 0.1403), B01 (0.1418 vs B05 0.1364), C033 (0.1427 vs C060 0.1399).
+
+**Confound found after the runs: the grouped runs train in a different clipping regime.** P1a, C033 and C060 clip on 100% of
+steps (pre-clip norm median 2.7); G0 / A / B on 12–14% (median 0.76). Cause: transformers 4.47.0 does not divide the loss by
+`gradient_accumulation_steps` (`Trainer.create_accelerator_and_postprocess`: "We explicitly don't rely on the Accelerator to do
+gradient accumulation", so accelerate's division is off, and `training_step` does not divide either), so with 256 x 4 the
+backward pass sums four micro-batch mean losses: about 4 x the gradient of the 1,024-row mean. Every 256 x 4 run in this repo
+(P1a, all MFD / chain runs, the C / D baselines) is in that regime, clipped at 1.0 on essentially every step; the grouped runs,
+one micro-batch of 1,023 rows, see the true mean gradient (norm ~0.8) and are mostly unclipped. (Adam is insensitive to the
+4 x itself; what differs is whether every step is renormalised to norm 1.) So:
+- **C033 vs P1a is clean** (same layout, batch, accumulation and clipping regime): +0.0033 test HR@10 (CI > 0), +0.0027 NDCG@10.
+- **A01 vs G0 is clean** (same grouped batch and regime): the ensemble-teacher KL adds +0.0020 valid and +0.0023 test HR@10.
+- **G0 vs P1a, and therefore A / B vs P1a, mix two changes:** views grouped in one step and the unclipped optimisation (and
+  G0 / A / B stop later: best epoch 68–75 vs 56).
+- A regime-matched grouped control (85 pairs = 255 rows x 4 micro-batches, the same accumulation path as P1a, 1,020 rows per
+  step) would separate them; **not run** (decision pending, see 21.4).
 
 ### 21.3 Instruments results
 
@@ -1880,6 +1912,17 @@ Round-21 runs (the per-family winners from 21.2): **TODO (submitted by stage 2).
 
 ### 21.4 Interpretation and promotion
 
-**TODO.** Questions: does any method reach or beat P1a + 1c with plain inference; does 1c still add on top; do the f
+**Arts (Instruments pending).**
+- **Plain inference reaches P1a + 1c:** A01 and C033 are +0.0019 / +0.0020 test HR@10 over P1a + 1c (CIs include 0) and
+  +0.0033 over plain P1a (CI > 0), at no inference cost; both tie C on HR@10 (−0.0007 / −0.0006) and beat C on NDCG@10 (CI > 0).
+- **1c adds little on top:** +0.0008 (A01) / +0.0007 (C033) test HR@10 vs +0.0014 for P1a; validation still picks a non-zero α.
+- **f diagnostics move with HR@10 only weakly:** f top-1 +0.001 to +0.003, true-f median rank −1, recall@10 +0.005 for A01; B05,
+  the worst run, has the lowest f top-1 (0.109 test). The gains are not mainly a better P(f) top-1.
+- **G0 alone ≈ P1a** (valid −0.0001, test +0.0009, CIs include 0), but in a different clipping regime (above), so "grouping
+  has no effect" is not established; A and B are read against G0.
+- **Promotion bar (Arts valid ≥ 0.1435):** A01 0.14348 (bar 0.14349: misses by 1e-5, i.e. at the bar); C033 0.1427 (misses
+  by 0.0008). Neither clears it strictly on validation; both clear it on test. Instruments decides (21.3).
+
+**TODO (after Instruments):** final answers to: does any method reach or beat P1a + 1c with plain inference; does 1c still add on top; do the f
 diagnostics move with HR@10; is G0 different from P1a (if yes, A and B are read against G0). Promotion bar: Arts valid HR@10
 ≥ P1a plain + 0.002 with plain inference, holding on Instruments.
