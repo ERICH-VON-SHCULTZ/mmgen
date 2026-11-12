@@ -1941,7 +1941,11 @@ validation). Table (`tools/r21_seeds.py` -> `geo/r21_seeds_Arts.json`): mean ± 
 C033+1c, C merged, D; per seed paired CIs vs C of the same seed and vs P1a (plain, +1c) of the same seed. Jobs: pack 22679953
 (nice 100), evals 22679961–66 (incl. P1a 43 / 44), table 22679967.
 
-**TODO (pending).**
+**P1a reference re-evals at seeds 43 / 44 (done, jobs 22679961 / 22679964):** test plain HR@10 / NDCG@10 0.1240 / 0.0910 and
+0.1232 / 0.0913 (same as §20.5's K_f = 100 numbers), +1c 0.1237 / 0.0912 (seed 43: 1c below plain on test) and 0.1240 / 0.0918;
+valid plain 0.1377 / 0.1405. A01 / C033 seeds 43 / 44: **TODO (pack 22679953 pending).**
+
+
 
 ### 21.6 Where do A01 and C033 gain? (no training)
 
@@ -1952,7 +1956,40 @@ P1a, G0, A01, C033 (+ G0acc, A01acc, AC1, AC0 when trained); users rescued (P1a 
 into f crossing the K_f cut / rank change mostly across buckets (|Δn_other| > |Δn_within|) / mostly within the own bucket / tie.
 Jobs: 22679929 (P1a, G0, A01, C033), 22679952 (G0acc, A01acc), 22679973 (AC1, AC0).
 
-**TODO (pending).**
+**P1a, G0, A01, C033 (done, job 22679929; every run reproduces its r21_eval test ranks exactly; `geo/r21_gain_Arts.json`).**
+Test, plain K_f = 50, 22,171 users:
+
+| run | HR@10 | mean log P(true f) | margin log P(true f) − log P(top f), mean / median | f top-1 |
+|---|---|---|---|---|
+| P1a | 0.1227 | −4.713 | −2.337 / −2.126 | 0.1165 |
+| G0 | 0.1237 | −4.686 | −2.286 / −2.098 | 0.1182 |
+| A01 | 0.1260 | −4.651 | −2.142 / −1.951 | 0.1191 |
+| C033 | 0.1261 | −4.697 | −2.311 / −2.118 | 0.1202 |
+
+Rescued (P1a miss → hit) and lost (P1a hit → miss), by where the target's rank changed:
+
+| run | rescued | of which: f crosses the K_f cut / across buckets / within own bucket / tie | lost | of which: cut / across / within / tie | Δ margin rescued / lost | true-f rank improved: rescued / lost |
+|---|---|---|---|---|---|---|
+| G0 | 456 | 35 / 406 / 13 / 2 | 435 | 29 / 391 / 15 / 0 | +0.50 / −0.44 | 64% / 9% |
+| A01 | 482 | 29 / 435 / 17 / 1 | 409 | 24 / 372 / 11 / 2 | +0.50 / −0.27 | 62% / 13% |
+| C033 | 516 | 39 / 458 / 12 / 7 | 442 | 31 / 393 / 14 / 4 | +0.58 / −0.53 | 70% / 11% |
+
+(Median change of the other-bucket count above the target: −13 / −13 / −15 on rescued users, +13 / +13 / +15 on lost ones; the
+own-bucket count's median change is 0 everywhere.)
+
+Reading:
+- **~90% of both rescues and losses are cross-bucket**: the target moves past (or behind) items of other f codes; only 2–4% are
+  within its own bucket, 6–8% are the true f crossing the K_f = 50 cut. This is the Task-0 error type (§20.1), and both A01 and
+  C033 act on it.
+- **The net gain is a churn difference**: A01 +73 users (482 − 409), C033 +74 (516 − 442), G0 +21 (456 − 435). Each model swaps
+  ~900 users relative to P1a for a net 20–75.
+- **A01 works through P(f)**: its whole-population margin improves by +0.20 nats (−2.34 → −2.14) and mean log P(true f) by
+  +0.06; its losses keep a smaller margin drop (−0.27). **C033 barely changes the population-level P(f)** (margin +0.03, log P(true f)
+  +0.02) yet rescues the most users, with the largest margin swings on the churned users (+0.58 / −0.53): its gain is a reordering
+  concentrated on specific users rather than a uniformly sharper P(f). This is why f top-1 hardly moves for either.
+- G0 sits between P1a and A01 on every number; whether that is grouping or the clipping regime is §21.3.
+
+AC1 / AC0 / G0acc / A01acc rows: **TODO (pending)**.
 
 ### 21.7 Instruments results (round-21 family winners + regime controls)
 
