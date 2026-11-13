@@ -1900,6 +1900,14 @@ one micro-batch of 1,023 rows, see the true mean gradient (norm ~0.8) and are mo
 - A regime-matched grouped control (85 pairs = 255 rows x 4 micro-batches, the same accumulation path as P1a, 1,020 rows per
   step) separates them: §21.3.
 
+**Job note (2026-11-13).** The packs listed in §21.3–21.5 never started (fair-share factor 500 vs ~1,450–2,000 for the jobs
+ahead; the scheduler's start estimate was the same for any time / CPU / memory request, i.e. priority-bound, not size-bound). They
+were cancelled and merged into two GPU jobs so that only two slots are needed: **job A 23001937** (Instruments G0, A01, B01, C033 +
+Arts / Instruments G0acc, A01acc; 8 runs) and **job B 23001938** (nice 100: Arts A01 / C033 seeds 43 / 44 + AC1, AC0; 6 runs),
+24 CPUs / 140 GB / 16 h each (a 4-run pack peaked at 37 GB GPU memory, 98% utilisation; all A100 / H100 have 80 GB). Evals,
+collections, stages and gain diagnostics are re-chained on them; current IDs in `mmgen_runs/logs/round21_jobs.txt`. Runs share
+a GPU with more neighbours, so their train hours are not comparable with earlier packs (metrics are unaffected).
+
 ### 21.3 Clipping-regime controls (Arts and Instruments, seed 42)
 
 Decision (2026-11-11): the transformers 4.47 accumulation behaviour is **not** fixed globally (P1a, C and every baseline share
