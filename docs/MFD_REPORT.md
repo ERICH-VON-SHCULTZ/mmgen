@@ -1926,8 +1926,42 @@ per epoch at 85 x 4) and 9 (AC rows / loss); the gate now replaces `r21_check.js
 evals Arts 22679936 / 22679938, Instruments 22679937 / 22679949; collections 22679950 (Arts), 22679951 (Instruments, after the
 round-21 Instruments evals too).
 
-**TODO (pending): table per dataset: G0, G0acc, A01, A01acc, P1a with plain / +1c, the three contrasts, clipped share and median
-pre-clip norm, best epoch.**
+**Done (job A 23001937, evals 23001939–99, collections 23002000 / 23002001; `geo/r21_<D>.json` "pairs").** Plain K_f = 50:
+
+| dataset | run | regime (clipped share) | valid HR@10 | test HR@10 / NDCG@10 | test +1c HR@10 | best ep / steps per ep |
+|---|---|---|---|---|---|---|
+| Arts | P1a | 256 x 4 (100%) | 0.1415 | 0.1227 / 0.0904 | 0.1241 | 56 / 316 |
+| | G0acc | 85 x 4 (100%) | 0.1404 | 0.1246 / 0.0922 | 0.1261 | 78 / 317 |
+| | G0 | 341 x 1 (13.5%) | 0.1414 | 0.1237 / 0.0906 | 0.1234 | 68 / 316 |
+| | A01acc | 85 x 4 (100%) | 0.1414 | 0.1261 / 0.0929 | 0.1268 | 75 / 317 |
+| | A01 | 341 x 1 (12.2%) | 0.1435 | 0.1260 / 0.0920 | 0.1268 | 75 / 316 |
+| Instruments | P1a | 256 x 4 (100%) | 0.1545 | 0.1291 / 0.1006 | 0.1314 | 47 / 248 |
+| | G0acc | 85 x 4 (100%) | 0.1576 | 0.1289 / 0.0998 | 0.1299 | 61 / 249 |
+| | G0 | 341 x 1 (15.7%) | 0.1574 | 0.1279 / 0.0996 | 0.1281 | 58 / 249 |
+| | A01acc | 85 x 4 (100%) | 0.1591 | 0.1269 / 0.0989 | 0.1268 | 58 / 249 |
+| | A01 | 341 x 1 (15.6%) | 0.1574 | 0.1280 / 0.0994 | 0.1284 | 58 / 249 |
+
+Contrasts (plain; test HR@10 paired CI, valid difference):
+
+| contrast | Arts test | Arts valid | Instruments test | Instruments valid |
+|---|---|---|---|---|
+| grouping: G0acc − P1a | +0.0019 [−.0008, +.0045] | −0.0012 | −0.0003 [−.0032, +.0027] | +0.0031 |
+| clipping / optimiser: G0 − G0acc | −0.0009 [−.0036, +.0018] | +0.0011 | −0.0009 [−.0038, +.0016] | −0.0001 |
+| teacher KL, P1a regime: A01acc − G0acc | +0.0014 [−.0012, +.0041] | +0.0011 | −0.0019 [−.0046, +.0006] | +0.0016 |
+| teacher KL, one micro-batch: A01 − G0 | +0.0023 [−.0002, +.0048] | +0.0020 | +0.0001 [−.0024, +.0026] | +0.0000 |
+| A01acc − P1a | +0.0033 [+.0008, +.0059] | −0.0001 | −0.0022 [−.0051, +.0005] | +0.0047 |
+| A01 − A01acc | −0.0000 [−.0024, +.0024] | +0.0020 | +0.0011 [−.0013, +.0034] | −0.0017 |
+
+Reading:
+- **No contrast is significant on test, and none has a consistent sign across datasets and splits.** The clipping regime
+  (G0 − G0acc) is −0.0009 on test on both datasets with validation differences of +0.0011 / −0.0001: within noise. Grouping and
+  the teacher KL each move Arts test by +0.0014 to +0.0023 and Instruments test by −0.0019 to +0.0001.
+- **So the confound does not explain the Arts gains:** A01acc (P1a's regime) reproduces A01's Arts test numbers (0.1261 vs
+  0.1260), and the regimes give the same f diagnostics (§21.6).
+- **Validation and test disagree on both datasets:** on Instruments every grouped run gains +0.0029 to +0.0047 valid HR@10 over
+  P1a yet none gains on test (−0.0003 to −0.0022); on Arts A01acc is +0.0033 on test with −0.0001 on validation. With these
+  effect sizes (≈ 0.002–0.003, CI half-width ≈ 0.0027 on 22k users) single-seed selection is near its resolution; §21.5's seeds
+  decide.
 
 ### 21.4 A + C combos (Arts, seed 42)
 
@@ -1997,7 +2031,10 @@ Reading:
   concentrated on specific users rather than a uniformly sharper P(f). This is why f top-1 hardly moves for either.
 - G0 sits between P1a and A01 on every number; whether that is grouping or the clipping regime is §21.3.
 
-AC1 / AC0 / G0acc / A01acc rows: **TODO (pending)**.
+**G0acc, A01acc (done, job 23002002):** G0acc HR@10 0.1246, mean log P(true f) −4.708, margin −2.314 / −2.138, f top-1 0.1178;
+rescued 490 (cut 21 / across 450 / within 15 / tie 4), lost 448 (19 / 409 / 17 / 3). A01acc 0.1261, −4.645, −2.133 / −1.954, 0.1217;
+rescued 478 (22 / 432 / 22 / 2), lost 404 (22 / 364 / 14 / 4). The teacher KL sharpens P(f) the same way in both regimes (margin
++0.20 nats over P1a for A01acc as for A01); grouping alone (G0acc) does not (margin +0.02). AC1 / AC0 rows: **TODO (pending)**.
 
 ### 21.7 Instruments results (round-21 family winners + regime controls)
 
@@ -2007,7 +2044,20 @@ AC1 / AC0 / G0acc / A01acc rows: **TODO (pending)**.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | P1a (ref) | 0.1545 / 0.1563 | 0.1291 / 0.1006 | 0.1314 / 0.1018 (w 1/1, α 1/0) | −0.0022 [−.0036, −.0009] | −0.0010 [−.0044, +.0023]; NDCG +0.0008 [−.0009, +.0025] | +0.0012 [−.0021, +.0047]; NDCG +0.0021 [+.0003, +.0038] | 0.123 / 0.105 | 33 (53.9) / 36 (57.6) | 0.294 / 0.264 | 47 / 14,136 | 100% of logged steps | 8.0 / 8.1 |
 
-Round-21 runs (the per-family winners from 21.2): **TODO (submitted by stage 2).**
+**Round-21 family winners (done, job A; evals 23001939–42; `geo/r21_Instruments.json`).** Plain K_f = 50; CIs on test HR@10:
+
+| run | valid HR@10 plain / 1c | test plain HR@10 / NDCG@10 | test +1c HR@10 / NDCG@10 | plain − P1a | plain − P1a+1c | plain − C | f top-1 v / t | true-f median v / t | clipped | best ep |
+|---|---|---|---|---|---|---|---|---|---|---|
+| P1a (ref) | 0.1545 / 0.1563 | 0.1291 / 0.1006 | 0.1314 / 0.1018 | 0 | −0.0022 [−.0036, −.0009] | −0.0010 [−.0044, +.0023] | 0.123 / 0.105 | 33 / 36 | 100% | 47 |
+| G0 | 0.1574 / 0.1588 | 0.1279 / 0.0996 | 0.1281 / 0.1002 | −0.0012 [−.0042, +.0016] | −0.0034 [−.0064, −.0006] | −0.0022 [−.0054, +.0010] | 0.125 / 0.106 | 32 / 36 | 15.7% | 58 |
+| A01 | 0.1574 / 0.1583 | 0.1280 / 0.0994 | 0.1284 / 0.0998 | −0.0012 [−.0040, +.0019] | −0.0034 [−.0062, −.0005] | −0.0022 [−.0053, +.0010] | 0.124 / 0.106 | 31 / 36 | 15.6% | 58 |
+| B01 | 0.1539 / 0.1557 | 0.1267 / 0.0985 | 0.1259 / 0.0979 | −0.0025 [−.0051, +.0005] | −0.0047 [−.0075, −.0019] | −0.0034 [−.0066, −.0002] | 0.121 / 0.105 | 31 / 36 | 15.5% | 58 |
+| **C033** | 0.1584 / 0.1598 | **0.1292 / 0.1010** | 0.1310 / 0.1019 | +0.0001 [−.0027, +.0030] | −0.0022 [−.0050, +.0008] | −0.0009 [−.0041, +.0024] | 0.126 / 0.107 | 32 / 36 | 100% | 51 |
+
+Reading: **nothing carries to Instruments on test.** C033 ties P1a (+0.0001) and stays below P1a + 1c (−0.0022); A01 / G0 are
+−0.0012, B01 −0.0025. On validation every run except B01 is +0.0029 to +0.0039 above P1a (the Arts-style gain appears on
+validation only). 1c still adds on top (+0.0018 for C033, +0.0004 for A01). Regime controls on Instruments: §21.3.
+
 
 ### 21.8 Interpretation and promotion
 
