@@ -1985,7 +1985,9 @@ C033+1c, C merged, D; per seed paired CIs vs C of the same seed and vs P1a (plai
 
 **P1a reference re-evals at seeds 43 / 44 (done, jobs 22679961 / 22679964):** test plain HR@10 / NDCG@10 0.1240 / 0.0910 and
 0.1232 / 0.0913 (same as §20.5's K_f = 100 numbers), +1c 0.1237 / 0.0912 (seed 43: 1c below plain on test) and 0.1240 / 0.0918;
-valid plain 0.1377 / 0.1405. A01 / C033 seeds 43 / 44: **TODO (pack 22679953 pending).**
+valid plain 0.1377 / 0.1405. **Seed 43 (job B 23001938 trained 2026-11-15; evals 23002005 / 23002006):** A01 valid 0.1419 (+0.0042
+vs P1a seed 43), test 0.1269 / 0.0927 (+0.0029), +1c 0.1260; C033 valid 0.1432 (+0.0055), test 0.1261 / 0.0917 (+0.0021), +1c 0.1258;
+C seed 43 merged 0.1270. Seed 44 and the 3-seed table with paired CIs: **TODO (evals 23002007 / 23002016 pending, table 23002017).**
 
 
 
