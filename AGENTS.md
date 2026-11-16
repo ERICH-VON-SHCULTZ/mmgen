@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-15 (main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-15 (round 22 started; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -146,6 +146,12 @@ are reference-only, not part of the main line.
   **3 seeds, Arts (2026-11-15, §21.5):** A01 0.1263 ± .0005 / 0.0923 vs P1a 0.1233 ± .0006 / 0.0909, P1a+1c 0.1239, C 0.1262 ± .0012 / 0.0898,
   D 0.1255; A01 − P1a CI > 0 on every seed, valid +0.002 to +0.004 on every seed (meets the Arts bar); C033 0.1254 ± .0011 (CI > 0 on seed 42
   only). AC1 combo: valid 0.1411, test 0.1259 (no gain over A01 / C033; not chained). Pending: AC0 eval, round-20 dense evals.
+  **Round-21 finish (§21.9, running):** A01 on Instruments 43/44 + Games 42/43/44, P1a re-evals, 3-dataset x 3-seed table with valid/test
+  CIs vs P1a and C and a pooled bootstrap (`tools/r21_seeds_all.py`). No promotion call (user decides).
+- **Round 22 (2026-11-15, running), `docs/MFD_REPORT.md` §22; jobs `mmgen_runs/logs/round22_jobs.txt`:** exploratory probes on A01.
+  E3 codebook-smoothed P(f) (no training, `macrec/r22_e3_smooth.py`); E2 step 1 t1/i1 diagnostic vs C (`r22_e2_diag.py`), step 2 aux
+  t1/i1 heads at the f position (`r22_aux.py`, `r22_e2_eval.py`, γ 0.1/0.5); E1 A01 on the locked 1+3+3 SIDs. E1 step 0: 1+2+2 and
+  1+3+3 come from separate tokenizer runs (no shared codebooks, prefixes differ). `enc_struct` counts third-level codes (1+2+2 unchanged).
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -201,6 +207,7 @@ mmgen/
 │   ├── dense_head.py      §20 Task 2: DenseItemMFDT5 = P1a + dense item-level head (decoder start state x summed code embeddings), loss in training only
 │   ├── dense_eval.py      §20 Task 2: fused score P1a + w_d log-softmax(dense), f-selection rules A/B, valid sweep / test apply
 │   ├── r21_views.py, finetune_r21.py, r21_eval.py, r21_check.py, r21_gain_diag.py   §21: grouped views / ensemble-teacher KL / mutual view KL (GroupedItemMFDT5), item-level random views, A+C combo rows (GroupedRandDataset); gain diagnostic; entry on top of finetune_geo.py; K_f = 50 eval (plain, 1c, f diagnostics); sanity checks
+│   ├── r22_aux.py, r22_e3_smooth.py, r22_e2_diag.py, r22_e2_eval.py, r22_check.py   §22: aux t1/i1 heads (AuxGroupedItemMFDT5, loaded by mfd_eval.load_mfd_model), codebook-smoothed P(f), t1/i1 rank diagnostic, aux-score eval, gate checks
 │   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -277,6 +284,7 @@ mmgen/
     ├── mfd/p2_stage2.sbatch       §20 Task 2 stage 2 (CPU): lambda chosen on Arts validation -> Instruments/Games pack, eval and dense eval
     ├── r21/run_r21_train.sh, r21_gate.sbatch, pack_r21_train.sbatch, r21_eval.sbatch, r21_stage2.sbatch, r21_collect.sbatch   §21 runs (VAR G0|A01|A05|B01|B05|C033|C060|G0acc|A01acc|AC1|AC0; P1aref = dry-run reference; pack entry <D>:<VAR>[:<SEED>]), gate (macrec/r21_check.py + tools/r21_config_diff.py; writes only r21_* files), packs, H200 eval (K_f 50 plain + 1c + f diagnostics), Arts -> Instruments family choice (tools/r21_family_choice.py), CIs (tools/r21_collect.py -> geo/r21_<D>.json)
     ├── r21/r21_gain.sbatch, r21_combo_stage.sbatch, r21_tool.sbatch   §21.6 gain diagnostic (macrec/r21_gain_diag.py + tools/r21_gain_report.py), §21.4 combo -> Instruments stage (tools/r21_combo_choice.py), any §21 CPU tool (e.g. TOOL="r21_seeds.py Arts" = §21.5 3-seed table)
+    ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|eval, SID=1+2+2|1+3+3); reports tools/r22_e3_report.py, r22_e2_report.py; §21.9 table tools/r21_seeds_all.py
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
@@ -610,7 +618,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `7113441`, `d9cc025` | K_f = 50 main setting, §21 setup; grouped loss = mean over views (clipping), per-step grad-norm logging |
 | `b823838`…`574381c` | §19.5 clipping row; §21.2 Arts results; accumulation/clipping gotcha |
 | `9d189dd` | §21 follow-up code: G0acc/A01acc, AC combos, gate checks, gain diagnostic, 3-seed / pairwise tools |
-| (next) | §21.3–21.6 setup and job chains (results pending) |
+| `d65db02`…`7ae8a04` | §21.3–21.7 results, 3-seed Arts table, merged packs |
+| `6b9bdda` | §21.9 tool; §22 code (E3, E2, E1) |
+| (next) | §21.9 / §22 setup and job chains |
 
 ---
 

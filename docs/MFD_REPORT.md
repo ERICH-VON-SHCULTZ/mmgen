@@ -1,6 +1,6 @@
 # MFD stage 1 on Instruments: report
 
-> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18; main method P1a, reproduction and results summary: §19; error decomposition, test-time view ensemble, dense head, seeds: §20; training-side view methods: §21.**
+> **Parts A–C (1+3+3, wider search, multi-view augmentation, Arts) are §7–§12; summary in §7. MQL4GRec task mix on MFD: §13. Codebook-geometry-aware training: §14; what produced the Arts gain: §15; item-level encoder structure: §16; V2-MFD single changes, Instruments/Games, C + codebook init: §17; top-10 diversity and the LR-schedule check: §18; main method P1a, reproduction and results summary: §19; error decomposition, test-time view ensemble, dense head, seeds: §20; training-side view methods: §21; round-22 explorations: §22.**
 
 Two-branch decoder (MFD) vs the MD chain-decoder control, same SID and training recipe.
 Instruments, MD-RQ-VAE 1+2+2 v1 SID, seed 42. Written 2026-10-31.
@@ -2100,6 +2100,22 @@ Reading: **nothing carries to Instruments on test.** C033 ties P1a (+0.0001) and
 validation only). 1c still adds on top (+0.0018 for C033, +0.0004 for A01). Regime controls on Instruments: §21.3.
 
 
+### 21.9 A01 across datasets and seeds (round-21 finish)
+
+A01 with its exact round-21 config (grouped views, one micro-batch of 341 pairs x 3 rows, teacher KL β = 0.1) trained on
+Instruments seeds 43 / 44 and Games seeds 42 / 43 / 44 (5 runs, one GPU job); P1a re-evaluated with `r21_eval.py` on the same
+seeds (Instruments 43 / 44, Games 42 / 43 / 44; the other references exist). Every run: plain K_f = 50, +1c chosen on its own
+validation, f diagnostics (H200, batch 64). Table (`tools/r21_seeds_all.py` -> `geo/r21_seeds_all.json`): per dataset mean ± std
+over seeds of P1a, P1a+1c, A01, A01+1c, C, D (valid and test); per seed paired CIs of A01 (and A01+1c) vs P1a, P1a+1c and C of
+the same seed on validation and test (C's validation lists rebuilt like the test ones); pooled paired bootstrap of A01 − P1a and
+A01 − C over all users of the three datasets (stratified by dataset; per seed and pooled over seeds; information only). No
+promotion call is made here (decision with the user).
+
+Jobs (`logs/round21_jobs.txt`): Games gate 23291207 (r21 checks on Games + A01 dry run), pack 23291209, P1a re-evals
+23291210–20, A01 evals 23291223–30, table 23291845.
+
+**TODO (pending).** Leftovers closing round 21: AC0 eval (§21.4) and the round-20 dense evals (§20), written up when they finish.
+
 ### 21.8 Interpretation and promotion
 
 **Arts (Instruments pending).**
@@ -2116,3 +2132,77 @@ validation only). 1c still adds on top (+0.0018 for C033, +0.0004 for A01). Regi
 **TODO (after Instruments):** final answers to: does any method reach or beat P1a + 1c with plain inference; does 1c still add on top; do the f
 diagnostics move with HR@10; is G0 different from P1a (if yes, A and B are read against G0). Promotion bar: Arts valid HR@10
 ≥ P1a plain + 0.002 with plain inference, holding on Instruments.
+
+## 22. Round 22: three cheap explorations on A01 (E3, E2, E1)
+
+Exploratory probes; none is the final method. Base model for every E-task = **A01** (round 21, exact config). Seed 42 and Arts
+unless stated; valid-only selection, test once; H200, batch 64, K_f = 50. Code `6b9bdda`; jobs `mmgen_runs/logs/round22_jobs.txt`.
+
+### 22.1 E3: codebook-smoothed P(f) (no training)
+
+`macrec/r22_e3_smooth.py`: c_f = row k of `shared_rq.vq_layers.0` of the locked v1 tokenizer for `<s0_k>`; K(f′, f) =
+softmax_f(−‖c_f′ − c_f‖² / τ) (rows sum to 1); P′(f) = (1 − λ) P(f) + λ Σ_f′ P(f′) K(f′, f); log P′ replaces log P in the f term
+and in the top-K_f choice (branch terms unchanged, w = 1 / .5 / .5). Grid on validation: τ ∈ {0.25, 0.5, 1, 2, 4} × the median
+pairwise squared codebook distance, λ ∈ {0, 0.1, 0.25, 0.5} (λ = 0 = plain A01; sanity: equals A01's r21_eval valid ranks).
+Test once: chosen and plain, deployment path, timed. Diagnostic (`tools/r22_e3_report.py`): on C-hit / A01-miss test users, the
+share of the codes ranked above the target's f (by A01's P(f), up to 64) that are among the target f's 5 nearest codebook
+neighbours, and how often the top code is one of them, vs the chance rate 5 / 255. Runs: A01 Arts 42 / 43 / 44 and Instruments 42
+now (jobs 23291807–16, report 23291831); Instruments 43 / 44 and Games 42 / 43 / 44 as Part 1 delivers them (23291817–30, report
+23291832).
+
+**TODO (pending).**
+
+### 22.2 E2: multiple entry points into the decoder
+
+**Codebook organisation (answer to the step-1 question).** The MD-RQ-VAE has one codebook per level and branch
+(`shared_rq` / `text_rq` / `image_rq` `.vq_layers.<l>`, 256 codes each); a residual level's codebook is shared by every parent
+code (not per parent), so the same t1 / i1 code can occur under many f. How many f each t1 / i1 code actually occurs under in
+the catalog is reported by step 1.
+
+**Step 1 (no training; `macrec/r22_e2_diag.py` job 23291833, `tools/r22_e2_report.py` 23291834).** C-hit / A01-miss test users
+(C merged vs A01 plain, seed 42): share hit by C's text list only / image list only / both; rank of the target's t1 and i1 under
+A01's branch distributions given the target's f (decoder [start, f*, <T>] / [start, f*, <I>]), among all level codes and among
+the codes occurring under f*. **TODO (pending).**
+
+**Step 2 (training).** `macrec/r22_aux.py` (`AuxGroupedItemMFDT5`): at the start position (the decoder state that predicts f)
+the final hidden state h0 also predicts the target's t1 and i1 marginally: logits(c) = ⟨A h0 · d_model^−0.5, e(c)⟩ with e(c) the
+model's own tied, codebook-initialised code embedding (= the main head's output row) and A (d × d, no bias) initialised to the
+identity, so at init the aux logits equal the main head's logits at that position restricted to the level's codes (checked).
+Choice where the spec left it open: a d × d map in front of the shared tied embeddings (rather than an independent output
+matrix) keeps "tied / codebook-initialised output embeddings" exactly and adds 2 × 128² parameters. Loss L = L_A01 + γ [CE(t1) +
+CE(i1)] on every row of the grouped batch (all three views), training only (validation loss = plain MFD loss); γ ∈ {0.1, 0.5}
+(runs E2g01 / E2g05). Inference (`macrec/r22_e2_eval.py`): score = A01 score + w [log P_aux(t1) + log P_aux(i1)], candidates
+unchanged (top-50 f by P(f)), w ∈ {0, .25, .5, 1} chosen on validation; test once for the chosen w and for w = 0 (separates the
+loss effect from the extra score term); f diagnostics, ms/user, CIs vs A01; Task-0 split vs A01 (rescued / lost, across vs
+within f). Gate `r22_gate` 23291836 (aux targets, identity init, loss = A01 + γ aux, eval loss plain, save / reload; config diff vs
+A01's dry run). Pack 23291837 (E2g01, E2g05, E1; nice 50), evals then e2eval per run, report 23291843.
+
+**TODO (pending).**
+
+### 22.3 E1: deep codes, minimal probe
+
+**Step 0 (done).** The 1+2+2 and 1+3+3 v1 sets come from **separate tokenizer runs** (`md/<D>/tok/a05_122` vs `a06_133`; tokenizer
+SHA-256 prefixes on Arts 43b26cef… vs 606f1640…), with separate codebooks. On Arts the f token agrees for 48 of 9,416 items (about
+chance for 256 codes) and no item has the same [f, t1, t2] prefix: the 1+3+3 prefix is **not** the 1+2+2 SID.
+
+**Step 1.** A01 end to end on the locked 1+3+3 SIDs (`run_r22_train.sh VAR=E1`: index `md133_a06_ep500_reassign`, codebook init
+from its own v1 tokenizer, levels s0 t0 t1 t2 v0 v1 v2): the item-level encoder sums all 7 codes of an item (4 in the text / image
+views), the decoder branches run 3 steps each (4 decoder passes). Code change: `enc_struct` now treats third-level tokens
+(`<t2_*>`, `<v2_*>`) as code tokens (own slot ids above OTHER, so the slot-embedding table and every 1+2+2 checkpoint are
+unchanged; checked in the gate). Evaluated at K_f = 50 (`r21_eval.py` on the 1+3+3 index), ms/user on H200; compared with A01
+1+2+2 and with the chain decoder's 1+2+2 vs 1+3+3 gap on Arts (0.1059 vs 0.1027, §5.1 of the MD-RQ-VAE report). Job: in pack
+23291837, eval 23291842. **TODO (pending).**
+
+**Step 2 (not run; design note for the decision).** "Encoder 1+3+3 / decoder 1+2+2" would need, because the two sets are
+unrelated codes from separate tokenizers:
+- **separate embedding tables / namespaces:** both sets use the token names `<s0_k>`, `<t0_k>`, …, so one set has to be renamed
+  (e.g. `<S0_k>`, `<T0_k>`, `<T2_k>`, …) and both added to the tokenizer (256 x 7 + 256 x 5 code rows); nothing can be shared;
+- **codebook init for both sets** (two `load_codebooks` calls with a level-key prefix in `geo_embed`);
+- **data:** a second index file to map each history item to its 1+3+3 string (encoder) while targets, the catalog and the
+  decoder stay 1+2+2; the grouped views built from the 1+3+3 parts;
+- **encoder slot table** for the renamed tokens; the encoder-only rows are never output targets (tied table, no head training for
+  them), which is acceptable;
+- **gate checks + config diff** as for E1.
+Estimate: ~150–200 lines in new files (a dataset / collator variant, a tokenizer-remap helper, a geo-init extension) plus ~80 lines
+of checks; one gate run and one training run. A shared-codebook alternative (1+3+3 whose prefix is the 1+2+2 SID) would need a new
+tokenizer (v2), since v1 is locked.
