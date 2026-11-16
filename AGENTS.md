@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-14 (main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-15 (main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -142,7 +142,10 @@ are reference-only, not part of the main line.
   **Done 2026-11-14:** Instruments (§21.7): no round-21 run gains on test (C033 0.1292 vs P1a 0.1291; A01 0.1280) although all but B01
   gain +0.003–0.004 on validation. Regime controls (§21.3): no contrast significant or sign-consistent; A01acc reproduces A01 on Arts
   (0.1261), so the clipping confound does not explain the Arts gains. Gain diagnostic (§21.6): ~90% of rescues/losses are cross-bucket;
-  the teacher KL sharpens P(f) (+0.2 nats margin) in both regimes. Pending: seeds 43/44 + combos (job B), round-20 dense evals.
+  the teacher KL sharpens P(f) (+0.2 nats margin) in both regimes.
+  **3 seeds, Arts (2026-11-15, §21.5):** A01 0.1263 ± .0005 / 0.0923 vs P1a 0.1233 ± .0006 / 0.0909, P1a+1c 0.1239, C 0.1262 ± .0012 / 0.0898,
+  D 0.1255; A01 − P1a CI > 0 on every seed, valid +0.002 to +0.004 on every seed (meets the Arts bar); C033 0.1254 ± .0011 (CI > 0 on seed 42
+  only). AC1 combo: valid 0.1411, test 0.1259 (no gain over A01 / C033; not chained). Pending: AC0 eval, round-20 dense evals.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
