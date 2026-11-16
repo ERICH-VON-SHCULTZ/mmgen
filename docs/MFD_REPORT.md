@@ -1977,7 +1977,18 @@ Instruments seed 42 only if a combo beats **both** C033 (0.1427) and A01 (0.1435
 **AC1 (done, eval 23002025):** valid HR@10 0.1411 / +1c 0.1427; test 0.1259 / 0.0926, +1c 0.1262 / 0.0930; f top-1 valid / test
 0.132 / 0.119; best epoch 72, 25,994 steps, 100% of steps clipped (P1a's regime). Valid 0.1411 is below both C033 (0.1427) and A01
 (0.1435), so AC1 is **not** chained to Instruments; on test it equals A01 / C033 seed 42 (0.1260 / 0.1261): combining A and C adds
-nothing over either. CIs vs P1a, C033, A01, A01acc, C: with the collection after AC0. **AC0: TODO (eval 23002026 pending).**
+nothing over either. **AC0 (done, eval 23002026; collection 23002028, combo stage 23002029, gain diagnostic 23002030):** valid 0.1429 / +1c 0.1442;
+test 0.1244 / 0.0914, +1c 0.1243 / 0.0917; f top-1 valid / test 0.133 / 0.121; best epoch 77; 100% of steps clipped.
+
+| combo | valid HR@10 | test HR@10 / NDCG@10 | − P1a | − P1a+1c | − C | − C033 | − A01 | − A01acc |
+|---|---|---|---|---|---|---|---|---|
+| AC1 | 0.1411 | 0.1259 / 0.0926 | +0.0032 [+.0005, +.0059] | +0.0018 [−.0009, +.0045] | −0.0008 [−.0039, +.0023] | −0.0002 [−.0030, +.0026] | −0.0001 [−.0027, +.0028] | −0.0002 [−.0028, +.0026] |
+| AC0 | 0.1429 | 0.1244 / 0.0914 | +0.0016 [−.0011, +.0044] | +0.0003 [−.0026, +.0030] | −0.0023 [−.0055, +.0011] | −0.0017 [−.0045, +.0009] | −0.0017 [−.0044, +.0011] | −0.0017 [−.0044, +.0011] |
+
+Gain diagnostic (§21.6 method): AC0 mean margin −2.147, f top-1 0.121; AC1 −2.187, 0.119 (A01 −2.142). Neither combo beats both C033
+(0.1427) and A01 (0.1435) on Arts validation, so none was chained to Instruments (`geo/r21_combo_choice.json`). **Closed:**
+combining A and C adds nothing over either alone (AC1 = A01 = C033 on test; AC0, the more diverse teacher, is lower); no more combo
+runs.
 
 ### 21.5 Three seeds on Arts: A01 and C033
 
