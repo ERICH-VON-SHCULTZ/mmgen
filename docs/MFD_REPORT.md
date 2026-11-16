@@ -1971,9 +1971,13 @@ MFD loss + 0.1 KL(stopgrad(p̄) ‖ p_full), p̄ = mean of the 3 rows' f distrib
 **AC1**: random rows p_full = 1/3 (as C033); **AC0**: p_full = 0 (each item text-only or image-only, 50/50). Gate check 9: row 0 =
 full view, per-item view rates, redraws, loss − G0 = β KL. Evaluation as §21.2; CIs vs P1a, C033, A01, A01acc and C. Chained to
 Instruments seed 42 only if a combo beats **both** C033 (0.1427) and A01 (0.1435) on Arts validation HR@10 (plain)
-(`tools/r21_combo_choice.py`). Jobs: pack 22679968 (nice 200), evals 22679969 / 22679970, collection 22679971, combo stage 22679972.
+(`tools/r21_combo_choice.py`). Jobs: in job B 23001938; evals 23002025 (AC1) / 23002026 (AC0), collection 23002028, combo stage
+23002029, gain diagnostic 23002030.
 
-**TODO (pending).**
+**AC1 (done, eval 23002025):** valid HR@10 0.1411 / +1c 0.1427; test 0.1259 / 0.0926, +1c 0.1262 / 0.0930; f top-1 valid / test
+0.132 / 0.119; best epoch 72, 25,994 steps, 100% of steps clipped (P1a's regime). Valid 0.1411 is below both C033 (0.1427) and A01
+(0.1435), so AC1 is **not** chained to Instruments; on test it equals A01 / C033 seed 42 (0.1260 / 0.1261): combining A and C adds
+nothing over either. CIs vs P1a, C033, A01, A01acc, C: with the collection after AC0. **AC0: TODO (eval 23002026 pending).**
 
 ### 21.5 Three seeds on Arts: A01 and C033
 
@@ -1985,9 +1989,44 @@ C033+1c, C merged, D; per seed paired CIs vs C of the same seed and vs P1a (plai
 
 **P1a reference re-evals at seeds 43 / 44 (done, jobs 22679961 / 22679964):** test plain HR@10 / NDCG@10 0.1240 / 0.0910 and
 0.1232 / 0.0913 (same as §20.5's K_f = 100 numbers), +1c 0.1237 / 0.0912 (seed 43: 1c below plain on test) and 0.1240 / 0.0918;
-valid plain 0.1377 / 0.1405. **Seed 43 (job B 23001938 trained 2026-11-15; evals 23002005 / 23002006):** A01 valid 0.1419 (+0.0042
-vs P1a seed 43), test 0.1269 / 0.0927 (+0.0029), +1c 0.1260; C033 valid 0.1432 (+0.0055), test 0.1261 / 0.0917 (+0.0021), +1c 0.1258;
-C seed 43 merged 0.1270. Seed 44 and the 3-seed table with paired CIs: **TODO (evals 23002007 / 23002016 pending, table 23002017).**
+valid plain 0.1377 / 0.1405. **Done (job B 23001938 trained 2026-11-15; evals 23002005–16; table 23002017; `geo/r21_seeds_Arts.json`).**
+
+Test, mean ± std over seeds 42 / 43 / 44 (HR@10 / NDCG@10):
+
+| run | HR@10 | NDCG@10 | per-seed HR@10 |
+|---|---|---|---|
+| P1a | 0.1233 ± .0006 | 0.0909 ± .0005 | 0.1227 / 0.1240 / 0.1232 |
+| P1a + 1c | 0.1239 ± .0002 | 0.0915 ± .0003 | 0.1241 / 0.1237 / 0.1240 |
+| **A01** | **0.1263 ± .0005** | **0.0923 ± .0004** | 0.1260 / 0.1269 / 0.1260 |
+| A01 + 1c | 0.1265 ± .0004 | 0.0925 ± .0004 | 0.1268 / 0.1260 / 0.1267 |
+| C033 | 0.1254 ± .0011 | 0.0920 ± .0010 | 0.1261 / 0.1261 / 0.1242 |
+| C033 + 1c | 0.1258 ± .0011 | 0.0924 ± .0012 | 0.1268 / 0.1258 / 0.1247 |
+| C (merged) | 0.1262 ± .0012 | 0.0898 ± .0011 | 0.1267 / 0.1270 / 0.1248 |
+| D (merged) | 0.1255 ± .0027 | 0.0893 ± .0021 | 0.1277 / 0.1224 / 0.1264 |
+
+Validation HR@10 (plain), seeds 42 / 43 / 44: P1a 0.1415 / 0.1377 / 0.1405; A01 0.1435 / 0.1419 / 0.1427 (+0.0020 / +0.0042 /
++0.0022); C033 0.1427 / 0.1432 / 0.1409 (+0.0012 / +0.0055 / +0.0004).
+
+Paired CIs per seed (test HR@10 / NDCG@10; vs C of the same seed and vs P1a of the same seed):
+
+| seed | A01 − P1a | A01 − P1a+1c | A01 − C | C033 − P1a | C033 − P1a+1c | C033 − C | P1a − C |
+|---|---|---|---|---|---|---|---|
+| 42 | +.0033 [+.0005, +.0059] / +.0016 [+.0001, +.0031] | +.0019 [−.0008, +.0046] | −.0007 [−.0038, +.0026] / +.0024 [+.0005, +.0041] | +.0033 [+.0006, +.0060] / +.0027 [+.0012, +.0043] | +.0020 [−.0008, +.0047] | −.0006 [−.0037, +.0025] / +.0035 [+.0016, +.0053] | −.0040 [−.0071, −.0009] |
+| 43 | +.0029 [+.0002, +.0058] / +.0017 [+.0003, +.0033] | +.0032 [+.0007, +.0060] | −.0001 [−.0028, +.0029] / +.0018 [−.0000, +.0036] | +.0021 [−.0007, +.0049] / +.0007 [−.0008, +.0022] | +.0024 [−.0004, +.0051] | −.0009 [−.0041, +.0020] / +.0007 [−.0012, +.0025] | −.0030 [−.0059, −.0000] |
+| 44 | +.0028 [+.0001, +.0053] / +.0010 [−.0005, +.0025] | +.0019 [−.0008, +.0045] | +.0011 [−.0020, +.0040] / +.0035 [+.0016, +.0053] | +.0010 [−.0015, +.0037] / −.0002 [−.0016, +.0013] | +.0001 [−.0024, +.0028] | −.0007 [−.0037, +.0024] / +.0023 [+.0005, +.0042] | −.0017 [−.0047, +.0014] |
+
+Reading:
+- **A01 is a reproducible Arts gain:** +0.0030 test HR@10 over P1a on the 3-seed mean (0.1263 vs 0.1233; seed spreads ±0.0005 /
+  ±0.0006), with the paired CI > 0 on **every** seed; +0.0024 over P1a + 1c (CI > 0 on seed 43, touching 0 on 42 / 44).
+  Validation agrees on every seed (+0.0020 / +0.0042 / +0.0022): A01 meets the Arts promotion bar (valid ≥ P1a + 0.002) on all
+  three seeds (seed 42 at the bar).
+- **A01 closes the HR@10 gap to C on Arts** (0.1263 vs 0.1262; per-seed CIs include 0) and **beats C on NDCG@10**
+  (0.0923 vs 0.0898; CI > 0 on seeds 42 and 44, touching 0 on 43). Plain P1a was below C on HR@10 at every seed (CI < 0 on 42, 43).
+- **C033 is weaker and seed-dependent:** +0.0021 mean over P1a; CI > 0 only on seed 42; seed 44 +0.0010 with validation +0.0004.
+- **1c on top adds ~0.0002–0.0004 mean** for A01 / C033 (vs +0.0006 for P1a): the training-side change absorbs what 1c gave.
+- A01's 1c α is again unstable across seeds (0 / .25, 0 / .25, 0 / .5), but plain A01 does not need it.
+- Caveat for promotion: A01 did **not** carry to Instruments test at seed 42 (§21.7: −0.0012, valid +0.0029).
+
 
 
 
