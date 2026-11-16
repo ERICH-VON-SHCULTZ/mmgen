@@ -35,11 +35,12 @@ singularity exec --nv --bind /scratch/yw8866 --overlay "$OVERLAY":ro "$SIF" /bin
 set -euo pipefail
 source /ext3/env.sh && conda activate py310
 cd $M
+M=$M D=$D VAR=P1aref SEED=42 DRYRUN=1 bash $RR     # first: check 7b reads P1aref's dry run (Games gate 23291207 failed without it)
 python -u r21_check.py --data_path $RUNS/data --dataset $D --p1a_ckpt $RUNS/mfd/$D/mfd122_mv_geoP1a/seed42 \
   --out_file $RUNS/geo/$D/r21_check.new.json > $RUNS/geo/$D/r21_check.log 2>&1 || { tail -20 $RUNS/geo/$D/r21_check.log; echo 'R21 CHECK FAILED (r21_check.json left as it was)'; exit 1; }
 mv $RUNS/geo/$D/r21_check.new.json $RUNS/geo/$D/r21_check.json        # replaced only when every check passes
 tail -1 $RUNS/geo/$D/r21_check.log
-for V in P1aref $VARS; do M=$M D=$D VAR=\$V SEED=42 DRYRUN=1 bash $RR; done
+for V in $VARS; do M=$M D=$D VAR=\$V SEED=42 DRYRUN=1 bash $RR; done
 cd $T && python r21_config_diff.py $D $VARS
 "
 echo done
