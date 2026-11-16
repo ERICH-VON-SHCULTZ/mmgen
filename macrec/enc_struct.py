@@ -25,6 +25,10 @@ from mfd_model import MFDT5
 CODE_TOKEN = re.compile(r"^<([stv])(\d+)_(\d+)>$")
 SLOTS = ("s0", "t0", "t1", "v0", "v1")
 OTHER = len(SLOTS)
+# §22 E1 (1+3+3 SIDs): third-level codes are code tokens too. They get their own slot ids ABOVE OTHER, so the slot
+# embedding table (len(SLOTS) + 1 rows, used only by E1 on 1+2+2) and every existing checkpoint are unchanged; E2 sums
+# every code token (slot != OTHER).
+DEEP = ("t2", "v2")
 MAX_ITEMS = 20
 
 
@@ -43,11 +47,13 @@ class StructInput(nn.Module):
             m = CODE_TOKEN.match(tok)
             if m and m.group(1) + m.group(2) in SLOTS:
                 table[i] = SLOTS.index(m.group(1) + m.group(2))
+            elif m and m.group(1) + m.group(2) in DEEP:
+                table[i] = OTHER + 1 + DEEP.index(m.group(1) + m.group(2))
         self.slot_of = table.to(self.slot_of.device)
 
     def structure(self, ids):
         s = self.slot_of[ids]
-        code = s < OTHER
+        code = s != OTHER
         start = s == 0
         item = torch.cumsum(start.long(), 1) - 1                     # item index of each token (0 = oldest)
         n = start.sum(1, keepdim=True)
@@ -75,6 +81,7 @@ class StructMixin:
         emb = self.shared(input_ids)
         s, code, item, rec, n = self.struct.structure(input_ids)
         if self.struct_mode == "E1":
+            assert not bool((s > OTHER).any()), "E1 slot embeddings are defined for 1+2+2 codes only"
             x = emb + (self.struct.slot(s) + self.struct.rec(rec)) * code[..., None].to(emb.dtype)
             mask = attention_mask
         else:                                                         # E2: one position per item

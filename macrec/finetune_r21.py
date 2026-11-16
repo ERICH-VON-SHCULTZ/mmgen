@@ -4,6 +4,7 @@ one of the r21_views.py methods swapped in:
   --r21_beta BETA     A / B: weight of the KL term
   --r21_mode C        item-level random views (ItemRandViewDataset), --r21_p_full P; model and loss = P1a
   --r21_mode AC       §21.4: grouped [full, random, random] rows (GroupedRandDataset, --r21_p_full P in [0, 1)) + A's KL (--r21_beta)
+  --r22_aux_gamma G   §22 E2 (grouped modes only): + G x [CE(t1) + CE(i1)] from aux heads at the f position (r22_aux.py)
   --dump_file PATH    dry run: resolved config dumped at trainer.train() (config_dryrun), no training
 Every other argument is finetune_geo.py's (the exact P1a command; batch / accumulation set by the caller to match
 compute: grouped runs use 341 pairs x 3 views = 1,023 sequences per optimizer step, accumulation 1).
@@ -30,6 +31,7 @@ def pop(name, default=None):
 
 
 MODE = pop("--r21_mode")
+AUX = float(pop("--r22_aux_gamma", 0.0))
 BETA = float(pop("--r21_beta", 0.0))
 P_FULL = pop("--r21_p_full")
 P_FULL = None if P_FULL is None else float(P_FULL)
@@ -50,8 +52,12 @@ if __name__ == "__main__":
     import r21_views
     grouped = MODE in ("G0", "A", "B", "AC")
     model_mode = "A" if MODE == "AC" else MODE                     # AC = A's KL on [full, random, random] rows
+    assert AUX == 0 or grouped, "--r22_aux_gamma needs a grouped mode"
     if grouped:
         enc_struct.ItemMFDT5 = r21_views.GroupedItemMFDT5          # finetune_geo.setup() reads it at call time
+    if AUX > 0:
+        import r22_aux
+        enc_struct.ItemMFDT5 = r22_aux.AuxGroupedItemMFDT5
         mfd_data.MFDCollator = r21_views.GroupedCollator            # finetune_mfd.py imports it at run time
 
     def load_r21(args):
@@ -74,6 +80,8 @@ if __name__ == "__main__":
             super().__init__(*a, **k)
             if grouped:
                 info.update(k["model"].install_r21(k["tokenizer"], model_mode, BETA))
+            if AUX > 0:
+                info.update(k["model"].install_aux(k["tokenizer"], AUX))
             clip = self.accelerator.clip_grad_norm_
 
             def logged_clip(params, max_norm, *ca, **ck):
