@@ -55,10 +55,10 @@ if __name__ == "__main__":
     assert AUX == 0 or grouped, "--r22_aux_gamma needs a grouped mode"
     if grouped:
         enc_struct.ItemMFDT5 = r21_views.GroupedItemMFDT5          # finetune_geo.setup() reads it at call time
+        mfd_data.MFDCollator = r21_views.GroupedCollator            # finetune_mfd.py imports it at run time
     if AUX > 0:
         import r22_aux
         enc_struct.ItemMFDT5 = r22_aux.AuxGroupedItemMFDT5
-        mfd_data.MFDCollator = r21_views.GroupedCollator            # finetune_mfd.py imports it at run time
 
     def load_r21(args):
         if MODE == "AC":
@@ -82,6 +82,8 @@ if __name__ == "__main__":
                 info.update(k["model"].install_r21(k["tokenizer"], model_mode, BETA))
             if AUX > 0:
                 info.update(k["model"].install_aux(k["tokenizer"], AUX))
+            b = self.data_collator([self.train_dataset[0]])             # collator / dataset mismatch fails here, also in
+            assert not grouped or b["input_ids"].shape[0] == 3, b["input_ids"].shape   # the gate's dry run (23398867)
             clip = self.accelerator.clip_grad_norm_
 
             def logged_clip(params, max_norm, *ca, **ck):
