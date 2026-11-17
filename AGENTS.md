@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-15 (round 22 started; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-17 (round 22: E3, E2 step 1, E4 done; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -154,7 +154,10 @@ are reference-only, not part of the main line.
   1+3+3 come from separate tokenizer runs (no shared codebooks, prefixes differ). `enc_struct` counts third-level codes (1+2+2 unchanged).
   **E3 done (2026-11-16):** no gain (all 4 test CIs include 0; chosen τ unstable); ~87% of the f codes ranked above the target are not
   codebook neighbours. **E2 step 1 done:** given the true f, A01's t1 / i1 are top-10 for 95–97% of C-hit / A01-miss users → the miss is
-  choosing f. **E4 (§22.4, queued):** is f intrinsically harder to predict than a single-modality level-1 code (A01 vs C vs TIGER A/B).
+  choosing f. **E4 done (2026-11-17, §22.4):** f is NOT less predictable (normalised info gain = C's level 1,
+  2× TIGER A/B's); it is finer (256 vs 55–97 codes) and cuts across C's coarse buckets; A01's wrong f codes sit in the target's C-text
+  bucket 2.4× chance → cost of a fine cross-cutting first code, not predictability; C's edge is its training, not its partition.
+  Round-20 Task 2 closed: dense head gains on no dataset, stays out. A01 Part-1 and E1 reruns pending (collator bug, `9341b52`).
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -454,6 +457,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `pack_train.sbatch` (24 CPUs, long time limit) is rejected on h200_tandon ("partition not valid for this job") | train with `--partition=a100_tandon,h100_tandon --gres=gpu:1`; H200 only for evals |
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | transformers 4.47.0 does **not** divide the loss by `gradient_accumulation_steps` (accelerate's division is disabled in `create_accelerator_and_postprocess`; `training_step` does not divide), so 256 x 4 runs backprop the SUM of 4 micro-batch means (~4 x the gradient) and are clipped at max_grad_norm 1.0 on every step (P1a pre-clip median 2.7) | all runs in this repo share it, so comparisons between 256 x 4 runs are fair; a run with a different accumulation (e.g. §21's grouped runs, 1 micro-batch, median 0.76, 12–14% clipped) is in a different optimisation regime — match the accumulation, not just the rows per step (`docs/MFD_REPORT.md` §21.2) |
+| `config_dryrun` stops before `trainer.train()`, so gate dry runs never draw a batch: a collator / dataset mismatch passed both gates and crashed packs 23398867 / 23291837 at step 0 | `finetune_r21.py` collates one training example at trainer init (also in dry runs) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
 | `evaluation_strategy=` is deprecated | works in transformers 4.47; **do not upgrade transformers past 4.47** |
@@ -625,7 +629,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `6b9bdda` | §21.9 tool; §22 code (E3, E2, E1) |
 | `8904100` | r21 gate: P1aref dry run before the checks (Games gate fix) |
 | `40036b7` | §22.4 E4 code |
-| (next) | §21.9 / §22 results |
+| `9341b52` | finetune_r21: grouped collator for every grouped mode; collate-at-init guard |
+| (next) | §20.7 closed, §22.1/22.2 step 1/22.4 results |
 
 ---
 

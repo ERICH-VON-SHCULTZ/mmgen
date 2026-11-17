@@ -1742,7 +1742,7 @@ Reading: K_f = 50 is within 0.0006 valid HR@10 of K_f = 100 everywhere and equal
 time (8–10 vs 15–20 ms/user, i.e. 4–5× cheaper than C's 43). K_f = 20 loses 0.0028 valid HR@10 on Instruments. As agreed, the
 faster setting K_f = 50 is the one to report (TODO 20.9: paired CI K50 vs K100 from `kf_ranks.pt`; switch §19.7 to K_f = 50).
 
-### 20.7 Task 2: dense item-level head (Arts done; Instruments/Games pending)
+### 20.7 Task 2: dense item-level head (done on all three datasets; closed)
 
 P2a / P2b = P1a + dense head with loss weight λ = 0.1 / 0.5 (`macrec/dense_head.py`), seed 42. Joint validation grid
 (`macrec/dense_eval.py`): rule A/B × w_d ∈ {0, .25, .5, 1, 2} × α_text, α_image ∈ {0, .25, .5}, w = 1/.5/.5, K_f = 100. Every
@@ -1767,8 +1767,19 @@ Reading:
 - **Rule B = rule A** for the selected config: adding w_d · logsumexp of the dense probabilities per f never changes which
   100 f codes are kept.
 
-Instruments / Games (λ = 0.1): **TODO (pending jobs above)** — fill: best epoch; dense alone valid/test; test at w_d = 0 and
-selected; dense alone vs with 1c; CIs vs same run w_d = 0, P1a, P1a + 1c, C; ms/user.
+Instruments / Games (P2a, λ = 0.1, seed 42; evals 22680023/25/26/27/45 on H200, CIs `round20_collect` 23474593/94 ->
+`geo/round20_<D>.json`; K_f = 100 as on Arts):
+
+| dataset | best / stopped epoch | dense alone, valid / test HR@10 | test w_d = 0 | test, selected | selected − same run w_d = 0 | − P1a (ii) | − P1a + 1c | − C | ms/user |
+|---|---|---|---|---|---|---|---|---|---|
+| Instruments | 48 / 58 | 0.1514 / 0.1222 | 0.1283 | 0.1294 (w_d = 1, rule B ≡ A, α = 0) | +0.0011 [−.0007, +.0031] | +0.0004 [−.0025, +.0035] | −0.0020 [−.0050, +.0011] | −0.0007 [−.0038, +.0026] | 14.8 |
+| Games | 61 / 71 | 0.0911 / 0.0798 | 0.0986 | 0.0993 (w_d = .25, rule A, α = 0) | +0.0007 [−.0004, +.0018] | −0.0016 [−.0039, +.0007] | −0.0019 [−.0042, +.0004] | −0.0022 [−.0048, +.0001] | 20.2 |
+
+With 1c the joint grid again chose α = 0 (dense + 1c = dense alone). Rescues (C hit / w_d = 0 miss): Instruments 426 users, 60
+rescued, f rank (full) median 10, dense-only rank < 10 for 82%; Games 1,576 users, 143 rescued, median 5, 76%.
+
+**Decision (Task 2 closed):** no dataset gains (every CI vs its own w_d = 0 and vs P1a includes 0, and P2a's base model is at or
+below P1a); the dense head stays out of the main method.
 
 ### 20.8 Task 0 extension: what the dense term rescues (Arts, test)
 
@@ -1787,15 +1798,15 @@ term with P2a ≠ P1a (different training), so its 185 is not the dense term's e
 Reading: **the dense term does not fix cross-f ranking by moving the target's f up** (rule A keeps the selection; rule B never
 moves it either). It rescues users by reordering items across the kept f codes, mostly targets the dense head alone already
 ranks in its top 10 and whose f is not the top f. That is the error Task 0 found, but the reordering swaps out as many hits
-as it rescues. TODO: same table on Instruments and Games.
+as it rescues. Instruments / Games: same pattern (counts in 20.7).
 
 ### 20.9 Remaining / TODO
 
-- [ ] Task 2 on Instruments and Games (λ = 0.1): fill 20.7 and 20.8 (`round20_collect.sbatch D=<D> VARS=P2a`).
+- [x] Task 2 on Instruments and Games (λ = 0.1): 20.7 (2026-11-17).
 - [x] K_f = 50 adopted by the validation rule (§19.7); paired CI K_f = 50 vs 100 on test still to add (`kf_ranks.pt`).
 - [ ] baselines_all.json: add P1a and P1a + 1c 3-seed rows (`collect_baselines.py` or a separate entry).
 - [ ] AGENTS.md §1 / §7: Task 3 means, Task 2 outcome, K_f choice.
-- [ ] Decide on Task 2 after Instruments/Games: if no dataset gains, the dense head stays out of the main method.
+- [x] Task 2 decided: no dataset gains, the dense head stays out of the main method (20.7).
 
 ## 21. Training-side view methods to absorb the 1c gain (Arts screen, then Instruments)
 
@@ -2125,7 +2136,12 @@ promotion call is made here (decision with the user).
 Jobs (`logs/round21_jobs.txt`): Games gate 23291207 (r21 checks on Games + A01 dry run), pack 23291209, P1a re-evals
 23291210–20, A01 evals 23291223–30, table 23291845.
 
-**TODO (pending).** Leftovers closing round 21: AC0 eval (§21.4) and the round-20 dense evals (§20), written up when they finish.
+Job history: Games gate 23291207 failed (check 7b read P1a's reference dry run before the gate created it; fixed `8904100`);
+the resubmitted pack 23398867 crashed at step 0 because `6b9bdda` (round 22) installed the grouped collator only with aux heads
+(fixed `9341b52`; the trainer now collates one example at init, so a gate dry run catches a collator / dataset mismatch).
+Current chain: gate 23504694, pack 23504695, A01 evals 23504696–703, table 23504712. **Results TODO (pending).**
+
+Leftovers closed: AC0 (§21.4) and the round-20 dense evals (§20.7: no gain, dense head out).
 
 ### 21.8 Interpretation and promotion
 
@@ -2158,10 +2174,23 @@ pairwise squared codebook distance, λ ∈ {0, 0.1, 0.25, 0.5} (λ = 0 = plain A
 Test once: chosen and plain, deployment path, timed. Diagnostic (`tools/r22_e3_report.py`): on C-hit / A01-miss test users, the
 share of the codes ranked above the target's f (by A01's P(f), up to 64) that are among the target f's 5 nearest codebook
 neighbours, and how often the top code is one of them, vs the chance rate 5 / 255. Runs: A01 Arts 42 / 43 / 44 and Instruments 42
-now (jobs 23291807–16, report 23291831); Instruments 43 / 44 and Games 42 / 43 / 44 as Part 1 delivers them (23291817–30, report
-23291832).
+now (jobs 23291807–16, report 23291831); Instruments 43 / 44 and Games 42 / 43 / 44 as Part 1 delivers them (now 23504707–11,
+report 23504713).
 
-**TODO (pending).**
+Results (test HR@10, H200, batch 64; `geo/r22_e3.json`):
+
+| checkpoint | chosen on valid | valid chosen / plain | test chosen / plain | chosen − plain (test) | ms/user chosen / plain | above-codes in 5-NN / top code in 5-NN (chance .020) |
+|---|---|---|---|---|---|---|
+| Arts 42 | τ 2, λ .25 | 0.1442 / 0.1435 | 0.1264 / 0.1260 | +0.0004 [−.0004, +.0011] | 10.1 / 10.1 | 0.125 / 0.130 |
+| Arts 43 | τ 0.5, λ .25 | 0.1422 / 0.1419 | 0.1264 / 0.1269 | −0.0005 [−.0014, +.0004] | 10.0 / 10.1 | 0.125 / 0.136 |
+| Arts 44 | τ 4, λ .25 | 0.1427 / 0.1427 | 0.1261 / 0.1260 | +0.0001 [−.0005, +.0007] | 10.1 / 10.1 | 0.141 / 0.146 |
+| Instruments 42 | τ 4, λ .5 | 0.1580 / 0.1574 | 0.1280 / 0.1280 | +0.0001 [−.0013, +.0015] | 8.1 / 8.1 | 0.075 / 0.089 |
+
+Diagnostic users (C-hit / A01-miss, with ≥ 1 code above the target f): Arts 529 / 494 / 514, Instruments 349.
+
+Reading: **no effect** (every CI includes 0, the chosen τ moves across seeds, no cost). Codebook neighbours are over-represented
+among the codes ranked above the target f (4–7× chance) but are only 8–14% of them: most of the confusions are with codes far
+from the target in the shared codebook, which neighbour smoothing cannot move. Remaining checkpoints (Part 1) pending.
 
 ### 22.2 E2: multiple entry points into the decoder
 
@@ -2173,7 +2202,16 @@ the catalog is reported by step 1.
 **Step 1 (no training; `macrec/r22_e2_diag.py` job 23291833, `tools/r22_e2_report.py` 23291834).** C-hit / A01-miss test users
 (C merged vs A01 plain, seed 42): share hit by C's text list only / image list only / both; rank of the target's t1 and i1 under
 A01's branch distributions given the target's f (decoder [start, f*, <T>] / [start, f*, <I>]), among all level codes and among
-the codes occurring under f*. **TODO (pending).**
+the codes occurring under f*.
+
+Results (Arts seed 42, 616 C-hit / A01-miss users, `geo/r22_e2.json`):
+- **Which C list hits them:** text only 27.8%, image only 25.5%, both 39.0%, merged list only 7.8% — not one modality.
+- **Given the true f, A01's branches are right:** target t1 rank 1 for 52.9%, top 5 88.0%, top 10 95.3%; i1 53.2% / 89.3% /
+  97.4% (restricting to the codes under f* changes nothing). Over all test users: t1 26.5% / 54.0% / 68.9%. The misses are
+  users whose t1 / i1 A01 predicts *better* than average: the error is choosing f.
+- **Codebook organisation:** 255 t1 and 255 i1 codes in use; a t1 code occurs under a median of 31 distinct f (i1: 29); 98.8% /
+  100% of the codes occur under more than one f. t1 / i1 codes are shared across f, so a marginal t1 / i1 signal (step 2) can
+  carry evidence across f buckets.
 
 **Step 2 (training).** `macrec/r22_aux.py` (`AuxGroupedItemMFDT5`): at the start position (the decoder state that predicts f)
 the final hidden state h0 also predicts the target's t1 and i1 marginally: logits(c) = ⟨A h0 · d_model^−0.5, e(c)⟩ with e(c) the
@@ -2188,7 +2226,10 @@ loss effect from the extra score term); f diagnostics, ms/user, CIs vs A01; Task
 within f). Gate `r22_gate` 23291836 (aux targets, identity init, loss = A01 + γ aux, eval loss plain, save / reload; config diff vs
 A01's dry run). Pack 23291837 (E2g01, E2g05, E1; nice 50), evals then e2eval per run, report 23291843.
 
-**TODO (pending).**
+Training (pack 23291837): E2g01 best / stopped epoch 68 / 78, clipped on 15.9% of steps (A01 12.2%); **E2g05 75 / 85, clipped on
+100% of steps** — at γ = 0.5 the aux CE (≈ 2 × log 255 at init scale) puts every step above max_grad_norm 1.0, so E2g05 is also a
+different optimisation regime (read γ through E2g01). The pack's E1 run crashed (§22.3), so its dependents were cancelled; E2
+evals resubmitted: eval 23504717 / 23504719, e2eval 23504718 / 23504720, report 23504721. **Results TODO (pending).**
 
 ### 22.3 E1: deep codes, minimal probe
 
@@ -2202,7 +2243,8 @@ views), the decoder branches run 3 steps each (4 decoder passes). Code change: `
 (`<t2_*>`, `<v2_*>`) as code tokens (own slot ids above OTHER, so the slot-embedding table and every 1+2+2 checkpoint are
 unchanged; checked in the gate). Evaluated at K_f = 50 (`r21_eval.py` on the 1+3+3 index), ms/user on H200; compared with A01
 1+2+2 and with the chain decoder's 1+2+2 vs 1+3+3 gap on Arts (0.1059 vs 0.1027, §5.1 of the MD-RQ-VAE report). Job: in pack
-23291837, eval 23291842. **TODO (pending).**
+23291837, which crashed at step 0 (grouped collator not installed without aux heads, `6b9bdda`; fixed `9341b52`). Rerun: gate
+23504714, pack 23504715, eval 23504716. **TODO (pending).**
 
 **Step 2 (not run; design note for the decision).** "Encoder 1+3+3 / decoder 1+2+2" would need, because the two sets are
 unrelated codes from separate tokenizers:
@@ -2217,3 +2259,88 @@ unrelated codes from separate tokenizers:
 Estimate: ~150–200 lines in new files (a dataset / collator variant, a tokenizer-remap helper, a geo-init extension) plus ~80 lines
 of checks; one gate run and one training run. A shared-codebook alternative (1+3+3 whose prefix is the 1+2+2 SID) would need a new
 tokenizer (v2), since v1 is locked.
+
+### 22.4 E4: is the shared code f harder to predict than a single-modality level-1 code? (no training)
+
+Question: E3 and E2 step 1 put A01's remaining errors on choosing f, while C's text or image list alone hits most of those users
+with its own single-modality first code. Is f, clustered from the fused representation, a partition that is intrinsically harder
+to predict from behaviour?
+
+Setup (`macrec/r22_e4_first.py`, `sbatch/r22/r22_e4.sbatch` job 23478999 on H200, `tools/r22_e4_report.py` 23479000 ->
+`geo/r22_e4.json`; seed 42, test, Arts and Instruments). Each model's first-step distribution over its own level-1 codebook under
+teacher forcing: A01's log P(f) from the full view (the deployment f distribution); C (MQL4GRec) text-SID and image-SID level 1 and
+TIGER A (text) / B (image) level 1 from exactly `first_token_acc.py`'s inputs (prompt 0, allowed = first token of every catalog SID).
+Choices: the full-vocabulary log-softmax restricted to the level-1 codes is **renormalised over those codes** (proper distribution
+per codebook); the marginal baseline q = empirical distribution of the target's level-1 code over all test users, CE_m = mean
+−log q over the user set (= H(marginal) on all users); information gain IG = CE_m − NLL and IG / CE_m. User sets: C hit = C's merged
+list, A01 hit = plain K_f = 50 (r21_eval), hit = rank < 10.
+
+**1. Level-1 predictability** (all test users; IG / CE_m also on the two disagreement sets)
+
+| dataset | partition | codes (used) | H (nats) | top-1 | top-10 | MRR | median rank | NLL | IG | IG / CE_m all | C-hit / A01-miss | A01-hit / C-miss |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Arts | A01 f | 256 (256) | 5.34 | 0.119 | 0.328 | 0.191 | 27 | 4.65 | 0.69 | 0.129 | 0.255 | 0.395 |
+| Arts | C text | 55 (53) | 3.64 | 0.216 | 0.676 | 0.359 | 4 | 3.08 | 0.56 | 0.155 | 0.444 | 0.334 |
+| Arts | C image | 84 (84) | 4.20 | 0.153 | 0.468 | 0.255 | 11 | 3.73 | 0.48 | 0.114 | 0.314 | 0.235 |
+| Arts | A text | 86 (85) | 4.09 | 0.171 | 0.534 | 0.286 | 8 | 3.87 | 0.22 | 0.053 | 0.308 | 0.255 |
+| Arts | B image | 144 (144) | 4.79 | 0.101 | 0.335 | 0.182 | 23 | 4.53 | 0.25 | 0.053 | 0.230 | 0.201 |
+| Instruments | A01 f | 256 (255) | 5.24 | 0.105 | 0.262 | 0.162 | 36 | 4.73 | 0.50 | 0.096 | 0.145 | 0.248 |
+| Instruments | C text | 58 (57) | 3.67 | 0.169 | 0.570 | 0.293 | 7 | 3.32 | 0.36 | 0.097 | 0.262 | 0.138 |
+| Instruments | C image | 97 (97) | 4.27 | 0.148 | 0.418 | 0.237 | 14 | 3.84 | 0.43 | 0.101 | 0.240 | 0.156 |
+| Instruments | A text | 84 (83) | 4.02 | 0.143 | 0.475 | 0.250 | 11 | 3.84 | 0.18 | 0.044 | 0.157 | 0.137 |
+| Instruments | B image | 104 (104) | 4.32 | 0.124 | 0.388 | 0.211 | 16 | 4.13 | 0.19 | 0.044 | 0.160 | 0.109 |
+
+Disagreement sets: Arts 616 C-hit / A01-miss and 601 A01-hit / C-miss users; Instruments 392 / 355. On C-hit / A01-miss users the
+true level-1 code's top-10 rate is A01 f 0.500 vs C text 0.946 (Arts), 0.327 vs 0.849 (Instruments).
+
+**2. HR@10 by the true level-1 code's rank** (share of users / HR@10 in the bucket / contribution to HR@10)
+
+| dataset | model (own list) | HR@10 | rank 1 | 2–5 | 6–20 | > 20 |
+|---|---|---|---|---|---|---|
+| Arts | A01 | 0.1260 | .119 / .630 / .0750 | .123 / .219 / .0270 | .197 / .104 / .0204 | .561 / .006 / .0036 |
+| Arts | C text list | 0.1189 | .216 / .392 / .0849 | .298 / .087 / .0259 | .319 / .025 / .0081 | .167 / 0 / 0 |
+| Arts | C image list | 0.1235 | .153 / .476 / .0728 | .183 / .159 / .0290 | .306 / .071 / .0218 | .359 / 0 / 0 |
+| Arts | C merged (min of the two ranks) | 0.1267 | .283 / .346 / .0977 | .316 / .077 / .0244 | .296 / .016 / .0046 | .105 / 0 / 0 |
+| Arts | TIGER A | 0.0931 | .171 / .386 / .0661 | .222 / .096 / .0213 | .289 / .020 / .0057 | .318 / 0 / 0 |
+| Arts | TIGER B | 0.0949 | .101 / .514 / .0520 | .135 / .194 / .0263 | .231 / .072 / .0166 | .533 / 0 / 0 |
+| Instruments | A01 | 0.1280 | .105 / .752 / .0794 | .083 / .224 / .0187 | .186 / .124 / .0230 | .626 / .011 / .0069 |
+| Instruments | C text list | 0.1271 | .169 / .492 / .0832 | .231 / .116 / .0269 | .364 / .047 / .0169 | .236 / 0 / 0 |
+| Instruments | C image list | 0.1271 | .148 / .552 / .0815 | .148 / .146 / .0216 | .294 / .082 / .0240 | .411 / 0 / 0 |
+| Instruments | C merged | 0.1301 | .227 / .412 / .0932 | .273 / .100 / .0273 | .351 / .027 / .0096 | .149 / 0 / 0 |
+| Instruments | TIGER A | 0.1131 | .143 / .496 / .0708 | .197 / .143 / .0282 | .301 / .047 / .0141 | .360 / 0 / 0 |
+| Instruments | TIGER B | 0.1120 | .124 / .587 / .0730 | .147 / .136 / .0200 | .278 / .068 / .0189 | .451 / 0 / 0 |
+
+**3. Partition relations to f** (catalog items; test targets in brackets)
+
+| dataset | partition | NMI | ARI | other codes per f bucket (median) | f codes per other bucket (median) | C-hit / A01-miss: f codes the target's bucket spans / its items in the target f | f codes above the target containing bucket items (vs chance) / top-1 f does |
+|---|---|---|---|---|---|---|---|
+| Arts | C text | 0.43 (0.48) | 0.07 (0.12) | 10 | 51 | 50 / 3.7% | 55% (23%) / 63% |
+| Arts | C image | 0.44 (0.49) | 0.08 (0.13) | 14 | 48 | 50 / 4.2% | 40% (19%) / 46% |
+| Arts | A text | 0.48 (0.52) | 0.09 (0.15) | 11 | 37 | 37 / 5.1% | 48% (17%) / 57% |
+| Arts | B image | 0.49 (0.55) | 0.11 (0.20) | 16 | 31 | 31 / 6.4% | 32% (12%) / 39% |
+| Instruments | C text | 0.45 (0.51) | 0.07 (0.15) | 9 | 44 | 46 / 3.5% | 41% (19%) / 46% |
+| Instruments | C image | 0.48 (0.56) | 0.09 (0.19) | 12 | 33 | 33 / 5.9% | 29% (12%) / 35% |
+| Instruments | A text | 0.48 (0.55) | 0.08 (0.16) | 10 | 32 | 33 / 4.9% | 33% (16%) / 39% |
+| Instruments | B image | 0.48 (0.56) | 0.09 (0.19) | 12 | 34 | 34 / 6.0% | 28% (12%) / 35% |
+
+**Interpretation.**
+- **f is not intrinsically less predictable.** Normalised information gain over all users is the same as C's level-1 codes (Arts
+  0.129 vs C text 0.155 / image 0.114; Instruments 0.096 vs 0.097 / 0.101), and the absolute gain is the largest (0.69 / 0.50
+  nats). What differs is granularity: f has 256 codes vs C's 55–97, so the same normalised gain leaves the true f at median rank
+  27–36 instead of 4–14.
+- **f is worth more when right and costs more when missed.** With f at rank 1, A01 hits 63–75% vs 39–55% for C's lists; but 56–63%
+  of users have f beyond rank 20 and get almost nothing (≤ 0.007 of HR@10), while C's coarse code is beyond rank 20 for only
+  17–41% (merged: 10–15%), and C's lists still collect hits at ranks 2–20.
+- **C's edge comes from its training, not its partition.** TIGER A / B, single-modality partitions of similar size, have half the
+  normalised gain of C and of f (0.044–0.053) and trail both in HR@10. The partition type alone does not make level 1 predictable;
+  C's multi-task recipe does, and on our own fused partition A01's training reaches the same normalised gain.
+- **f cuts across the coarse partitions and the confusions stay in the right coarse region.** NMI 0.43–0.49 with every other
+  partition (ARI ≤ 0.11): an f bucket mixes about 10 C-text codes and a C-text code is spread over about 50 f codes. On C-hit /
+  A01-miss users the target's C-text bucket spans a median of 50 f codes, with only 3.7% of its items in the target's f. The f codes
+  A01 ranks above the target contain items of that bucket 2.4× more often than chance (55% vs 23% Arts; 41% vs 19% Instruments),
+  and the top-1 f does for 63% / 46%. A01 finds the right text region but picks the wrong fine f inside it, and those f codes are
+  far apart in the shared codebook (E3).
+- **Implication:** the fixable part is the cost of a fine, cross-cutting first code, not its predictability. A coarse-to-fine
+  first step (a coarse region chosen first, f within it), or fusing a coarse text / image region score into the f term, targets
+  this error; codebook-neighbour smoothing (E3) does not.
+
