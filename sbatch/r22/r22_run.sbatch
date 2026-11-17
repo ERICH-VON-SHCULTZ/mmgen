@@ -3,6 +3,7 @@
 #   e3      macrec/r22_e3_smooth.py   codebook-smoothed P(f): (tau, lambda) grid on valid, test once timed -> <run>/seed<S>/r22_e3/
 #   e2diag  macrec/r22_e2_diag.py     t1 / i1 ranks given the target f (test) -> geo/r22/<D>/e2diag_<RUN>_s<S>.pt
 #   e2eval  macrec/r22_e2_eval.py     A01 + aux heads: w grid on valid, test once timed -> <run>/seed<S>/r22_e2eval/
+#   e5      macrec/r22_e5_eval.py     region-mass score (needs geo/r22/<D>/e5_regions.pt): beta x K_f on valid, test once -> <run>/seed<S>/r22_e5/
 #   eval    macrec/r21_eval.py        plain K_f = 50 + 1c + f diagnostics, on the run's own SID set (SID=1+2+2|1+3+3) -> <run>/seed<S>/r21_eval/
 # Submit: sbatch --export=ALL,D=Arts,RUN=r21_A01,SEED=42,STEP=e3 sbatch/r22/r22_run.sbatch
 #SBATCH --account=torch_pr_69_tandon_advanced
@@ -37,6 +38,7 @@ case $STEP in
   e3)     OUT=$CK/r22_e3; mkdir -p $OUT; CMD="python -u r22_e3_smooth.py $A --tokenizer_ckpt $V1/tokenizer.pth --out_dir $OUT > $OUT/e3.log 2>&1; tail -c 800 $OUT/e3.log" ;;
   e2diag) mkdir -p $RUNS/geo/r22/$D; CMD="python -u r22_e2_diag.py $A --out_file $RUNS/geo/r22/$D/e2diag_${RUN}_s$SEED.pt" ;;
   e2eval) OUT=$CK/r22_e2eval; mkdir -p $OUT; CMD="python -u r22_e2_eval.py $A --out_dir $OUT > $OUT/e2eval.log 2>&1; tail -c 800 $OUT/e2eval.log" ;;
+  e5)     OUT=$CK/r22_e5; mkdir -p $OUT; CMD="python -u r22_e5_eval.py $A --regions $RUNS/geo/r22/$D/e5_regions.pt --out_dir $OUT > $OUT/e5.log 2>&1; tail -c 800 $OUT/e5.log" ;;
   eval)   OUT=$CK/r21_eval; mkdir -p $OUT; CMD="python -u r21_eval.py $A --out_dir $OUT > $OUT/eval.log 2>&1; tail -c 600 $OUT/eval.log" ;;
   *) echo "STEP?"; exit 1 ;;
 esac

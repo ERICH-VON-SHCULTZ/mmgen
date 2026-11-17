@@ -2344,3 +2344,29 @@ true level-1 code's top-10 rate is A01 f 0.500 vs C text 0.946 (Arts), 0.327 vs 
   first step (a coarse region chosen first, f within it), or fusing a coarse text / image region score into the f term, targets
   this error; codebook-neighbour smoothing (E3) does not.
 
+### 22.5 E5: coarse-region mass on top of the f term (inference only)
+
+Motivation: E4 — A01's wrong f codes mostly lie in the target's coarse region but are not codebook neighbours. Score
+(`macrec/r22_e5_eval.py`): candidates = every item under the top-K_f f codes (unchanged); s = A01's score; p = softmax(s) over the
+user's candidates; P(r) = Σ p over the candidates in region r; s' = s + β log P(r(item)). Valid grid β ∈ {0, .25, .5, 1, 2} × K_f ∈
+{50, 100} (exact ranks: every item under every f scored once), chosen per partition by valid HR@10 (tie NDCG@10); β = 0, K_f = 50 =
+plain A01 (sanity: equals its r21_eval valid ranks). Test once per chosen config; ms/user = one timed deployment pass at the chosen
+K_f + the region step (H200, batch 64).
+
+Partitions (`macrec/r22_e5_regions.py`, fitted on catalog items and training histories only; k-means = sklearn, n_init 10, seed 0):
+- **oracle** (diagnostic only): C's text-SID / image-SID level-1 code (`oracle_ctext`, `oracle_cimage`);
+- **(a) `mdlat_G{32,64,128}`:** k-means on the MD-RQ-VAE pre-quantization fused latent z_f (locked v1 1+2+2 tokenizer, same input prep);
+- **(b) `behav_G{32,64}`:** groups of the 256 f codes: f → next-f counts over consecutive pairs inside each user's items[:-2] (the
+  training part of the leave-one-out split), + 0.01 per cell, row-normalised, square root (Hellinger) so k-means on rows compares
+  distributions; region = group of the item's f. (Choice: k-means on Hellinger rows rather than spectral clustering — no affinity
+  parameter to tune);
+- **(c) `femb_G{32,64}`:** k-means on the checkpoint's own trained f input-embedding rows (baked codebook projection + offset), per
+  checkpoint;
+- **(d) `rawtext_G{32,64}` — uses raw features:** k-means on the item text features the tokenizer consumes.
+Each partition's NMI vs C-text and C-image level 1 (catalog items) is reported with its result.
+
+Checkpoints: A01 Arts 42 / 43 / 44, Instruments 42; Instruments 43 / 44 and Games 42 / 43 / 44 when Part 1 delivers them. Report
+`tools/r22_e5_report.py` -> `geo/r22_e5.json` (paired CIs vs plain A01; split on C-hit / A01-miss users for the best oracle and the
+best own partition: rescued / lost, items above the target split into same f / other f in the target's region / other region).
+**TODO (pending).**
+
