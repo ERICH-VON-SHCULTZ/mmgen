@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-18 (round 22: E2–E5 done, E6 / E7 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-18 (round 22: E2–E6 done, E7 / E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -167,6 +167,10 @@ are reference-only, not part of the main line.
   competitors are not history codes → partial over-repeat, mostly unseen in-region f codes.
   **E6 / E7 (§22.6 / 22.7, queued 2026-11-18):** E6 = are A01's competitors the user's history f codes (no training); E7 = item
   vector s_j + zero-init W[f; text; image] (E7a) / W_f f (E7b) on A01, Arts seed 42 (seeds 43/44 only if valid beats A01).
+  **E8 / E9 (§22.8 / 22.9, queued 2026-11-18):** E8 = f embedding E(f) + zero-init W c(f), c = mean child-code embedding sum under f
+  in the SID tree (a: t1 t2 i1 i2, b: t1 i1; folded into the table at bake, checkpoint = A01 layout); E9 = mixture of K = 2 / 4
+  softmaxes at the f step (position 0). Arts seed 42; seeds 43/44 only if valid beats A01. Common report for E1 / E7 / E8 / E9 runs:
+  `tools/r22_runs_report.py` (E6 repeat / new-f split, E4 within-region split).
   **Gate rule (2026-11-18):** every pack needs a 5-step real-training smoke run (`finetune_r21.py --smoke_steps`) besides the checks.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
@@ -223,7 +227,7 @@ mmgen/
 │   ├── dense_head.py      §20 Task 2: DenseItemMFDT5 = P1a + dense item-level head (decoder start state x summed code embeddings), loss in training only
 │   ├── dense_eval.py      §20 Task 2: fused score P1a + w_d log-softmax(dense), f-selection rules A/B, valid sweep / test apply
 │   ├── r21_views.py, finetune_r21.py, r21_eval.py, r21_check.py, r21_gain_diag.py   §21: grouped views / ensemble-teacher KL / mutual view KL (GroupedItemMFDT5), item-level random views, A+C combo rows (GroupedRandDataset); gain diagnostic; entry on top of finetune_geo.py; K_f = 50 eval (plain, 1c, f diagnostics); sanity checks
-│   ├── r22_aux.py, r22_e3_smooth.py, r22_e2_diag.py, r22_e2_eval.py, r22_check.py, r22_e4_first.py, r22_e5_regions.py, r22_e5_eval.py, r22_e7.py, r22_e7_check.py   §22: aux t1/i1 heads (AuxGroupedItemMFDT5, loaded by mfd_eval.load_mfd_model), codebook-smoothed P(f), t1/i1 rank diagnostic, aux-score eval, gate checks, E4 level-1 (first-step) distributions of A01 / C / TIGER A / B, E5 coarse partitions + region-mass score eval, E7 structured item vector (E7GroupedItemMFDT5, loaded by load_mfd_model) + gate checks
+│   ├── r22_aux.py, r22_e3_smooth.py, r22_e2_diag.py, r22_e2_eval.py, r22_check.py, r22_e4_first.py, r22_e5_regions.py, r22_e5_eval.py, r22_e7.py, r22_e7_check.py, r22_e8.py, r22_e9.py, r22_e89_check.py   §22: aux t1/i1 heads (AuxGroupedItemMFDT5, loaded by mfd_eval.load_mfd_model), codebook-smoothed P(f), t1/i1 rank diagnostic, aux-score eval, gate checks, E4 level-1 (first-step) distributions of A01 / C / TIGER A / B, E5 coarse partitions + region-mass score eval, E7 structured item vector (E7GroupedItemMFDT5, loaded by load_mfd_model) + gate checks, E8 child-composed f embedding (E8Embedding, folded at bake), E9 mixture of softmaxes at the f step (MoSHead, E9GroupedItemMFDT5 loaded by load_mfd_model) + their gate checks
 │   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -300,7 +304,7 @@ mmgen/
     ├── mfd/p2_stage2.sbatch       §20 Task 2 stage 2 (CPU): lambda chosen on Arts validation -> Instruments/Games pack, eval and dense eval
     ├── r21/run_r21_train.sh, r21_gate.sbatch, pack_r21_train.sbatch, r21_eval.sbatch, r21_stage2.sbatch, r21_collect.sbatch   §21 runs (VAR G0|A01|A05|B01|B05|C033|C060|G0acc|A01acc|AC1|AC0; P1aref = dry-run reference; pack entry <D>:<VAR>[:<SEED>]), gate (macrec/r21_check.py + tools/r21_config_diff.py; writes only r21_* files), packs, H200 eval (K_f 50 plain + 1c + f diagnostics), Arts -> Instruments family choice (tools/r21_family_choice.py), CIs (tools/r21_collect.py -> geo/r21_<D>.json)
     ├── r21/r21_gain.sbatch, r21_combo_stage.sbatch, r21_tool.sbatch   §21.6 gain diagnostic (macrec/r21_gain_diag.py + tools/r21_gain_report.py), §21.4 combo -> Instruments stage (tools/r21_combo_choice.py), any §21 CPU tool (e.g. TOOL="r21_seeds.py Arts" = §21.5 3-seed table)
-    ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1|E7a|E7b; SMOKE=1 = 5 real optimizer steps -> geo/gate/r22_smoke; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|e5|fdump|eval, SID=1+2+2|1+3+3); E5 partitions r22_e5_regions.sbatch (CPU), report tools/r22_e5_report.py; E6 tools/r22_e6_report.py (history-f competitors); E7 gate r22_e7_gate.sbatch, stage r22_e7_stage.sbatch (CPU), report tools/r22_e7_report.py; reports tools/r22_e3_report.py, r22_e2_report.py; E4 r22_e4.sbatch + tools/r22_e4_report.py (level-1 predictability, HR@10 by level-1 rank, partition NMI/ARI); §21.9 table tools/r21_seeds_all.py
+    ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1|E7a|E7b|E8a|E8b|E9k2|E9k4; SMOKE=1 = 5 real optimizer steps -> geo/gate/r22_smoke; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|e5|fdump|eval, SID=1+2+2|1+3+3); E5 partitions r22_e5_regions.sbatch (CPU), report tools/r22_e5_report.py; E6 tools/r22_e6_report.py (history-f competitors); E7 gate r22_e7_gate.sbatch, stage r22_e7_stage.sbatch (CPU), report tools/r22_e7_report.py; E8/E9 gate r22_e89_gate.sbatch, stage r22_e89_stage.sbatch (CPU); common E1/E7/E8/E9 report tools/r22_runs_report.py; reports tools/r22_e3_report.py, r22_e2_report.py; E4 r22_e4.sbatch + tools/r22_e4_report.py (level-1 predictability, HR@10 by level-1 rank, partition NMI/ARI); §21.9 table tools/r21_seeds_all.py
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
@@ -644,7 +648,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `fa97f5b` | §22.5 E5 code |
 | `21284c4` | §22.2 step 2, §22.5 results |
 | `4bab1f8` | §22.6 E6 / §22.7 E7 code, smoke-step gate |
-| (next) | §22.6 results |
+| `dec3646` | §22.6 E6 results |
+| (next) | §22.8 E8 / §22.9 E9 code, common round-22 run report |
 
 ---
 

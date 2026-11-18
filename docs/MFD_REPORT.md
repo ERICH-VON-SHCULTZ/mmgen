@@ -2515,3 +2515,86 @@ Stage (`sbatch/r22/r22_e7_stage.sbatch`, CPU): every variant with Arts seed-42 v
 seeds 43 / 44 (pack, eval, fdump, report). GPU order: Part-1 A01 pack, then E1, then E7 (the E7 pack starts only after both have
 started). **TODO (pending).**
 
+
+### 22.8 E8: f embedding composed from its children (training)
+
+Why (from E6): A01 already beats C on repeat-f users; the whole gap is on users moving to a new f, where the true f sits at a
+median rank of about 40. E8 gives each f a representation built from its children in the MD SID tree. The t1 / i1 codebooks are
+shared across f (each t1 code appears under about 30 f codes), so related f codes get related embeddings even when they are far
+apart in the f codebook.
+
+`macrec/r22_e8.py` (`E8GroupedItemMFDT5` = A01 + `E8Embedding`):
+- For every f, c(f) = the mean over the catalog items under f of [E(t1) + E(t2) + E(i1) + E(i2)] (**E8-a**) or [E(t1) + E(i1)]
+  (**E8-b**).
+- E'(f) = E(f) + W c(f), with W = Linear(d → d, no bias) initialised to zero.
+- c(f) is recomputed from the current embedding table on every forward pass, and gradients reach the child embeddings too.
+- The tree comes from the locked v1 1+2+2 index of all catalog items; no interaction data is used.
+
+E'(f) replaces E(f) in the whole tied table. That covers the encoder's item-vector sum and the tied output layer (the f logits;
+the f rows of every softmax), as specified. It also covers the decoder's input f token. Choice: the spec names the first two;
+the decoder input is the only other use of E(f), and switching it keeps one table everywhere. At W = 0 this is identical.
+
+Implementation choice: E8Embedding wraps the training-time GeoEmbedding and exposes `full_weight()`. The geometry bake
+(`finetune_geo.bake_and_save`) therefore folds E'(f), with the final W and c, into the plain table. The saved checkpoint has
+A01's layout (`config.r22_e8` records the variant), and every evaluation tool loads it unchanged. This is exact, because c(f)
+depends only on the table, which is frozen after training. The final ‖W‖ is logged in `train_stats.json` (`r21.e8`). Added
+parameters: 128² = 16,384.
+
+### 22.9 E9: mixture of softmaxes at the f step (training)
+
+`macrec/r22_e9.py` (`E9GroupedItemMFDT5` = A01 + `MoSHead` as the tied output head) works at decoder position 0, the position
+whose output is P(f) in training and in every inference path. With the final decoder state h (after T5's tied-head scaling):
+- h_k = W_k h for k = 1..K;
+- logits_k = h_k Eᵀ, using the tied table;
+- π = softmax(W_π h);
+- P = Σ_k π_k softmax(logits_k), over the full vocabulary, as A01's f softmax.
+
+Init: W_k = I + N(0, 0.01²) and W_π = 0, so π starts uniform. The position-0 logits are replaced by log P, so the rest is
+unchanged:
+- the f CE is −log P(true f);
+- A01's teacher KL reads `logits[:, 0, 0, f codes]`, so student and teacher are the mixture renormalised over f, as in A01, and
+  the teacher is the mean over views of the mixture P(f);
+- inference (`mfd_eval.score_batch` pass 1, `mfd_mv_infer.f_logprobs`) reads the full-vocabulary log-softmax at [start], which is
+  log P.
+
+In `last_logprobs` (inference reads only the last position), the mixture at position 0 is skipped for decoder inputs longer
+than one token, because it would be discarded. W and W_π are saved with the model (`config.r22_e9` = K), and
+`mfd_eval.load_mfd_model` rebuilds the class. Runs: K = 2 and K = 4 (added parameters K·128² + 128·K).
+
+### 22.8 / 22.9 gate, runs and reporting
+
+**Gate** (`sbatch/r22/r22_e89_gate.sbatch`) runs `macrec/r22_e89_check.py` on A01 seed 42.
+- **E8, for a and b:**
+  1. Step 0 equals A01: logits and the grouped training loss with W = 0.
+  2. W receives a gradient.
+  3. c(f) is finite. Bucket sizes are reported: catalog items per f, and f tokens without items, which get c = 0.
+  4. Geometry is installed for real. Then:
+     - 4a: a safetensors checkpoint reload (as `Trainer._load_best_model`) gives identical logits;
+     - 4: the bake folds E'(f) with identical logits, and `load_mfd_model` reloads the baked model with identical logits.
+- **E9, for K = 2 and 4:**
+  1. The initial loss is close to A01's (|Δ| / loss < 0.02). Reported: Δloss, the maximum |Δ log P(f)|, and an unchanged check
+     on the other positions.
+  2. W_π and every W_k receive gradients.
+  3. Inference P(f) from `last_logprobs` at [start] equals the training forward's position-0 log P, and a later position read
+     through `last_logprobs` equals the training forward.
+  4. Checks 4a and 4 as for E8.
+
+The gate also does dry runs plus a config diff against A01: only model_class, n_params and model_config.r22_e8 / r22_e9 may
+differ. Each of E8a, E8b, E9k2 and E9k4 then runs 5 real optimizer steps (`smoke.json`: losses and gradient norms finite, ‖W‖ > 0
+for E8, ‖W_π‖ > 0 for E9). `run_r22_train.sh` refuses an E8 or E9 run unless the check file and its smoke file pass.
+
+**Runs:** Arts seed 42, A01's exact config otherwise (`run_r22_train.sh VAR=E8a|E8b|E9k2|E9k4`). One pack runs after the
+already-queued jobs (Part-1 evals, E1 eval, E7 pack and evals).
+
+**Common reporting** (`tools/r22_runs_report.py` → `geo/r22_runs.json`) applies to every E1 / E7 / E8 / E9 run:
+- valid and test HR@1/5/10 and NDCG@5/10, with paired CIs against A01 of the same seed, and ms/user;
+- f diagnostics: top-1, median rank of the true f, and E4 information gain;
+- the **E6 split**: for repeat-f and new-f users, the share of users, the model's and C's HR@10, C − model, and the median rank
+  of the true f; also the share of competitors that are history f codes;
+- the **E4 within-region split**: among C-hit / A01-miss users, how many are rescued; over all users, rescued vs lost; and the
+  same-region competitors, A01 vs the model.
+
+E1 is analysed in its own 1+3+3 f space. Its f codes are not comparable to A01's, but its competitor counts are.
+
+**Stage** (`sbatch/r22/r22_e89_stage.sbatch`, CPU): every E8 / E9 variant whose Arts seed-42 valid HR@10 beats A01's (0.1435) is
+chained on Arts seeds 43 / 44. Not on Instruments. **TODO (pending).**

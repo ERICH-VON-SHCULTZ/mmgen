@@ -7,6 +7,9 @@ one of the r21_views.py methods swapped in:
   --r22_aux_gamma G   §22 E2 (grouped modes only): + G x [CE(t1) + CE(i1)] from aux heads at the f position (r22_aux.py)
   --r22_e7 a|b        §22.7 E7 (grouped modes only): zero-initialised linear map of the item's f / text / image code sums (a) or of
                       its f embedding only (b) added to the item vector (r22_e7.py)
+  --r22_e8 a|b        §22.8 E8 (grouped modes only): f embedding E'(f) = E(f) + W c(f), c(f) = mean child-code embedding sum
+                      under f in the SID tree (a: t1 t2 i1 i2, b: t1 i1), W zero-initialised (r22_e8.py; folded into the table at bake)
+  --r22_e9_k K        §22.9 E9 (grouped modes only): mixture of K softmaxes at the f step (r22_e9.py)
   --smoke_steps N     gate: run N real optimizer steps of the exact command (data loading, loss, backward, optimizer, clipping),
                       write <output_dir>/smoke.json (per-step loss + grad norm, E7 weight norm) and exit; no evaluation, no save
   --dump_file PATH    dry run: resolved config dumped at trainer.train() (config_dryrun), no training
@@ -37,6 +40,8 @@ def pop(name, default=None):
 MODE = pop("--r21_mode")
 AUX = float(pop("--r22_aux_gamma", 0.0))
 E7 = pop("--r22_e7")
+E8 = pop("--r22_e8")
+E9 = int(pop("--r22_e9_k", 0))
 SMOKE = int(pop("--smoke_steps", 0))
 BETA = float(pop("--r21_beta", 0.0))
 P_FULL = pop("--r21_p_full")
@@ -66,9 +71,17 @@ if __name__ == "__main__":
     if AUX > 0:
         import r22_aux
         enc_struct.ItemMFDT5 = r22_aux.AuxGroupedItemMFDT5
+    assert sum(map(bool, (AUX > 0, E7, E8, E9))) <= 1, "one round-22 change at a time"
+    assert (E8 is None or (grouped and E8 in ("a", "b"))) and (E9 == 0 or (grouped and E9 >= 2)), "--r22_e8 / --r22_e9_k need a grouped mode"
     if E7:
         import r22_e7
         enc_struct.ItemMFDT5 = r22_e7.E7GroupedItemMFDT5
+    if E8:
+        import r22_e8
+        enc_struct.ItemMFDT5 = r22_e8.E8GroupedItemMFDT5
+    if E9:
+        import r22_e9
+        enc_struct.ItemMFDT5 = r22_e9.E9GroupedItemMFDT5
 
     def load_r21(args):
         if MODE == "AC":
@@ -94,6 +107,11 @@ if __name__ == "__main__":
                 info.update(k["model"].install_aux(k["tokenizer"], AUX))
             if E7:
                 info.update(k["model"].install_e7(E7))
+            if E8:
+                arg = lambda n: sys.argv[sys.argv.index("--" + n) + 1]
+                info["e8"] = k["model"].install_e8(k["tokenizer"], os.path.join(arg("data_path"), arg("dataset"), arg("dataset") + arg("index_file")), E8)
+            if E9:
+                info["e9"] = k["model"].install_e9(E9)
             b = self.data_collator([self.train_dataset[0]])             # collator / dataset mismatch fails here, also in
             assert not grouped or b["input_ids"].shape[0] == 3, b["input_ids"].shape   # the gate's dry run (23398867)
             clip = self.accelerator.clip_grad_norm_
@@ -132,11 +150,14 @@ if __name__ == "__main__":
             import math
             m = self.trainer.model
             e7 = getattr(m, "e7", None)
+            e8 = m.e8_w_norm() if E8 else None
+            e9 = m.e9_stats() if E9 else None
             res = {"steps": state.global_step, "losses": LOSSES, "grad_norms": NORMS,
-                   "e7_weight_norm": None if e7 is None else float(e7.weight.norm()),
+                   "e7_weight_norm": None if e7 is None else float(e7.weight.norm()), "e8_weight_norm": e8, "e9": e9,
                    "trainable_params": sum(p.numel() for p in m.parameters() if p.requires_grad)}
             res["ok"] = (len(LOSSES) >= SMOKE and all(math.isfinite(x) for x in LOSSES + NORMS)
-                         and (e7 is None or res["e7_weight_norm"] > 0))
+                         and (e7 is None or res["e7_weight_norm"] > 0) and (not E8 or e8 > 0)
+                         and (not E9 or e9["W_pi_norm"] > 0))
             json.dump(res, open(os.path.join(args.output_dir, "smoke.json"), "w"), indent=1)
             print("[finetune_r21] smoke", json.dumps(res), flush=True)
             os._exit(0 if res["ok"] else 4)
@@ -146,6 +167,10 @@ if __name__ == "__main__":
     out_dir = sys.argv[sys.argv.index("--output_dir") + 1]
     runpy.run_path(os.path.join(here, "finetune_mfd.py"), run_name="__main__")
     if int(os.environ.get("LOCAL_RANK", 0)) == 0 and "model" in state:
+        if E8:
+            info["e8"]["w_norm_final"] = state["model"].e8_w_norm()    # W is folded into the table by the bake
+        if E9:
+            info["e9"]["final"] = state["model"].e9_stats()
         diff = finetune_geo.bake_and_save(state, out_dir)
         if NORMS:
             json.dump(NORMS, open(os.path.join(out_dir, "grad_norms.json"), "w"))

@@ -46,7 +46,11 @@ def load_mfd_model(path):
     """MFDT5, or enc_struct.ItemMFDT5 when the checkpoint has config.struct_mode (§17 P1a), or dense_head.DenseItemMFDT5
     when it has config.dense_head (§20 Task 2)."""
     cfg = json.load(open(os.path.join(path, "config.json")))
-    if cfg.get("r22_e7"):                                           # §22.7 E7: A01 + structured item vector
+    if cfg.get("r22_e9"):                                           # §22.9 E9: A01 + mixture of softmaxes at the f step
+        from r22_e9 import E9GroupedItemMFDT5
+        return E9GroupedItemMFDT5.from_pretrained(path)
+    # §22.8 E8 (config.r22_e8) needs no branch: E'(f) is folded into the saved table, the model is A01's layout
+    if cfg.get("r22_e7"):                                         # §22.7 E7: A01 + structured item vector
         from r22_e7 import E7GroupedItemMFDT5
         return E7GroupedItemMFDT5.from_pretrained(path)
     if cfg.get("r22_aux"):                                          # §22 E2: A01 + aux t1 / i1 heads

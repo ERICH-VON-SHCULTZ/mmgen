@@ -2,6 +2,8 @@
 Allowed: run-dir paths, volatile fields and per variant
   E2g*: the aux heads (model_class, n_params, model_config.r22_aux / r22_aux_nt / r22_aux_ni)
   E7*:  the E7 item-vector map (model_class, n_params, model_config.r22_e7)
+  E8*:  the f-embedding map W (model_class, n_params, model_config.r22_e8)
+  E9*:  the mixture-of-softmaxes parameters (model_class, n_params, model_config.r22_e9)
   E1:   the 1+3+3 SID set (index_file / image_index_file, vocabulary: model_config.vocab_size, tokenizer_len, n_params)
 Anything else is UNINTENDED -> not ok.  Usage: python r22_config_diff.py <D> VAR [VAR ...] -> geo/gate/<D>/r22_config_diff.json (merged)
 """
@@ -14,6 +16,8 @@ from r21_config_diff import PATHS, VOLATILE, comparable
 RUNS = "/scratch/yw8866/mmgen_runs"
 OK = {"E2": {"model_class", "n_params", "model_config.r22_aux", "model_config.r22_aux_nt", "model_config.r22_aux_ni"},
       "E7": {"model_class", "n_params", "model_config.r22_e7"},
+      "E8": {"model_class", "n_params", "model_config.r22_e8"},
+      "E9": {"model_class", "n_params", "model_config.r22_e9"},
       "E1": {"resolved_args.index_file", "resolved_args.image_index_file", "model_config.vocab_size", "tokenizer_len", "n_params"}}
 
 

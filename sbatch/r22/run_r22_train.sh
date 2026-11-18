@@ -7,6 +7,9 @@
 #                        encoder sums all 7 codes, decoder branches 3 steps each)
 #        E7a / E7b       §22.7: A01 + zero-initialised W on the item's [f; text; image] code sums (a) / on its f embedding (b)
 #                        (--r22_e7 a|b; macrec/r22_e7.py). Also needs geo/<D>/r22_e7_check.json all_pass + the 5-step smoke run.
+#        E8a / E8b       §22.8: f embedding E(f) + W c(f), c = mean child-code sum (a: t1 t2 i1 i2, b: t1 i1), W zero-init (--r22_e8)
+#        E9k2 / E9k4     §22.9: mixture of K = 2 / 4 softmaxes at the f step (--r22_e9_k). E8 / E9 need geo/<D>/r22_e89_check.json
+#                        all_pass + the 5-step smoke run.
 # -> mmgen_runs/mfd/<D>/r22_<VAR>/seed<S>. Gate: geo/<D>/r22_check.json all_pass + geo/gate/<D>/r22_config_diff.json runs.r22_<VAR>.ok
 # DRYRUN=1: dumps the resolved config into mmgen_runs/geo/gate/r22_dryrun/<D>/r22_<VAR> (no training).
 # SMOKE=1: the exact command for 5 real optimizer steps (--smoke_steps 5) -> geo/gate/r22_smoke/<D>/r22_<VAR>/smoke.json, then exit.
@@ -20,7 +23,11 @@ case $VAR in
   E1)    SID=1+3+3; IDX=.index_md133_a06_ep500_reassign.json ;;
   E7a)   EXTRA="--r22_e7 a" ;;
   E7b)   EXTRA="--r22_e7 b" ;;
-  *) echo "VAR must be E2g01, E2g05, E1, E7a or E7b"; exit 1 ;;
+  E8a)   EXTRA="--r22_e8 a" ;;
+  E8b)   EXTRA="--r22_e8 b" ;;
+  E9k2)  EXTRA="--r22_e9_k 2" ;;
+  E9k4)  EXTRA="--r22_e9_k 4" ;;
+  *) echo "VAR must be E2g01, E2g05, E1, E7a, E7b, E8a, E8b, E9k2 or E9k4"; exit 1 ;;
 esac
 V1=$RUNS/md/sids/v1/$D/$SID; TOKCK=$V1/tokenizer.pth
 NAME=r22_$VAR; OUT=$RUNS/mfd/$D/$NAME/seed$SEED
@@ -33,6 +40,11 @@ echo "r22 train D=$D VAR=$VAR SEED=$SEED SID=$SID -> $OUT (commit $(cd $REPO && 
 if [ "$DRYRUN" != 1 ] && [ "$SMOKE" != 1 ]; then
   if [[ $VAR == E7* ]]; then
     python -c "import json, sys; sys.exit(0 if json.load(open('$RUNS/geo/$D/r22_e7_check.json'))['all_pass'] else 1)" || { echo "R22 E7 CHECK NOT PASSED"; exit 3; }
+  fi
+  if [[ $VAR == E8* || $VAR == E9* ]]; then
+    python -c "import json, sys; sys.exit(0 if json.load(open('$RUNS/geo/$D/r22_e89_check.json'))['all_pass'] else 1)" || { echo "R22 E8/E9 CHECK NOT PASSED"; exit 3; }
+  fi
+  if [[ $VAR == E7* || $VAR == E8* || $VAR == E9* ]]; then
     python -c "import json, sys; sys.exit(0 if json.load(open('$RUNS/geo/gate/r22_smoke/$D/$NAME/smoke.json'))['ok'] else 1)" || { echo "R22 SMOKE NOT PASSED ($NAME)"; exit 3; }
   fi
   python -c "import json, sys; sys.exit(0 if json.load(open('$RUNS/geo/$D/r22_check.json'))['all_pass'] else 1)" || { echo "R22 CHECK NOT PASSED"; exit 3; }
