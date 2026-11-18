@@ -2436,7 +2436,57 @@ most recent. Competitors = f codes A01 ranks strictly above the target f. Choice
 analytic — the share expected if the competitors were drawn from q (the f marginal of training interactions, items[:-2]) excluding
 the target f, Σ_{f ∈ H, f ≠ f*} q(f) / (1 − q(f*)); "in the target's region" = the E4 definition (the f code contains ≥ 1 item of
 the target's C-text level-1 bucket); C hit = C's merged list of the same seed. User sets: all, C-hit / A01-miss, A01-hit / C-miss.
-**TODO (pending).**
+
+Results (fdumps 23594194–99 on H200, report 23594200; Part-1 checkpoints pending, 23594201–06).
+
+**1. Competitors from history** (mean over users with ≥ 1 competitor; chance in the last column)
+
+| checkpoint | user set | users | any | last 1 | last 3 | last 5 | chance | history f ranked above target |
+|---|---|---|---|---|---|---|---|---|
+| Arts 42 | all | 22,171 | 0.162 | 0.039 | 0.100 | 0.135 | 0.031 | 0.567 |
+| Arts 42 | C-hit / A01-miss | 616 | 0.256 | 0.073 | 0.165 | 0.217 | 0.029 | 0.448 |
+| Arts 42 | A01-hit / C-miss | 601 | 0.310 | 0.068 | 0.197 | 0.268 | 0.030 | 0.230 |
+| Arts 43 | C-hit / A01-miss | 589 | 0.267 | 0.080 | 0.187 | 0.235 | 0.030 | 0.443 |
+| Arts 44 | C-hit / A01-miss | 589 | 0.259 | 0.075 | 0.168 | 0.220 | 0.029 | 0.451 |
+| Instruments 42 | all | 17,112 | 0.122 | 0.026 | 0.068 | 0.096 | 0.045 | 0.558 |
+| Instruments 42 | C-hit / A01-miss | 392 | 0.154 | 0.038 | 0.097 | 0.129 | 0.045 | 0.450 |
+| Instruments 42 | A01-hit / C-miss | 355 | 0.236 | 0.062 | 0.158 | 0.200 | 0.043 | 0.257 |
+
+(Arts 43 / 44 "all" rows equal Arts 42 within ±0.003.)
+
+**2. Target f in history** (all users; C-hit / A01-miss in brackets)
+
+| checkpoint | target f in history | most recent at position 1 / 2–3 / 4–5 | A01 f rank in history: median / top-1 / top-10 | not in history |
+|---|---|---|---|---|
+| Arts 42 | 0.190 (0.310) | .44 / .31 / .14 | 1 / 0.465 / 0.809 (1 / 0.330 / 0.791) | 40 / 0.038 / 0.216 (15 / 0.056 / 0.369) |
+| Arts 43 | 0.190 (0.317) | .44 / .31 / .14 | 1 / 0.475 / 0.806 (1 / 0.412 / 0.786) | 41 / 0.035 / 0.214 |
+| Arts 44 | 0.190 (0.309) | .44 / .31 / .14 | 1 / 0.479 / 0.813 (1 / 0.313 / 0.824) | 39 / 0.037 / 0.214 |
+| Instruments 42 | 0.127 (0.158) | .34 / .35 / .17 | 1 / 0.437 / 0.689 (2 / 0.403 / 0.694) | 44 / 0.057 / 0.200 |
+
+**3. Repeat vs new f** (test HR@10; gap = C − A01; contribution = share × gap)
+
+| checkpoint | repeat: share / A01 / C / gap | new f: share / A01 / C / gap | contribution repeat / new | overall gap |
+|---|---|---|---|---|
+| Arts 42 | 0.190 / 0.377 / 0.369 / −0.0076 | 0.810 / 0.0673 / 0.0699 / +0.0026 | −0.0014 / +0.0021 | +0.0007 |
+| Arts 43 | 0.190 / 0.378 / 0.373 / −0.0045 | 0.810 / 0.0682 / 0.0694 / +0.0012 | −0.0009 / +0.0009 | +0.0001 |
+| Arts 44 | 0.190 / 0.377 / 0.365 / −0.0121 | 0.810 / 0.0673 / 0.0687 / +0.0014 | −0.0023 / +0.0012 | −0.0011 |
+| Instruments 42 | 0.127 / 0.377 / 0.372 / −0.0051 | 0.873 / 0.0917 / 0.0949 / +0.0032 | −0.0006 / +0.0028 | +0.0022 |
+
+**4. Region link** (share of competitors that are history f codes, in-region vs out-of-region): all users Arts 0.16 vs 0.12,
+Instruments 0.12 vs 0.10; C-hit / A01-miss Arts 0.27–0.28 vs 0.16–0.17, Instruments 0.17 vs 0.12.
+
+**Interpretation.**
+- **Not under-use:** when the target f is in the history (13–19% of users), A01 ranks it at median 1 (top-10 69–81%) and **beats C**
+  on these repeat users on every checkpoint (gap −0.005 to −0.012).
+- **The whole A01–C gap is on "new f" users** (81–87% of users; C ahead by +0.001 to +0.003 on every checkpoint), and there the target
+  f sits at median rank ~40.
+- **Partial over-repeat:** history f codes are 5× over-represented among competitors over all users (Arts 0.16 vs chance 0.03) and
+  ~9× on C-hit / A01-miss users (0.26 vs 0.03), concentrated on the most recent items (last 5: 0.22), and more so inside the target's
+  region (0.27 vs 0.16 outside). On these users A01 ranks 45% of the user's non-target history f codes above the target f. But ~74%
+  of the competitors are not history f codes at all, so over-repeat explains a minority of the within-region competitors.
+- **Verdict: mostly "neither", with an over-repeat component.** A01 is good at repeats, loses on transitions to a new f, and part of
+  that loss is pulling recent history f codes (often from the target's region) above the new target f. The rest of the competitors
+  are other unseen f codes in the region — the E4 / E5 picture.
 
 ### 22.7 E7: structured item vector that keeps f separable (training)
 

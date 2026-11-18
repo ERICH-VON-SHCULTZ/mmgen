@@ -162,6 +162,9 @@ are reference-only, not part of the main line.
   **E5 done (2026-11-17, §22.5):** region-mass score s + β log P(region) fails even with C's level-1 oracle (valid falls
   monotonically in β; all test CIs include 0 or are negative): a region-level term is constant within the region where the competing
   f codes are → closes the inference-only region line.
+  **E6 done (2026-11-18, §22.6, Arts 42/43/44 + Instruments 42):** A01 beats C on repeat-f users (target f in history, 13–19%);
+  the whole gap is on new-f users; history f codes are 5–9× over-represented among competitors (recent, in-region) but ~74% of
+  competitors are not history codes → partial over-repeat, mostly unseen in-region f codes.
   **E6 / E7 (§22.6 / 22.7, queued 2026-11-18):** E6 = are A01's competitors the user's history f codes (no training); E7 = item
   vector s_j + zero-init W[f; text; image] (E7a) / W_f f (E7b) on A01, Arts seed 42 (seeds 43/44 only if valid beats A01).
   **Gate rule (2026-11-18):** every pack needs a 5-step real-training smoke run (`finetune_r21.py --smoke_steps`) besides the checks.
@@ -640,7 +643,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `b986758` | §20.7 closed, §22.1 / 22.2 step 1 / 22.4 results |
 | `fa97f5b` | §22.5 E5 code |
 | `21284c4` | §22.2 step 2, §22.5 results |
-| (next) | §22.6 E6 / §22.7 E7 code, smoke-step gate |
+| `4bab1f8` | §22.6 E6 / §22.7 E7 code, smoke-step gate |
+| (next) | §22.6 results |
 
 ---
 
