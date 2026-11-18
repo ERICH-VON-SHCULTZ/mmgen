@@ -2229,7 +2229,22 @@ A01's dry run). Pack 23291837 (E2g01, E2g05, E1; nice 50), evals then e2eval per
 Training (pack 23291837): E2g01 best / stopped epoch 68 / 78, clipped on 15.9% of steps (A01 12.2%); **E2g05 75 / 85, clipped on
 100% of steps** — at γ = 0.5 the aux CE (≈ 2 × log 255 at init scale) puts every step above max_grad_norm 1.0, so E2g05 is also a
 different optimisation regime (read γ through E2g01). The pack's E1 run crashed (§22.3), so its dependents were cancelled; E2
-evals resubmitted: eval 23504717 / 23504719, e2eval 23504718 / 23504720, report 23504721. **Results TODO (pending).**
+evals resubmitted: eval 23504717 / 23504719, e2eval 23504718 / 23504720, report 23504721.
+
+Results (Arts seed 42, H200, batch 64, K_f = 50; `geo/r22_e2.json`):
+
+| run | valid HR@10 at w = 0 / .25 / .5 / 1 | chosen w | test HR@10 / NDCG@10 | − A01 (HR@10) | f top-1 / median rank (test) | ms/user |
+|---|---|---|---|---|---|---|
+| A01 (reference) | 0.1435 | — | 0.1260 / 0.0920 | — | — | 10.1 |
+| E2g01 (γ .1) | 0.1397 / .1377 / .1359 / .1303 | 0 | 0.1207 / 0.0885 | −0.0054 [−.0081, −.0027] | 0.119 / 27 | 10.2 |
+| E2g05 (γ .5) | 0.1326 / .1317 / .1301 / .1261 | 0 | 0.1149 / 0.0848 | −0.0111 [−.0137, −.0083] | 0.114 / 29 | 10.2 |
+
+Task-0 split vs A01 (test): E2g01 rescues 394 users and loses 513 (89% / 88% across f buckets); E2g05 373 / 619.
+
+Reading: **E2 fails on both counts.** The aux loss hurts the base model (w = 0 is already −0.005 / −0.011 on test, CI < 0, with
+f top-1 unchanged), more at the larger γ (whose steps are all clipped); the aux score term lowers validation monotonically in w,
+so validation picks w = 0. A marginal t1 / i1 prediction at the f position does not add cross-bucket evidence the f term lacks.
+**E2 closed.**
 
 ### 22.3 E1: deep codes, minimal probe
 
@@ -2368,5 +2383,47 @@ Each partition's NMI vs C-text and C-image level 1 (catalog items) is reported w
 Checkpoints: A01 Arts 42 / 43 / 44, Instruments 42; Instruments 43 / 44 and Games 42 / 43 / 44 when Part 1 delivers them. Report
 `tools/r22_e5_report.py` -> `geo/r22_e5.json` (paired CIs vs plain A01; split on C-hit / A01-miss users for the best oracle and the
 best own partition: rescued / lost, items above the target split into same f / other f in the target's region / other region).
-**TODO (pending).**
+
+Jobs: regions 23507053 (Arts, Instruments) / 23507059 (Games), evals 23507054–57, report 23507058 (`geo/r22_e5.json`); Part-1
+checkpoints 23507060–65, final report 23507069 (pending). Sanity (β = 0, K_f = 50 = A01's r21_eval valid ranks) 1.0000 on all four.
+
+Partitions on Arts (catalog items; Instruments similar): NMI vs C-text / C-image / f — mdlat 32/64/128: .38/.35/.52, .41/.39/.62,
+.43/.42/.72; behav 32/64: .28/.24/.68, .31/.26/.74 (very unbalanced: median region 115 / 27 items, largest 1,073 / 1,373); rawtext
+32/64: .66/.27/.41, .67/.31/.47; femb 32/64: ≈ .29–.35 / .27–.33.
+
+**Validation HR@10 by β** (K_f = 100; β = 0 at K_f = 50 in brackets):
+
+| checkpoint | partition | β = 0 | .25 | .5 | 1 | 2 |
+|---|---|---|---|---|---|---|
+| Arts 42 | oracle C-text | 0.1437 (0.1435) | 0.1440 | 0.1422 | 0.1384 | 0.1342 |
+| Arts 42 | rawtext G64 | 0.1437 | 0.1445 | 0.1431 | 0.1401 | 0.1345 |
+| Arts 42 | mdlat G64 | 0.1437 | 0.1434 | 0.1424 | 0.1383 | 0.1311 |
+| Instruments 42 | oracle C-text | 0.1576 (0.1574) | 0.1561 | 0.1532 | 0.1475 | 0.1393 |
+| Instruments 42 | rawtext G64 | 0.1576 | 0.1552 | 0.1531 | 0.1473 | 0.1393 |
+| Instruments 42 | mdlat G64 | 0.1576 | 0.1549 | 0.1518 | 0.1464 | 0.1363 |
+
+**Test** (chosen per partition on validation; CIs vs plain A01): most partitions choose β = 0 (then = plain at the chosen K_f,
+difference ≤ 0.0001). β > 0 was chosen only for: Arts 42 oracle C-text (β .25, K 100) −0.0013 [−.0026, +.0000] and rawtext G64 (β
+.25, K 100) −0.0013 [−.0027, +.0000]; Arts 43 rawtext G64 −0.0011 [−.0025, +.0002]; Arts 44 rawtext G64 −0.0005 [−.0018, +.0008];
+Instruments 42 behav G64 −0.0004 [−.0020, +.0012]. Mean over the four checkpoints: best valid gain +0.0004 (rawtext G64), test
+−0.0007; the oracle +0.0002 / −0.0003. ms/user 10.1 (K_f 50) / 19.2 (K_f 100) on Arts, 8.1 / 15.1 on Instruments; the region step
+itself costs < 0.1 ms.
+
+Split (C-hit / A01-miss users, best oracle = C-text, best own = rawtext G64): on Arts 42, oracle 28 of 616 rescued (all users: 94
+rescued / 123 lost), rawtext 41 of 616 (101 / 130); median target rank unchanged (22.5 → 23). Caveat: where the chosen K_f is 100
+the "items above" counts mix the region term with the larger candidate set (the +6–9 items "from other regions" are K_f = 100
+candidates), so they do not isolate the region term.
+
+**Interpretation.**
+- **The oracle does not help**, so the principle fails as formulated: validation HR@10 falls monotonically with β for every
+  partition, including C's own level-1 codes (Arts at most +0.0005 at β = .25; Instruments drops from β = .25). No own partition
+  beats the oracle except within noise (rawtext G64, the partition closest to C-text, NMI .67, is the best own one); NMI with C
+  and G do not track a gain because there is none.
+- **Why:** β log P(r) is constant within a region, so it cannot reorder the target against competitors in the same region —
+  and E4 showed most competitors are there (the f codes above the target contain the target's C-text bucket 2.4× chance). The
+  term can only push down other regions, and it pushes the target down whenever its region has less model mass than the
+  competitors' region. Region mass computed from A01's own scores also adds no new information; it re-weights A01's beliefs.
+- **Consequence:** fixing "right region, wrong fine code" needs a signal that discriminates **within** a region (between f codes
+  that share a coarse region), not a region-level prior. E5 closes the inference-only region line; Part-1 checkpoints still run
+  for completeness (23507060–65).
 

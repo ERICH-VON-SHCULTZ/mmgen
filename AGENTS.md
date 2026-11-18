@@ -158,8 +158,10 @@ are reference-only, not part of the main line.
   2× TIGER A/B's); it is finer (256 vs 55–97 codes) and cuts across C's coarse buckets; A01's wrong f codes sit in the target's C-text
   bucket 2.4× chance → cost of a fine cross-cutting first code, not predictability; C's edge is its training, not its partition.
   Round-20 Task 2 closed: dense head gains on no dataset, stays out. A01 Part-1 and E1 reruns pending (collator bug, `9341b52`).
-  **E5 (§22.5, queued):** s' = s + β log P(region) over the candidate softmax; oracle C-text / C-image level-1 regions vs own
-  partitions (MD latent, behavioural f groups, A01 f embedding, raw text features); β × K_f on valid, test once.
+  **E2 step 2 done (2026-11-17):** aux t1/i1 heads hurt (test −0.0054 / −0.0111 vs A01, CI < 0; aux score term w chosen 0) → closed.
+  **E5 done (2026-11-17, §22.5):** region-mass score s + β log P(region) fails even with C's level-1 oracle (valid falls
+  monotonically in β; all test CIs include 0 or are negative): a region-level term is constant within the region where the competing
+  f codes are → closes the inference-only region line.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -633,7 +635,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `40036b7` | §22.4 E4 code |
 | `9341b52` | finetune_r21: grouped collator for every grouped mode; collate-at-init guard |
 | `b986758` | §20.7 closed, §22.1 / 22.2 step 1 / 22.4 results |
-| (next) | §22.5 E5 code |
+| `fa97f5b` | §22.5 E5 code |
+| (next) | §22.2 step 2, §22.5 results |
 
 ---
 
