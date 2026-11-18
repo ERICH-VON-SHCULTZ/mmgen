@@ -1,6 +1,7 @@
 """§22 config gate: each round-22 dry run (sbatch/r22/run_r22_train.sh DRYRUN=1) vs round 21's A01 dry run (the base), dry vs dry.
 Allowed: run-dir paths, volatile fields and per variant
   E2g*: the aux heads (model_class, n_params, model_config.r22_aux / r22_aux_nt / r22_aux_ni)
+  E7*:  the E7 item-vector map (model_class, n_params, model_config.r22_e7)
   E1:   the 1+3+3 SID set (index_file / image_index_file, vocabulary: model_config.vocab_size, tokenizer_len, n_params)
 Anything else is UNINTENDED -> not ok.  Usage: python r22_config_diff.py <D> VAR [VAR ...] -> geo/gate/<D>/r22_config_diff.json (merged)
 """
@@ -12,6 +13,7 @@ from r21_config_diff import PATHS, VOLATILE, comparable
 
 RUNS = "/scratch/yw8866/mmgen_runs"
 OK = {"E2": {"model_class", "n_params", "model_config.r22_aux", "model_config.r22_aux_nt", "model_config.r22_aux_ni"},
+      "E7": {"model_class", "n_params", "model_config.r22_e7"},
       "E1": {"resolved_args.index_file", "resolved_args.image_index_file", "model_config.vocab_size", "tokenizer_len", "n_params"}}
 
 
@@ -27,7 +29,7 @@ def main():
     allok = True
     for V in vars_:
         d = json.load(open(f"{RUNS}/geo/gate/r22_dryrun/{D}/r22_{V}/dryrun.json"))
-        okset = OK["E2" if V.startswith("E2") else "E1"]
+        okset = OK[V[:2]]
         cls = {"allowed": {}, "paths": {}, "volatile": {}, "UNINTENDED": {}}
         for k, v in diff(comparable(ref), comparable(d)).items():
             last = k.split(".")[-1]

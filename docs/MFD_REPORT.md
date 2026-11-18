@@ -2427,3 +2427,41 @@ candidates), so they do not isolate the region term.
   that share a coarse region), not a region-level prior. E5 closes the inference-only region line; Part-1 checkpoints still run
   for completeness (23507060–65).
 
+### 22.6 E6: are the within-region competitors the user's own history f codes? (no training)
+
+Setup: A01's full-view log P(f) per test user (`r22_run.sbatch STEP=fdump` = `macrec/r22_e4_first.py --kind mfd` ->
+`geo/r22/<D>/fdump_r21_A01_s<S>.pt`), analysed by `tools/r22_e6_report.py` -> `geo/r22_e6.json`. Checkpoints: A01 Arts 42 / 43 / 44,
+Instruments 42; Instruments 43 / 44 and Games 42 / 43 / 44 when Part 1 delivers them. Test history = items[:-1], last 20, recency 1 =
+most recent. Competitors = f codes A01 ranks strictly above the target f. Choices where the spec left room: the chance baseline is
+analytic — the share expected if the competitors were drawn from q (the f marginal of training interactions, items[:-2]) excluding
+the target f, Σ_{f ∈ H, f ≠ f*} q(f) / (1 − q(f*)); "in the target's region" = the E4 definition (the f code contains ≥ 1 item of
+the target's C-text level-1 bucket); C hit = C's merged list of the same seed. User sets: all, C-hit / A01-miss, A01-hit / C-miss.
+**TODO (pending).**
+
+### 22.7 E7: structured item vector that keeps f separable (training)
+
+`macrec/r22_e7.py` (`E7GroupedItemMFDT5` = A01's GroupedItemMFDT5 + this encoder input): A01's item vector s_j (sum of the code
+embeddings present in the view) gets a zero-initialised linear term:
+- **E7-a:** e_j = s_j + W [E(f); E(t1) + E(t2); E(i1) + E(i2)] + r_j, W = Linear(3d → d, no bias);
+- **E7-b:** e_j = s_j + W_f E(f) + r_j, W_f = Linear(d → d, no bias).
+Absent parts in the text / image views are zero vectors (no view marker). Choice: no bias, so W = 0 is exactly A01 and every
+added parameter is a map of the parts (a bias would be a constant item offset, a different change). Everything else is A01's
+exact config (`run_r22_train.sh VAR=E7a|E7b`: grouped 341 pairs × 3 rows, accumulation 1, β = 0.1, same schedule and early
+stopping); added parameters 3 × 128² = 49,152 (a) / 16,384 (b).
+
+Gate (`sbatch/r22/r22_e7_gate.sbatch`): `macrec/r22_e7_check.py` on A01 seed 42 — (1) step 0 equals A01: logits, encoder output
+and grouped training loss with W = 0; (2) W receives gradient; (3) view parts (full view: f, text, image parts non-zero for every
+item; text view: image part zero; image view: text part zero; parts sum = A01's item sum); (4) save / reload with W ≠ 0 rebuilds
+E7GroupedItemMFDT5 (`mfd_eval.load_mfd_model`) with identical logits. Dry runs + config diff vs A01 (`tools/r22_config_diff.py`:
+only model_class, n_params, model_config.r22_e7 may differ). **New rule: 5 real training steps** of the exact command
+(`finetune_r21.py --smoke_steps 5`, `run_r22_train.sh SMOKE=1` -> `geo/gate/r22_smoke/<D>/r22_<VAR>/smoke.json`: per-step loss and
+gradient norm finite, E7 weight moved off zero); also run for E1 (whose pack was submitted before the rule). The training script
+refuses an E7 run unless both the check file and its smoke file pass.
+
+Evaluation: `r21_eval.py` plain K_f = 50 (valid / test HR@1/5/10, NDCG@5/10, f diagnostics, ms/user; H200, batch 64), fdump for the
+E4 information gain; `tools/r22_e7_report.py` -> `geo/r22_e7.json`: paired CIs vs A01 seed 42 on valid and test, and for the better
+run the within-region split on C-hit / A01-miss users (rescued / lost; same-region competitors above the target f, A01 vs E7).
+Stage (`sbatch/r22/r22_e7_stage.sbatch`, CPU): every variant with Arts seed-42 valid HR@10 above A01's (0.1435) is chained on Arts
+seeds 43 / 44 (pack, eval, fdump, report). GPU order: Part-1 A01 pack, then E1, then E7 (the E7 pack starts only after both have
+started). **TODO (pending).**
+

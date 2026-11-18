@@ -46,6 +46,9 @@ def load_mfd_model(path):
     """MFDT5, or enc_struct.ItemMFDT5 when the checkpoint has config.struct_mode (§17 P1a), or dense_head.DenseItemMFDT5
     when it has config.dense_head (§20 Task 2)."""
     cfg = json.load(open(os.path.join(path, "config.json")))
+    if cfg.get("r22_e7"):                                           # §22.7 E7: A01 + structured item vector
+        from r22_e7 import E7GroupedItemMFDT5
+        return E7GroupedItemMFDT5.from_pretrained(path)
     if cfg.get("r22_aux"):                                          # §22 E2: A01 + aux t1 / i1 heads
         from r22_aux import AuxGroupedItemMFDT5
         return AuxGroupedItemMFDT5.from_pretrained(path)
