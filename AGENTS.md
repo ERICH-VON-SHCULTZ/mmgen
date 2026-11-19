@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-18 (round 22: E2–E6 done, E7 / E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-19 (§21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -146,8 +146,9 @@ are reference-only, not part of the main line.
   **3 seeds, Arts (2026-11-15, §21.5):** A01 0.1263 ± .0005 / 0.0923 vs P1a 0.1233 ± .0006 / 0.0909, P1a+1c 0.1239, C 0.1262 ± .0012 / 0.0898,
   D 0.1255; A01 − P1a CI > 0 on every seed, valid +0.002 to +0.004 on every seed (meets the Arts bar); C033 0.1254 ± .0011 (CI > 0 on seed 42
   only). AC1 combo: valid 0.1411, test 0.1259 (no gain over A01 / C033; not chained). Pending: AC0 eval, round-20 dense evals.
-  **Round-21 finish (§21.9, running):** A01 on Instruments 43/44 + Games 42/43/44, P1a re-evals, 3-dataset x 3-seed table with valid/test
-  CIs vs P1a and C and a pooled bootstrap (`tools/r21_seeds_all.py`). No promotion call (user decides).
+  **Round-21 finish (§21.9, done 2026-11-19):** 3 datasets × 3 seeds, test HR@10 mean: A01 Instruments 0.1279 / Arts 0.1263 / Games 0.0994
+  vs P1a 0.1294 / 0.1233 / 0.1004 vs C 0.1310 / 0.1262 / 0.1007; A01's gain over P1a is Arts-only. Pooled over datasets: A01 − P1a +0.0000
+  [−0.0008, +0.0009], A01 − C −0.0012 [−0.0024, −0.0001] (NDCG ties C). No promotion call (user decides).
 - **Round 22 (2026-11-15, running), `docs/MFD_REPORT.md` §22; jobs `mmgen_runs/logs/round22_jobs.txt`:** exploratory probes on A01.
   E3 codebook-smoothed P(f) (no training, `macrec/r22_e3_smooth.py`); E2 step 1 t1/i1 diagnostic vs C (`r22_e2_diag.py`), step 2 aux
   t1/i1 heads at the f position (`r22_aux.py`, `r22_e2_eval.py`, γ 0.1/0.5); E1 A01 on the locked 1+3+3 SIDs. E1 step 0: 1+2+2 and
@@ -165,6 +166,10 @@ are reference-only, not part of the main line.
   **E6 done (2026-11-18, §22.6, Arts 42/43/44 + Instruments 42):** A01 beats C on repeat-f users (target f in history, 13–19%);
   the whole gap is on new-f users; history f codes are 5–9× over-represented among competitors (recent, in-region) but ~74% of
   competitors are not history codes → partial over-repeat, mostly unseen in-region f codes.
+  **E3 / E5 / E6 on all 9 A01 checkpoints (2026-11-19):** unchanged conclusions (E3, E5 closed; E6 repeat-f advantage / new-f gap
+  on every checkpoint, largest repeat advantage on Games). **E1 (1+3+3) done:** test HR@10 0.1234 vs A01 0.1260 (−0.0027 [−0.0057,
+  +0.0004]), 25 ms/user, not chained. **E7 done:** E7a −0.0013 (CI includes 0), E7b −0.0041 (CI < 0) test HR@10; new-f users and the
+  true f's rank unchanged → closed, not chained.
   **E6 / E7 (§22.6 / 22.7, queued 2026-11-18):** E6 = are A01's competitors the user's history f codes (no training); E7 = item
   vector s_j + zero-init W[f; text; image] (E7a) / W_f f (E7b) on A01, Arts seed 42 (seeds 43/44 only if valid beats A01).
   **E8 / E9 (§22.8 / 22.9, queued 2026-11-18):** E8 = f embedding E(f) + zero-init W c(f), c = mean child-code embedding sum under f
@@ -649,7 +654,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `21284c4` | §22.2 step 2, §22.5 results |
 | `4bab1f8` | §22.6 E6 / §22.7 E7 code, smoke-step gate |
 | `dec3646` | §22.6 E6 results |
-| (next) | §22.8 E8 / §22.9 E9 code, common round-22 run report |
+| `6157ad3`, `4dad819` | §22.8 E8 / §22.9 E9 code, common round-22 run report; E8/E9 gate check device fix |
+| (next) | §21.9 table, §22.1/22.3/22.5/22.6/22.7 results |
 
 ---
 

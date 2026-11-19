@@ -2139,7 +2139,36 @@ Jobs (`logs/round21_jobs.txt`): Games gate 23291207 (r21 checks on Games + A01 d
 Job history: Games gate 23291207 failed (check 7b read P1a's reference dry run before the gate created it; fixed `8904100`);
 the resubmitted pack 23398867 crashed at step 0 because `6b9bdda` (round 22) installed the grouped collator only with aux heads
 (fixed `9341b52`; the trainer now collates one example at init, so a gate dry run catches a collator / dataset mismatch).
-Current chain: gate 23504694, pack 23504695, A01 evals 23504696–703, table 23504712. **Results TODO (pending).**
+Current chain: gate 23504694, pack 23504695, A01 evals 23504696–703, table 23504712 (`tools/r21_seeds_all.py` → `geo/r21_seeds_all.json`).
+
+**Results (2026-11-19).** Plain K_f = 50 and +1c; C and D are merged lists. Mean ± std over seeds 42/43/44, HR@10 / NDCG@10:
+
+| | Instruments valid | Instruments test | Arts valid | Arts test | Games valid | Games test |
+|---|---|---|---|---|---|---|
+| P1a | 0.1562 / 0.1204 | 0.1294 ± .0002 / 0.1010 | 0.1399 / 0.1013 | 0.1233 ± .0006 / 0.0909 | 0.1123 / 0.0600 | 0.1004 ± .0004 / 0.0531 |
+| P1a+1c | 0.1577 / 0.1209 | 0.1300 ± .0012 / 0.1014 | 0.1415 / 0.1019 | 0.1239 ± .0002 / 0.0915 | 0.1132 / 0.0603 | 0.1000 ± .0011 / 0.0529 |
+| A01 | 0.1568 / 0.1198 | 0.1279 ± .0005 / 0.0991 | 0.1427 / 0.1028 | 0.1263 ± .0005 / 0.0923 | 0.1127 / 0.0599 | 0.0994 ± .0008 / 0.0528 |
+| A01+1c | 0.1583 / 0.1205 | 0.1290 ± .0006 / 0.0997 | 0.1440 / 0.1033 | 0.1265 ± .0004 / 0.0925 | 0.1134 / 0.0601 | 0.1000 ± .0003 / 0.0530 |
+| C | 0.1594 / 0.1208 | 0.1310 ± .0012 / 0.1006 | 0.1453 / 0.1025 | 0.1262 ± .0012 / 0.0898 | 0.1146 / 0.0611 | 0.1007 ± .0008 / 0.0537 |
+| D | 0.1588 / 0.1201 | 0.1310 ± .0009 / 0.1011 | 0.1441 / 0.1016 | 0.1255 ± .0027 / 0.0893 | 0.1156 / 0.0618 | 0.1020 ± .0019 / 0.0539 |
+
+Per-seed paired test CIs:
+- **Arts.** A01 − P1a > 0 on every seed (CI > 0). A01 ties C on HR@10 and is above C on NDCG@10 (§21.5).
+- **Instruments.** A01 − P1a is −0.0010 to −0.0022 HR@10 (CIs include 0), and NDCG@10 is lower (CI < 0 on seeds 43/44).
+- **Instruments, A01 − C.** −0.0022, −0.0040 (CI < 0), −0.0030.
+- **Games, A01 − P1a.** −0.0018, +0.0002, −0.0011 (all CIs include 0).
+- **Games, A01 − C.** −0.0025 (CI < 0 on seed 42), +0.0003, −0.0015.
+- **+1c on A01** adds +0.0002 (Arts) to +0.0011 (Instruments) test HR@10.
+
+**Pooled bootstrap**, test, all three datasets (81,542 users per seed), HR@10:
+- A01 − P1a: +0.0000 [−0.0008, +0.0009];
+- A01 − C: −0.0012 [−0.0024, −0.0001].
+
+NDCG@10: A01 − P1a −0.0001 [−0.0006, +0.0003]; A01 − C −0.0001 [−0.0009, +0.0006].
+
+Evidence only, no promotion call:
+- A01's gain over P1a is an Arts effect. It is consistent there, absent on Games, and slightly negative on Instruments.
+- Pooled over the three datasets, A01 equals P1a and sits 0.0012 HR@10 below C, with NDCG@10 tied with C.
 
 Leftovers closed: AC0 (§21.4) and the round-20 dense evals (§20.7: no gain, dense head out).
 
@@ -2190,7 +2219,10 @@ Diagnostic users (C-hit / A01-miss, with ≥ 1 code above the target f): Arts 52
 
 Reading: **no effect** (every CI includes 0, the chosen τ moves across seeds, no cost). Codebook neighbours are over-represented
 among the codes ranked above the target f (4–7× chance) but are only 8–14% of them: most of the confusions are with codes far
-from the target in the shared codebook, which neighbour smoothing cannot move. Remaining checkpoints (Part 1) pending.
+from the target in the shared codebook, which neighbour smoothing cannot move. **All 9 checkpoints** (A01, 3 datasets × 3 seeds;
+final report 23504713): every test CI includes 0 (differences −0.0005 to +0.0005); the chosen τ ranges from 0.25 to 4.0 across
+checkpoints; ms/user is unchanged. On Instruments and Games too, only 6–15% of the codes ranked above the target are among its 5
+codebook neighbours. **E3 closed.**
 
 ### 22.2 E2: multiple entry points into the decoder
 
@@ -2259,7 +2291,20 @@ views), the decoder branches run 3 steps each (4 decoder passes). Code change: `
 unchanged; checked in the gate). Evaluated at K_f = 50 (`r21_eval.py` on the 1+3+3 index), ms/user on H200; compared with A01
 1+2+2 and with the chain decoder's 1+2+2 vs 1+3+3 gap on Arts (0.1059 vs 0.1027, §5.1 of the MD-RQ-VAE report). Job: in pack
 23291837, which crashed at step 0 (grouped collator not installed without aux heads, `6b9bdda`; fixed `9341b52`). Rerun: gate
-23504714, pack 23504715, eval 23504716. **TODO (pending).**
+23504714, pack 23504715, eval 23504716; fdump (1+3+3) 23650455; report `tools/r22_runs_report.py` 23650456.
+
+**Result (Arts seed 42):**
+- valid HR@10 0.1409 vs A01 0.1435 (−0.0025 [−0.0057, +0.0008]);
+- test HR@10 / NDCG@10 0.1234 / 0.0915 vs 0.1260 / 0.0920 (HR@10 −0.0027 [−0.0057, +0.0004], NDCG@10 −0.0005);
+- 25.1 ms/user vs 10.1, because of the extra decoder pass and the larger prefix sets;
+- f diagnostics (in its own 1+3+3 f space): top-1 0.106 vs 0.119, median rank 31 vs 27, normalised IG 0.116 vs 0.129.
+
+E6 split:
+- repeat-f users are 16.7% (vs 19.0% in A01's f space), HR@10 0.386, C − model −0.0022;
+- new-f users: HR@10 0.0706, C − model +0.0044, true-f median rank 42.
+
+E4 split on C-hit / A01-miss users: 258 / 616 rescued. Over all users, 574 rescued and 633 lost: E1 reorders a lot of users but
+nets out slightly below A01. The deeper codes do not help on Arts and cost 2.5× the time. Not chained (Arts valid below A01).
 
 **Step 2 (not run; design note for the decision).** "Encoder 1+3+3 / decoder 1+2+2" would need, because the two sets are
 unrelated codes from separate tokenizers:
@@ -2385,7 +2430,13 @@ Checkpoints: A01 Arts 42 / 43 / 44, Instruments 42; Instruments 43 / 44 and Game
 best own partition: rescued / lost, items above the target split into same f / other f in the target's region / other region).
 
 Jobs: regions 23507053 (Arts, Instruments) / 23507059 (Games), evals 23507054–57, report 23507058 (`geo/r22_e5.json`); Part-1
-checkpoints 23507060–65, final report 23507069 (pending). Sanity (β = 0, K_f = 50 = A01's r21_eval valid ranks) 1.0000 on all four.
+checkpoints 23507060–65, final report 23507069 (done). **All 9 A01 checkpoints:**
+- For every partition (both oracles, MD latent, behavioural, f embedding, raw text), the mean valid gain is ≤ +0.0004 and the
+  mean test gain is between −0.0003 and +0.0002.
+- No test CI excludes 0 on any checkpoint.
+- Where β > 0 is chosen, the gain comes with K_f = 100 (the larger candidate set), not from the region term.
+
+The conclusion is unchanged: **E5 closed.** Sanity (β = 0, K_f = 50 = A01's r21_eval valid ranks) 1.0000 on all four.
 
 Partitions on Arts (catalog items; Instruments similar): NMI vs C-text / C-image / f — mdlat 32/64/128: .38/.35/.52, .41/.39/.62,
 .43/.42/.72; behav 32/64: .28/.24/.68, .31/.26/.74 (very unbalanced: median region 115 / 27 items, largest 1,073 / 1,373); rawtext
@@ -2437,7 +2488,18 @@ analytic — the share expected if the competitors were drawn from q (the f marg
 the target f, Σ_{f ∈ H, f ≠ f*} q(f) / (1 − q(f*)); "in the target's region" = the E4 definition (the f code contains ≥ 1 item of
 the target's C-text level-1 bucket); C hit = C's merged list of the same seed. User sets: all, C-hit / A01-miss, A01-hit / C-miss.
 
-Results (fdumps 23594194–99 on H200, report 23594200; Part-1 checkpoints pending, 23594201–06).
+Results (fdumps 23594194–99 on H200, report 23594200; Part-1 checkpoints 23594201–05, final report 23594206 → all 9 A01 checkpoints).
+
+**All 9 checkpoints (final report):**
+
+| checkpoint | repeat-f share | C − A01 (repeat) | C − A01 (new-f) | new-f true-f median rank | competitors from history: all / C-hit A01-miss (chance) |
+|---|---|---|---|---|---|
+| Arts 42 / 43 / 44 | 0.190 | −0.0076 / −0.0045 / −0.0121 | +0.0026 / +0.0012 / +0.0014 | 40 / 41 / 39 | 0.16 / 0.26 (0.03) |
+| Games 42 / 43 / 44 | 0.170 | −0.0156 / −0.0138 / −0.0109 | +0.0062 / +0.0025 / +0.0040 | 27 / 28 / 28 | 0.20 / 0.29 (0.035) |
+| Instruments 42 / 43 / 44 | 0.127 | −0.0051 / −0.0051 / −0.0078 | +0.0032 / +0.0054 / +0.0046 | 44 / 43 / 43 | 0.12 / 0.15–0.17 (0.045) |
+
+The pattern holds on every checkpoint: A01 beats C on repeat-f users and loses on new-f users. On Games the repeat-f advantage
+is largest (−0.011 to −0.016). The new text below covers the first four checkpoints.
 
 **1. Competitors from history** (mean over users with ≥ 1 competitor; chance in the last column)
 
@@ -2513,7 +2575,36 @@ E4 information gain; `tools/r22_e7_report.py` -> `geo/r22_e7.json`: paired CIs v
 run the within-region split on C-hit / A01-miss users (rescued / lost; same-region competitors above the target f, A01 vs E7).
 Stage (`sbatch/r22/r22_e7_stage.sbatch`, CPU): every variant with Arts seed-42 valid HR@10 above A01's (0.1435) is chained on Arts
 seeds 43 / 44 (pack, eval, fdump, report). GPU order: Part-1 A01 pack, then E1, then E7 (the E7 pack starts only after both have
-started). **TODO (pending).**
+started).
+
+**Result (Arts seed 42; `tools/r22_runs_report.py`, report 23650456):**
+
+| | valid HR@10 (vs A01 0.1435) | test HR@10 / NDCG@10 (A01 0.1260 / 0.0920) | test HR@10 − A01 | ms/user |
+|---|---|---|---|---|
+| E7a | 0.1428 (−0.0007 [−0.0033, +0.0020]) | 0.1248 / 0.0911 | −0.0013 [−0.0038, +0.0014] | 10.1 |
+| E7b | 0.1415 (−0.0020 [−0.0046, +0.0005]) | 0.1219 / 0.0897 | −0.0041 [−0.0067, −0.0014] | 10.2 |
+
+f diagnostics are unchanged from A01 (top-1 0.120 / 0.119 vs 0.119; median rank 27; normalised IG 0.129 for all three).
+
+E6 split:
+
+| | repeat-f HR@10 | C − model (repeat) | new-f HR@10 | C − model (new-f) | new-f true-f median rank |
+|---|---|---|---|---|---|
+| A01 | 0.3769 | −0.0076 | 0.0673 | +0.0026 | 40 |
+| E7a | 0.3750 | −0.0057 | 0.0662 | +0.0037 | 40 |
+| E7b | 0.3727 | −0.0033 | 0.0632 | +0.0067 | 40 |
+
+Competitors from history: 0.164 / 0.163 vs 0.162.
+
+E4 split on C-hit / A01-miss users (616): E7a rescues 165 and E7b 154. Over all users, E7a rescues 410 and loses 438; E7b
+rescues 386 and loses 477. Same-region competitors: median 5 for A01 and E7a/E7b.
+
+**Interpretation:**
+- Neither variant moves the new-f users. Their HR@10 drops slightly, and the true f's median rank stays at 40.
+- f prediction is unchanged. Both variants cost a little on repeat users.
+- Keeping f separable in the item vector gives the encoder nothing it did not already have from the summed vector. The f map
+  alone (E7b) hurts on test.
+- The stage (23594214) found no variant above A01 on validation, so nothing was chained. **E7 closed.**
 
 
 ### 22.8 E8: f embedding composed from its children (training)
