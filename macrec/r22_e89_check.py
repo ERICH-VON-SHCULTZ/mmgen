@@ -76,7 +76,7 @@ def main():
         g.eval()
         with torch.no_grad():
             before = g(**b).logits
-        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:   # mid-training checkpoint (Trainer: safetensors)
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"), ignore_cleanup_errors=True) as t:   # mid-training checkpoint (Trainer: safetensors); NFS keeps .nfs* of the mmapped file
             g.save_pretrained(t, safe_serialization=True)
             from safetensors.torch import load_file
             sd = load_file(os.path.join(t, "model.safetensors"))
@@ -86,6 +86,7 @@ def main():
                     p.add_(0.01)
                 g.load_state_dict(sd, strict=False)                              # as Trainer._load_best_model
                 d_ck = (g(**b).logits - before).abs().max().item()
+            del sd                                                               # release the mmap before cleanup
         check(name.replace("_4_bake", "_4a_checkpoint"), d_ck < 1e-4 and len(new_keys) > 0, checkpoint_reload_max_logit_diff=d_ck,
               saved_new_param_keys=new_keys)
         with torch.no_grad():
@@ -93,7 +94,7 @@ def main():
             g.__class__ = type(g).__mro__[2]
             after = g(**b).logits
         d_bake = (before - after).abs().max().item()
-        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"), ignore_cleanup_errors=True) as t:
             g.save_pretrained(t)
             tok.save_pretrained(t)
             re = load_mfd_model(t).cuda().eval()
