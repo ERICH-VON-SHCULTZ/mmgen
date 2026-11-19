@@ -2689,3 +2689,59 @@ E1 is analysed in its own 1+3+3 f space. Its f codes are not comparable to A01's
 
 **Stage** (`sbatch/r22/r22_e89_stage.sbatch`, CPU): every E8 / E9 variant whose Arts seed-42 valid HR@10 beats A01's (0.1435) is
 chained on Arts seeds 43 / 44. Not on Instruments. **TODO (pending).**
+
+## 22.10 E10: why does A01 help only on Arts, and can it be made general?
+
+**Motivation.** §21.9, 3 seeds, test HR@10 A01 − P1a: Arts +0.0030 (CI > 0 on every seed), Instruments −0.0015, Games −0.0010,
+pooled +0.0000 [−0.0008, +0.0009]. Seed-42 leads: grouping alone (G0) gives Arts +0.0010 and the KL another +0.0023, but on
+Instruments grouping gives −0.0012 and the KL +0.0001; on Instruments A01's validation was +0.0029 while test was −0.0012; β = 0.1 was
+chosen on Arts only. **Selection from here on: pooled validation over Arts + Instruments + Games** (all users of the three datasets,
+stratified paired bootstrap), per-dataset numbers always reported. No promotion call.
+
+### 22.10.1 E10a: diagnostics (no training)
+
+Existing P1a / G0 / G0acc / A01 checkpoints, all 3 datasets × 3 seeds where they exist (G0, G0acc: Arts + Instruments seed 42).
+`macrec/r22_e10_views.py` (`sbatch/r22/r22_e10a_views.sbatch`) dumps, per TEST user, the full / text / image view's log P(f) at the f
+position (deployment `f_logprobs`, renormalised over the 256 catalog f codes = the `<s0_*>` set of A01's teacher);
+`tools/r22_e10a_report.py` → `geo/r22_e10a.json`:
+1. view disagreement: mean 3-view JS (H(p̄) − mean H(p_v), nats), mean KL(p̄ ‖ p_full) (p̄ = A01's teacher), share of users whose
+   argmax p̄ ≠ argmax p_full; also on repeat-f / new-f users; cross-check full view = the E6 fdump (A01);
+2. E6 split of A01 − P1a (repeat-f / new-f users, paired CI inside each group), and by P1a's view disagreement;
+3. A01 − P1a on validation and on test with paired CIs (+ the E6 split on validation);
+4. G0 − P1a, A01 − G0 (and G0acc) where G0 exists.
+
+Results: **TODO (pending).**
+
+### 22.10.2 E10c: A01's KL without grouping (training)
+
+P1a's exact data layout and optimisation path (`--r21_mode E10c`, `macrec/r22_e10c.py`): `MVMFDDataset` unchanged (3 independent
+view-examples per pair per epoch, shuffled across batches), 256 rows × 4 micro-batches, same clipping. Full-view rows also carry the
+text / image history strings of the same pair (inside `input_ids`, since the HF Trainer drops dataset keys that are not `forward()`
+arguments); the collator builds P1a's batch unchanged plus the extra inputs. For each full-view row, two extra forwards of the same model
+(train mode) under `torch.no_grad()`, decoder input [start] only (position 0 of a causal decoder = the full sequence's position 0), give
+p_text / p_image; p̄ = (stopgrad(p_full) + p_text + p_image) / 3; **loss = P1a's micro-batch CE + (1 / R) Σ_full rows 3β · KL(p̄ ‖ p_full)**
+(R = rows in the micro-batch, text / image rows weight 0). Full rows are 1/3 of the rows in expectation, so the expected per-pair weight
+is β, as in A01 (mean of the 3 view CEs + β · KL per pair). The main forward runs first, so its dropout masks are P1a's for the same RNG
+state. As every 256 × 4 run here, the 4 micro-batch losses are summed, not averaged (§6 gotcha); the KL is inside each micro-batch, so
+its weight relative to the CE is the same as A01's. β = 0.1; Arts, Instruments, Games seed 42.
+**Gate** (`sbatch/r22/r22_e10_gate.sbatch`, `macrec/r22_e10c_check.py` on P1a seed 42): 0 data layout = P1a's (strings, collated
+tensors, the extra views = P1a's own text / image rows of the pair); 1 β = 0: loss and every gradient equal P1a's (dropout on, same
+seed); 2 p_text / p_image have no autograd graph and the gradient equals P1a's CE + the KL with a constant teacher from an independent
+copy; 3 the KL term equals a float64 recomputation from P1a's own full / text / image rows; 4 the training class path (Geo + geometry)
+reaches the KL, bake / reload as `ItemMFDT5`; 5 cost per micro-batch (info). Dry run + config diff vs P1a's dry run (model_class only);
+5-step smoke run (β, batch 256, accumulation 4 checked; KL active on full rows; pre-clip norms printed). Clipping and wall time per
+epoch come from the run's stats. Results: **TODO (pending).**
+
+### 22.10.3 E10b: per-dataset β (training)
+
+A01 exactly (grouped, 341 × 1) with β ∈ {0.05, 0.2, 0.5} (`run_r22_train.sh VAR=E10b005|E10b02|E10b05`), Instruments and Games seed
+42 (β = 0.1 = A01 exists). β per dataset chosen on seed-42 validation HR@10 (tie NDCG@10); its test result reported. Arts keeps 0.1.
+Gate: dry run + config diff vs A01 (no difference allowed; β is checked in the smoke run) + 5-step smoke. Results: **TODO (pending).**
+
+### 22.10.4 Evaluation, selection and chaining
+
+Every E10b / E10c run: plain K_f = 50 (H200, batch 64), val / test HR@1/5/10 and NDCG@5/10, paired CIs vs P1a and vs A01 of the same
+seed, E6 split, f diagnostics, ms/user (`tools/r22_e10_report.py` → `geo/r22_e10.json`). Stage (`sbatch/r22/r22_e10_stage.sbatch`
+STAGE=e10c|e10b): if E10c, or A01 with the per-dataset β of E10b, beats **both** P1a and A01 on pooled seed-42 validation HR@10, it is
+chained on seeds 43 / 44 for all three datasets, then the 3 × 3 table with the pooled paired bootstrap vs P1a, A01 and C
+(`r22_e10_report.py --final`). Priority: E10a now; E10c pack ahead of the E8 / E9 pack; E10b packs after.
