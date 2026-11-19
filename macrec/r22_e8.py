@@ -34,7 +34,7 @@ class E8Embedding(nn.Module):
     def __init__(self, inner, f_ids, child_ids, M):
         super().__init__()
         self.inner = inner
-        d = table_of(inner).shape[1]
+        d = inner.weight.shape[1] if hasattr(inner, "weight") else inner.base.weight.shape[1]
         self.W = nn.Linear(d, d, bias=False)
         nn.init.zeros_(self.W.weight)
         self.register_buffer("f_ids", f_ids)

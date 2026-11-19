@@ -68,6 +68,7 @@ def main():
         g = Geo.from_pretrained(a.a01_ckpt).cuda()
         g.install_r21(tok, "A", 0.1)
         g.install_geometry(tok, a.tok_ckpt, "codebook")
+        g.cuda()                                   # training installs the geometry before the Trainer moves the model
         install(g)
         no_dropout(g)
         with torch.no_grad():
