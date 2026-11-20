@@ -184,6 +184,11 @@ are reference-only, not part of the main line.
   `tools/r22_e10a_report.py`); E10c = A01's KL without grouping on P1a's exact 256 x 4 path (`--r21_mode E10c`, `r22_e10c.py`, KL on
   full rows x 3β, two no-grad extra forwards); E10b = A01 β 0.05/0.2/0.5 on Instruments/Games. Chained on seeds 43/44 only if pooled
   valid beats both P1a and A01.
+  **E10a done (2026-11-19):** Arts has the largest view disagreement at the f step (KL(teacher‖full) 0.025 vs Instruments 0.016,
+  Games 0.012; same top-f-differs share ≈0.19 as Instruments); A01's Arts gain is mostly on new-f users; Instruments loses on new-f,
+  Games on repeat-f; A01's valid − test gap is positive on all 6 Instruments/Games seeds (+0.0017 mean); on Instruments the KL adds
+  nothing on top of grouping (A01 − G0 +0.0001). All E10 / E8 / E9 gates passed (E10c: β=0 = P1a exactly, KL = independent
+  recomputation, 1.6x compute per micro-batch ≈ +13–38 s/epoch).
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -664,7 +669,7 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `6157ad3`, `4dad819` | §22.8 E8 / §22.9 E9 code, common round-22 run report; E8/E9 gate check device fix |
 | `e09b0bd` | §21.9 table, §22.1/22.3/22.5/22.6/22.7 results |
 | `2da1199`, (this) | E8/E9 check NFS fix; §22.10 E10a/E10b/E10c code, gates, reports |
-| (next) | §22.10 results |
+| (next) | §22.10 E10a results; E10b/E10c pending |
 
 ---
 

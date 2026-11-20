@@ -2710,7 +2710,49 @@ position (deployment `f_logprobs`, renormalised over the 256 catalog f codes = t
 3. A01 − P1a on validation and on test with paired CIs (+ the E6 split on validation);
 4. G0 − P1a, A01 − G0 (and G0acc) where G0 exists.
 
-Results: **TODO (pending).**
+**Results (2026-11-19, `geo/r22_e10a.json`).**
+
+| seed mean, TEST | 3-view JS (nats) | KL(p̄ ‖ p_full) | top-f(p̄) ≠ top-f(full) | H(p_full) |
+|---|---|---|---|---|
+| Arts P1a / A01 | 0.0356 / 0.0255 | 0.0252 / 0.0152 | 0.194 / 0.175 | 4.28 / 4.40 |
+| Instruments P1a / A01 | 0.0231 / 0.0166 | 0.0156 / 0.0097 | 0.195 / 0.171 | 4.57 / 4.61 |
+| Games P1a / A01 | 0.0186 / 0.0142 | 0.0116 / 0.0079 | 0.146 / 0.134 | 4.26 / 4.39 |
+
+The full-view dump equals the E6 fdump (max |Δ| < 1e-5 on all 9 A01 checkpoints). G0 / G0acc (seed 42) are at P1a's level.
+
+A01 − P1a test HR@10, E6 split (per seed 42 / 43 / 44):
+- Arts: new-f +0.0026 / +0.0023 / +0.0030 (CI > 0 on 2 seeds), repeat-f +0.0062 / +0.0057 / +0.0019 (CIs include 0);
+- Instruments: new-f −0.0010 / −0.0007 / −0.0030 (CI < 0 on s44), repeat-f −0.0023 / −0.0028 / +0.0032;
+- Games: repeat-f −0.0028 / −0.0031 / −0.0091 (CI < 0 on s44), new-f −0.0016 / +0.0008 / +0.0005.
+
+Split by P1a's view disagreement (ensemble top-f ≠ full top-f), the gain is not concentrated on the disagreeing users. The sign
+flips across seeds (e.g. Arts s42 agree +0.0037, s43 disagree +0.0076).
+
+A01 − P1a, valid vs test HR@10:
+- Instruments: +0.0030 / +0.0008 / −0.0019 vs −0.0012 / −0.0010 / −0.0022;
+- Games: +0.0006 / +0.0014 / −0.0010 vs −0.0018 / +0.0002 / −0.0011;
+- Arts: +0.0019 / +0.0041 / +0.0022 vs +0.0033 / +0.0029 / +0.0028.
+
+Valid − test is positive on all 6 Instruments / Games seeds (mean +0.0017), and −0.0014 to +0.0012 on Arts. Each per-seed CI is
+about ±0.003, so this is a sign pattern, not a significant gap.
+
+Grouping vs KL (seed 42, test HR@10):
+- Arts: G0 − P1a +0.0009, A01 − G0 +0.0023 (CI [−0.0002, +0.0048]);
+- Instruments: G0 − P1a −0.0012 (valid +0.0030), A01 − G0 +0.0001 (valid +0.0000).
+
+G0acc gives the same picture. All of these CIs include 0.
+
+**Interpretation.**
+- Arts stands out on the size of the view disagreement, not on how often the views disagree. A01's teacher is 1.6× (Instruments)
+  to 2.2× (Games) farther from the full view on Arts, while the share of users whose ensemble top f differs is the same on Arts
+  and Instruments (≈0.19).
+- The KL has real signal to transfer only on Arts. Its Arts gain falls mostly on new-f users, the group where A01 trails C (§22.6).
+  On Instruments the KL adds nothing on top of grouping, and grouping's validation gain does not reach test.
+- On Games, A01 mainly loses repeat-f users.
+- Instruments / Games validation is consistently a little optimistic for A01 relative to test. This argues for pooled-validation
+  selection.
+- E10b (larger β where the teacher is close to the full view) and E10c (the KL without grouping) test the two remaining
+  explanations.
 
 ### 22.10.2 E10c: A01's KL without grouping (training)
 
