@@ -21,13 +21,13 @@ for D in $DSETS; do
   PREP=$(STEP=prep sbatch --parsable --export=ALL $J)
   echo "$(date +%F) $D prep $PREP code $COMMIT" | tee -a $LOG
   PREV=""
-  # (TAG:METHODS:BATCHES[:REPEATS]) one entry per job, each < 2 h at the smoke-test rates (Arts: P1a:50 10.5, C 65, C-fast 53,
+  # (TAG:METHODS:BATCHES[@REPEATS]) one entry per job (method names contain ":", so REPEATS follows "@"), each < 2 h at the smoke-test rates (Arts: P1a:50 10.5, C 65, C-fast 53,
   # TIGER 30, chain 37 ms/user at batch 64). Games' C / D / C-fast passes take ~45 min each (42k users), so there each repeat is
   # its own job (REPEATS=1, tags _r1.._r3; the report pools the three passes). C-fast 64 and 256 are separate jobs everywhere.
   if [ $D = Games ]; then
     JOBS="P1a64:P1a:20,P1a:50,P1a:100:64 P1a256:P1a:20,P1a:50,P1a:100:256 b1:P1a:20,P1a:50,P1a:100,Cfast,C,D,TIGER,chain:1
           TIGER64:TIGER:64 TIGER256:TIGER:256 chain64:chain:64 chain256:chain:256"
-    for M in Cfast C D; do for B in 64 256; do for r in 1 2 3; do JOBS="$JOBS $M${B}_r$r:$M:$B:1"; done; done; done
+    for M in Cfast C D; do for B in 64 256; do for r in 1 2 3; do JOBS="$JOBS $M${B}_r$r:$M:$B@1"; done; done; done
   elif [ $D = Arts ]; then
     JOBS="P1a64:P1a:20,P1a:50,P1a:100,A01:50:64 P1a256:P1a:20,P1a:50,P1a:100,A01:50:256 Cfast64:Cfast:64 Cfast256:Cfast:256
           b1:P1a:20,P1a:50,P1a:100,A01:50,Cfast,C,D,TIGER,chain:1 C64:C:64 C256:C:256 D64:D:64 D256:D:256 TIGER:TIGER:64,256
@@ -37,7 +37,8 @@ for D in $DSETS; do
           C64:C:64 C256:C:256 D64:D:64 D256:D:256 TIGER:TIGER:64,256 chain:chain:64,256"
   fi
   for spec in $JOBS; do
-    IFS=: read -r TAG METHODS BATCHES REPEATS <<< "$spec"; REPEATS=${REPEATS:-3}
+    REPEATS=3; case $spec in *@*) REPEATS=${spec##*@}; spec=${spec%@*} ;; esac
+    TAG=${spec%%:*}; rest=${spec#*:}; BATCHES=${rest##*:}; METHODS=${rest%:*}
     DEP="afterok:$PREP"; [ -n "$PREV" ] && DEP="$DEP,afterany:$PREV"
     PREV=$(STEP=time TAG=$TAG METHODS=$METHODS BATCHES=$BATCHES REPEATS=$REPEATS sbatch --parsable --dependency=$DEP --export=ALL $J)
     echo "$(date +%F) $D time $TAG [$METHODS @ $BATCHES x$REPEATS] $PREV" | tee -a $LOG

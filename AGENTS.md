@@ -682,7 +682,7 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `e09b0bd` | §21.9 table, §22.1/22.3/22.5/22.6/22.7 results |
 | `2da1199`, (this) | E8/E9 check NFS fix; §22.10 E10a/E10b/E10c code, gates, reports |
 | `7518dc3` | §22.10 E10a results; E10b/E10c pending |
-| (r23) | §23 inference-speed code (C-fast, timing harness, prep gate, jobs, report), §23.1 setup |
+| `8b3e050` | §23 inference-speed code (C-fast, timing harness, prep gate, jobs, report), §23.1 setup |
 
 ---
 
