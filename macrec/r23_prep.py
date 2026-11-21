@@ -236,11 +236,17 @@ def main():
     p.add_argument("--dataset", required=True)
     p.add_argument("--skip", default="", help="comma list of steps to skip (debug only)")
     p.add_argument("--limit", type=int, default=0, help="smoke test only: first N users in steps 1 and 4")
+    p.add_argument("--resume", action="store_true", help="keep the checks / p1a_ref of an existing prep.json and add the steps not "
+                   "skipped (Games: the C-fast step alone takes ~1.5 h, so prep runs as two jobs)")
     a = p.parse_args()
     D = a.dataset
     os.makedirs(f"{RT.OUT_DIR}/{D}", exist_ok=True)
     f = f"{RT.OUT_DIR}/{D}/prep.json"
     res = {"env": RT.env_info(), "dataset": D, "checks": {}}
+    if a.resume:
+        prev = json.load(open(f))
+        res = dict(prev, env=prev["env"], env_resume=RT.env_info())
+        res.pop("all_pass", None)
     # 0 subset + same users / targets in every method's dataset
     mfd = RT.MFDMethod(D, "P1a:50")
     U = mfd.U
@@ -255,6 +261,8 @@ def main():
             ds = RT.SeqRecDataset(args, task=t, mode="test", sample_num=args.sample_num)
             s2i = {"".join(v): int(k) for k, v in ds.indices.items()}
             tg[f"{name}/{t}"] = [s2i[d["item"]] for d in ds.inter_data]
+    if a.resume:
+        assert res["batch1_subset"] == sub, "batch-1 subset differs from the first prep part"
     check(res, "0_same_users_and_targets", all(v == tg["P1a"] for v in tg.values()), users=U, lists=sorted(tg))
     json.dump(res, open(f, "w"), indent=1)
     steps = [("p1a_ref", p1a_ref), ("reimpl", reimpl_verify), ("instrumented", instrumented_verify), ("cfast", cfast_verify)]

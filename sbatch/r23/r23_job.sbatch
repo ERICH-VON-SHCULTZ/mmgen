@@ -32,7 +32,7 @@ echo "job $SLURM_JOB_ID on $(hostname) D=$D STEP=$STEP METHODS=${METHODS:-} BATC
 nvidia-smi --query-gpu=name,driver_version,memory.used,utilization.gpu --format=csv
 nvidia-smi --query-compute-apps=pid,used_memory --format=csv
 case $STEP in
-  prep)    CMD="python -u r23_prep.py --dataset $D" ;;
+  prep)    CMD="python -u r23_prep.py --dataset $D ${PREPARGS:-}" ;;   # Games: PREPARGS="--skip cfast", then "--resume --skip p1a_ref,reimpl,instrumented"
   time)    CMD="python -u r23_timing.py --mode time --dataset $D --methods $METHODS --batches ${BATCHES:-64,256} --repeats ${REPEATS:-3} \
                 --warmup 200 --anchor --out_file $OUT/time_${TAG}.json" ;;
   profile) CMD="python -u r23_timing.py --mode profile --dataset $D --methods $METHODS --stage_batches ${STAGEB:-} \

@@ -5,7 +5,7 @@
 #   counts, FLOPs); the three dataset chains run in parallel; CPU report after all of them.
 # Why several jobs instead of one: the protocol's single job would run ~35 h at ~12 % GPU utilisation (cancelled after 2 h);
 # every job asks for the same GPU type (gpu:h200 on h200_tandon), records host / GPU / driver, and repeats a fixed anchor
-# measurement so jobs can be compared. Usage: bash sbatch/r23/r23_submit.sh [datasets]   (log: mmgen_runs/logs/round23_jobs.txt)
+# measurement so jobs can be compared. Usage: [REPORT_AFTER=j1:j2] bash sbatch/r23/r23_submit.sh [datasets]   (log: mmgen_runs/logs/round23_jobs.txt)
 set -euo pipefail
 REPO=/scratch/yw8866/mmgen; RUNS=/scratch/yw8866/mmgen_runs
 cd $REPO
@@ -18,8 +18,15 @@ DSETS=${1:-"Arts Instruments Games"}
 LAST=()
 for D in $DSETS; do
   export D CODE                                 # values with commas go through the environment (--export=ALL), not --export=
-  PREP=$(STEP=prep sbatch --parsable --export=ALL $J)
-  echo "$(date +%F) $D prep $PREP code $COMMIT" | tee -a $LOG
+  if [ $D = Games ]; then        # 42k users: C-fast == C (two full beam searches, ~1.5 h) is its own job after the other checks
+    # PREP1_DONE=1: part 1 already in timing/r23/Games/prep.json (all its checks passed), run part 2 only
+    if [ -n "${PREP1_DONE:-}" ]; then P0=done; D1=""; else P0=$(STEP=prep PREPARGS="--skip cfast" sbatch --parsable --export=ALL $J); D1="--dependency=afterok:$P0"; fi
+    PREP=$(STEP=prep PREPARGS="--resume --skip p1a_ref,reimpl,instrumented" sbatch --parsable $D1 --export=ALL $J)
+    echo "$(date +%F) $D prep $P0 (checks 0/2/3/4) -> $PREP (C-fast == C, 1/1b) code $COMMIT" | tee -a $LOG
+  else
+    PREP=$(STEP=prep sbatch --parsable --export=ALL $J)
+    echo "$(date +%F) $D prep $PREP code $COMMIT" | tee -a $LOG
+  fi
   PREV=""
   # (TAG:METHODS:BATCHES[@REPEATS]) one entry per job (method names contain ":", so REPEATS follows "@"), each < 2 h at the smoke-test rates (Arts: P1a:50 10.5, C 65, C-fast 53,
   # TIGER 30, chain 37 ms/user at batch 64). Games' C / D / C-fast passes take ~45 min each (42k users), so there each repeat is
@@ -56,7 +63,7 @@ for D in $DSETS; do
   fi
   LAST+=($PREV)
 done
-DEPS=$(IFS=:; echo "${LAST[*]}")
+DEPS=$(IFS=:; echo "${LAST[*]}${REPORT_AFTER:+:$REPORT_AFTER}")   # REPORT_AFTER: profile jobs of chains submitted earlier
 REP=$(sbatch --parsable --dependency=afterany:$DEPS --account=torch_pr_69_general --partition=cs,cpu_short --time=00:30:00 -c 2 --mem=16GB \
   --job-name=mmgen_r23_report --output=$RUNS/logs/%x_%j.out --export=NONE \
   --wrap="singularity exec --bind /scratch/yw8866 --overlay /scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3:ro \
