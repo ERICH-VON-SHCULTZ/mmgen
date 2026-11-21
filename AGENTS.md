@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-19 (§21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-20 (round 23 inference-speed measurement set up, §23; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -189,6 +189,14 @@ are reference-only, not part of the main line.
   Games on repeat-f; A01's valid − test gap is positive on all 6 Instruments/Games seeds (+0.0017 mean); on Instruments the KL adds
   nothing on top of grouping (A01 − G0 +0.0001). All E10 / E8 / E9 gates passed (E10c: β=0 = P1a exactly, KL = independent
   recomputation, 1.6x compute per micro-batch ≈ +13–38 s/epoch).
+- **Round 23 (2026-11-20, running), `docs/MFD_REPORT.md` §23; jobs `mmgen_runs/logs/round23_jobs.txt`:** inference speed of P1a
+  (K_f 20/50/100; A01 once on Arts) vs C, C-fast (C with a GPU-side trie mask, `macrec/r23_cfast.py`), D, TIGER-text and the MD
+  chain on one H200 per job; measurement only (no training, model code untouched). The "round 21b" latency task was never run;
+  nothing reused. Prep gate per dataset (`macrec/r23_prep.py`): C-fast == C bitwise on the full test set, harness == saved eval
+  files, reimplemented top-10 / merge == MACRec's, P1a exact ranks == reported. Timing `macrec/r23_timing.py` (batches 1 / 64 /
+  256, 3 passes, anchor per job, HR@10 recomputed), profile (stage breakdown on Arts, counts, measured FLOPs); report
+  `sbatch/tools/r23_report.py` → `mmgen_runs/timing/r23/r23_report.json`, `r23_acc_latency*.{png,csv}`. Smoke rates (Arts,
+  batch 64, ms/user): P1a K_f 50 10.5, C 64.6, C-fast 52.9, D 65.0, TIGER 29.9, chain 36.7.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -245,6 +253,7 @@ mmgen/
 │   ├── dense_eval.py      §20 Task 2: fused score P1a + w_d log-softmax(dense), f-selection rules A/B, valid sweep / test apply
 │   ├── r21_views.py, finetune_r21.py, r21_eval.py, r21_check.py, r21_gain_diag.py   §21: grouped views / ensemble-teacher KL / mutual view KL (GroupedItemMFDT5), item-level random views, A+C combo rows (GroupedRandDataset); gain diagnostic; entry on top of finetune_geo.py; K_f = 50 eval (plain, 1c, f diagnostics); sanity checks
 │   ├── r22_aux.py, r22_e3_smooth.py, r22_e2_diag.py, r22_e2_eval.py, r22_check.py, r22_e4_first.py, r22_e5_regions.py, r22_e5_eval.py, r22_e7.py, r22_e7_check.py, r22_e8.py, r22_e9.py, r22_e89_check.py, r22_e10_views.py, r22_e10c.py, r22_e10c_check.py   §22: aux t1/i1 heads (AuxGroupedItemMFDT5, loaded by mfd_eval.load_mfd_model), codebook-smoothed P(f), t1/i1 rank diagnostic, aux-score eval, gate checks, E4 level-1 (first-step) distributions of A01 / C / TIGER A / B, E5 coarse partitions + region-mass score eval, E7 structured item vector (E7GroupedItemMFDT5, loaded by load_mfd_model) + gate checks, E8 child-composed f embedding (E8Embedding, folded at bake), E9 mixture of softmaxes at the f step (MoSHead, E9GroupedItemMFDT5 loaded by load_mfd_model) + their gate checks, E10a per-view f distributions, E10c A01's KL without grouping (E10cDataset / E10cCollator / E10cItemMFDT5; saved model = plain ItemMFDT5) + its gate checks
+│   ├── r23_cfast.py, r23_timing.py, r23_prep.py   §23 inference speed: GPU-side trie mask for HF beam search (C-fast, bitwise = C), timing / stage profile / counts / FLOPs harness (reimplements test_ddp_save + ensemble ranking), prep gate (batch-1 subset, C-fast == C, reimplementation checks, P1a exact reference ranks)
 │   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -322,6 +331,7 @@ mmgen/
     ├── r21/run_r21_train.sh, r21_gate.sbatch, pack_r21_train.sbatch, r21_eval.sbatch, r21_stage2.sbatch, r21_collect.sbatch   §21 runs (VAR G0|A01|A05|B01|B05|C033|C060|G0acc|A01acc|AC1|AC0; P1aref = dry-run reference; pack entry <D>:<VAR>[:<SEED>]), gate (macrec/r21_check.py + tools/r21_config_diff.py; writes only r21_* files), packs, H200 eval (K_f 50 plain + 1c + f diagnostics), Arts -> Instruments family choice (tools/r21_family_choice.py), CIs (tools/r21_collect.py -> geo/r21_<D>.json)
     ├── r21/r21_gain.sbatch, r21_combo_stage.sbatch, r21_tool.sbatch   §21.6 gain diagnostic (macrec/r21_gain_diag.py + tools/r21_gain_report.py), §21.4 combo -> Instruments stage (tools/r21_combo_choice.py), any §21 CPU tool (e.g. TOOL="r21_seeds.py Arts" = §21.5 3-seed table)
     ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1|E7a|E7b|E8a|E8b|E9k2|E9k4|E10b005|E10b02|E10b05|E10c; E10c = P1a's 256 x 4 path; SMOKE=1 = 5 real optimizer steps -> geo/gate/r22_smoke; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|e5|fdump|eval, SID=1+2+2|1+3+3); E5 partitions r22_e5_regions.sbatch (CPU), report tools/r22_e5_report.py; E6 tools/r22_e6_report.py (history-f competitors); E7 gate r22_e7_gate.sbatch, stage r22_e7_stage.sbatch (CPU), report tools/r22_e7_report.py; E8/E9 gate r22_e89_gate.sbatch, stage r22_e89_stage.sbatch (CPU); common E1/E7/E8/E9 report tools/r22_runs_report.py; E10a r22_e10a_views.sbatch + tools/r22_e10a_report.py; E10 gate r22_e10_gate.sbatch (E10c check + dry runs + smoke), stage r22_e10_stage.sbatch (CPU; pooled-valid selection, seeds 43/44 chaining), report tools/r22_e10_report.py (--stage / --final 3x3 table); reports tools/r22_e3_report.py, r22_e2_report.py; E4 r22_e4.sbatch + tools/r22_e4_report.py (level-1 predictability, HR@10 by level-1 rank, partition NMI/ARI); §21.9 table tools/r21_seeds_all.py
+    ├── r23/r23_job.sbatch, r23/r23_submit.sh   §23 timing jobs (STEP prep|time|profile|smoke|smokeprof; one H200, frozen code snapshot timing/r23/code_<commit>), per-dataset serial chains + CPU report (tools/r23_report.py)
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
@@ -489,6 +499,8 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | ms/user is GPU-dependent; every baseline cost file is from an H200 | evaluate with `--partition=h200_tandon` (queue reason `QOSGrpGRES` = account H200s busy) |
 | transformers 4.47.0 does **not** divide the loss by `gradient_accumulation_steps` (accelerate's division is disabled in `create_accelerator_and_postprocess`; `training_step` does not divide), so 256 x 4 runs backprop the SUM of 4 micro-batch means (~4 x the gradient) and are clipped at max_grad_norm 1.0 on every step (P1a pre-clip median 2.7) | all runs in this repo share it, so comparisons between 256 x 4 runs are fair; a run with a different accumulation (e.g. §21's grouped runs, 1 micro-batch, median 0.76, 12–14% clipped) is in a different optimisation regime — match the accumulation, not just the rows per step (`docs/MFD_REPORT.md` §21.2) |
 | `config_dryrun` stops before `trainer.train()`, so gate dry runs never draw a batch: a collator / dataset mismatch passed both gates and crashed packs 23398867 / 23291837 at step 0 | `finetune_r21.py` collates one training example at trainer init (also in dry runs); from §22.7 on, gates also run 5 real optimizer steps (`--smoke_steps 5`) |
+| a timing job of Python-trie beam search keeps the GPU ~12% busy, so it is cancelled after 2 h like the evals; one protocol job for all methods would take ~35 h | §23 splits into serial jobs < 2 h on the same GPU type, each repeating an anchor measurement (P1a K_f 50 + C on fixed users); Games C / D / C-fast run one pass per job |
+| P1a inference calls `model.encoder` / `model.decoder` directly, so `FlopCounterMode` names both `T5Stack` and a name-based encoder/decoder split gives 0 | split FLOPs with forward hooks on the modules (`r23_timing.flops`) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
 | `evaluation_strategy=` is deprecated | works in transformers 4.47; **do not upgrade transformers past 4.47** |
@@ -669,7 +681,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `6157ad3`, `4dad819` | §22.8 E8 / §22.9 E9 code, common round-22 run report; E8/E9 gate check device fix |
 | `e09b0bd` | §21.9 table, §22.1/22.3/22.5/22.6/22.7 results |
 | `2da1199`, (this) | E8/E9 check NFS fix; §22.10 E10a/E10b/E10c code, gates, reports |
-| (next) | §22.10 E10a results; E10b/E10c pending |
+| `7518dc3` | §22.10 E10a results; E10b/E10c pending |
+| (r23) | §23 inference-speed code (C-fast, timing harness, prep gate, jobs, report), §23.1 setup |
 
 ---
 

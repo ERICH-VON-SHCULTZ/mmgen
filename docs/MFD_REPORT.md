@@ -2787,3 +2787,92 @@ seed, E6 split, f diagnostics, ms/user (`tools/r22_e10_report.py` → `geo/r22_e
 STAGE=e10c|e10b): if E10c, or A01 with the per-dataset β of E10b, beats **both** P1a and A01 on pooled seed-42 validation HR@10, it is
 chained on seeds 43 / 44 for all three datasets, then the 3 × 3 table with the pooled paired bootstrap vs P1a, A01 and C
 (`r22_e10_report.py --final`). Priority: E10a now; E10c pack ahead of the E8 / E9 pack; E10b packs after.
+
+## 23. Round 23: inference speed of P1a vs the baselines (measurement only)
+
+**Question.** How much faster is P1a than the generative baselines, and why? How much of the gap is algorithmic (fewer
+sequential decoder steps, shorter encoder memory, exact scoring instead of beam search) and how much is implementation (Python
+trie callbacks and beam bookkeeping)? No training. No model code path changes. The timed calls are the evaluated ones.
+
+**Earlier latency work ("round 21b").** It was never run. No stage breakdown, FLOP count or C-fast exists in the repo, the
+logs or `mmgen_runs`. The only earlier cost numbers are:
+- the `ms_per_user` fields of every eval: `cost_*.json` from `eval_split.py`, and `cost.ms_per_user` from `mfd_eval.py` and
+  `r21_eval.py`;
+- the C timing job `sbatch/mfd/timing_h200.sbatch` (→ `mmgen_runs/timing/<D>/mql/`, about 21.7 ms/user per list, H200).
+
+Those runs used different jobs, GPUs and contention, so nothing is reused for the numbers below; everything is re-measured
+under the protocol. They serve only as a plausibility check.
+
+### 23.1 Methods, code, protocol
+
+Code: `macrec/r23_cfast.py`, `r23_timing.py`, `r23_prep.py`; jobs `sbatch/r23/r23_job.sbatch` and `r23_submit.sh`;
+report `sbatch/tools/r23_report.py`. Outputs go to `mmgen_runs/timing/r23/`, and job IDs to `mmgen_runs/logs/round23_jobs.txt`.
+
+| method | checkpoint (seed 42) | inference timed |
+|---|---|---|
+| P1a K_f 20 / 50 / 100 | `mfd/<D>/mfd122_mv_geoP1a` | `mfd_mv_infer.infer`, plain full view, w = 1/.5/.5 (r21_eval's timed path); then the top 10 via `mfd_eval.rank_lists` |
+| A01 K_f 50 (Arts only) | `mfd/Arts/r21_A01` | same path as P1a (same architecture and cost; timed to confirm) |
+| C merged | `baselines/<D>/mql` | HF `generate` exactly as `test_ddp_save.py` (20 beams, 20 returned, `max_new_tokens` 10, `early_stopping`, `output_scores`, Python-trie `prefix_allowed_tokens_fn`) for seqrec and seqimage; string decode; MQL4GRec merge (`ensemble.py` rule) |
+| D merged | `baselines/<D>/macrecpaper` | same as C |
+| TIGER-text (A) | `baselines/<D>/tiger_text` | one constrained beam search; top 10 of the 20 beams (`get_topk_results` with `filter_items`) |
+| MD chain 1+2+2 | `baselines/<D>/md122_a05_ep500_reassign` | same as TIGER (5 code tokens + EOS = 6 decoding steps) |
+| C-fast | C's model | as C, but `logits_processor=[GPUTrieProcessor]` instead of the Python trie |
+
+**C-fast** (`r23_cfast.py`):
+- It is built from the same `Trie` object, flattened once into GPU tensors: a sorted edge table (key = node · V + token) and
+  a CSR table of children.
+- Each step, every beam row's trie node is found with one batched `searchsorted` per decoder position.
+- The allowed (row, token) pairs come from `repeat_interleave` over the CSR. The mask arithmetic is HF's own: `full_like(−inf)`,
+  allowed entries set to 0, then `scores + mask`.
+- So the processed scores are bitwise identical whenever the allowed sets are. One device→host sync per step remains (the
+  output size of `repeat_interleave`, and HF's empty-set error).
+- Everything else is unchanged: HF's Python beam scorer, the KV-cache reorder, string decode and merge. C-fast therefore
+  bounds the cost of the constraint callbacks only, not all implementation overhead (§23.4).
+
+**Verification before timing** (`r23_prep.py`, one GPU job per dataset; the timing jobs depend on it with `afterok`):
+- (0) Every method's test set has the same users, in the same order, with the same target item.
+- (1) C-fast vs C on the full test set, in `test_ddp_save`'s user order at batch 64: the 20 returned sequences and their
+  scores compared bitwise for both lists, and the merged top 10 per user. The harness's original C is also compared with the
+  reported save files (strings and scores).
+- (2) `merge_top10` / `single_top10` vs MACRec's `get_topk_results_ensemble` / `get_topk_results` on the reported save files
+  of C, D, TIGER and chain.
+- (3) The stage-timed copies equal the plain paths.
+- (4) Exact P1a reference ranks (all f scored) at K_f 20/50/100 for seeds 42/43/44: the HR@10 reference for K_f 20, which
+  was never reported at w = 1/.5/.5, and the 3-seed means for the figure.
+
+**Protocol.**
+- Precision: fp32 for every method (checkpoint dtype). TF32 matmul is off (torch default). No `torch.compile`, no CUDA graphs.
+- Decoding: HF beam search keeps its KV cache, and MFD re-runs its short decoder sequences, each as evaluated.
+- Data: inputs are pre-tokenised on the CPU before timing, identically for every method, so tokenisation is excluded.
+- Timed region per batch: host→device copy, inference, and the top-10 item ids on the host (for C/D this includes the string
+  decode and the merge).
+- Warm-up on the first ≥ 200 users, then 3 full timed passes. `torch.cuda.synchronize()` at both ends of each pass; ms/user =
+  pass seconds / users. We report mean ± std over the 3 passes.
+- Batch sizes 64 and 256 use the full test set; batch 1 uses a fixed 2,000-user subset per dataset (numpy `default_rng(0)`,
+  the same users for every method). On OOM, 256 falls back to 192 / 128, reported.
+- User order: test_ddp_save's sampler order for the beam methods (batch 64 then reproduces the evaluated batches), dataset
+  order for MFD (as in r21_eval).
+- After timing, test HR@10 is recomputed from the batch-64 lists and compared with the reported number.
+
+**Deviation: several jobs instead of one.** The protocol asks for one sbatch job on one GPU. That does not fit this cluster:
+- The whole measurement is about 35 GPU-hours, against a 48 h limit.
+- The cluster cancels any job whose mean GPU utilisation stays below about 60% for 2 h (AGENTS.md §4). The Python-trie beam
+  searches keep the GPU about 12% busy (§6 gotcha).
+
+So the measurement is split into jobs of under 2 h each:
+- one job per (dataset, method[, batch size]), all on the same GPU type (`--partition=h200_tandon --gres=gpu:h200:1`,
+  exclusive GPU, 8 CPU cores);
+- run as one serial chain per dataset, so no two of our jobs overlap within a dataset;
+- each job records host, GPU, driver, CUDA, torch and CPU model;
+- each job repeats a fixed **anchor**: P1a K_f 50 at batch 64 on 2,048 users, plus C (both lists and the merge) at batch 64 on
+  512 users. The spread of the anchor across jobs shows how comparable the jobs are (§23.2);
+- on Games, one pass of C, D or C-fast over the 42,259 test users takes about 45 min at batch 64 or 256, so each of the three
+  passes is its own job (with its own warm-up and anchor) and the report pools the three passes into mean ± std;
+- C-fast at batch 64 and at batch 256 are separate jobs on every dataset (about 1 h each on Arts);
+- the stage breakdown (Arts) is one profile job per method: batch 64 on the first 2,560 test users (sampler order), batch 1 on
+  the first 500 users of the fixed batch-1 subset; device kernel times come from `torch.profiler` on 640 users at batch 64 and 200
+  at batch 1 for P1a (256 / 100 for the beam searches, whose Python trie makes about a million profiler events per 256 users).
+  Counts and FLOPs use the first 256 test users of each method.
+
+Speedups are computed only within a dataset, from these jobs, and never against earlier numbers.
+
