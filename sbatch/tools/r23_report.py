@@ -19,7 +19,8 @@ R = "/scratch/yw8866/mmgen_runs"
 T = f"{R}/timing/r23"
 DS = ("Arts", "Instruments", "Games")
 BASE = {"C": "mql", "D": "macrecpaper", "TIGER": "tiger_text", "chain": "md122_a05_ep500_reassign"}
-LABEL = {"P1a:20": "P1a K_f=20", "P1a:50": "P1a K_f=50", "P1a:100": "P1a K_f=100", "A01:50": "A01 K_f=50", "C": "C merged",
+LABEL = {"P1aopt:20": "P1a-opt K_f=20", "P1aopt:50": "P1a-opt K_f=50", "P1aopt:100": "P1a-opt K_f=100",
+         "P1aoptr:50": "P1a-opt restricted (not exact)", "P1a:20": "P1a K_f=20", "P1a:50": "P1a K_f=50", "P1a:100": "P1a K_f=100", "A01:50": "A01 K_f=50", "C": "C merged",
          "Cfast": "C-fast", "D": "D merged", "TIGER": "TIGER-text", "chain": "MD chain 1+2+2"}
 OPT = {"Copt": "C-opt (forwards only)", "Coptk": "C-opt + top-k", "Dopt": "D-opt", "TIGERopt": "TIGER-opt", "chainopt": "chain-opt"}
 ORDER = list(LABEL)
@@ -107,6 +108,8 @@ def three_seed(D):
                 v.append(d.get("mean_results", d)["hit@10"])
         out[m] = (float(np.mean(v)), len(v)) if v else None
     out["Cfast"] = out["C"]
+    for K in (20, 50, 100):                                       # P1a-opt = P1a's rankings (verified, p1aopt_verify.json)
+        out[f"P1aopt:{K}"] = out[f"P1a:{K}"]
     return out
 
 
@@ -127,11 +130,13 @@ def figure(tab):
         if not pts:
             continue
         fig, ax = plt.subplots(figsize=(6.4, 4.4))
-        p1 = [p for p in pts if p[0].startswith("P1a")]
-        if p1:
-            ax.plot([p[1] for p in p1], [p[3] for p in p1], "-o", color="#1f6fb4", label="P1a (K_f = 20 / 50 / 100)")
-            for p in p1:
-                ax.annotate(f"K_f={p[0].split(':')[1]}", (p[1], p[3]), textcoords="offset points", xytext=(5, -11), fontsize=8)
+        for pref, sty, col, lab in (("P1aopt:", "-o", "#1f6fb4", "P1a-opt (K_f = 20 / 50 / 100)"),
+                                    ("P1a:", "--o", "#9ecae1", "P1a reference implementation")):
+            p1 = [p for p in pts if p[0].startswith(pref)]
+            if p1:
+                ax.plot([p[1] for p in p1], [p[3] for p in p1], sty, color=col, label=lab, mfc="white" if pref == "P1a:" else col)
+                for p in p1:
+                    ax.annotate(f"K_f={p[0].split(':')[1]}", (p[1], p[3]), textcoords="offset points", xytext=(5, -11), fontsize=8)
         mk = {"A01:50": ("#1f6fb4", "D"), "C": ("#c0392b", "s"), "Cfast": ("#e67e22", "s"), "D": ("#8e44ad", "^"),
               "TIGER": ("#7f8c8d", "v"), "chain": ("#27ae60", "P")}
         for p in pts:
@@ -215,7 +220,26 @@ def main():
     res["figure_rows"] = figure(tab)
     json.dump(res, open(f"{T}/r23_report.json", "w"), indent=1)
 
-    print("== 1 end-to-end (ms/user mean +- std over 3 passes; speedup vs C / C-fast at the same batch) ==")
+    print("== HEADLINE: end-to-end latency, P1a-opt vs C-fast (identical outputs to C) and official C; ms/user, mean +- std ==")
+    for D in DS:
+        for b in (1, 64, 256):
+            cf, c = tab.get(f"{D} Cfast {b}"), tab.get(f"{D} C {b}")
+            for K in (20, 50, 100):
+                r = tab.get(f"{D} P1aopt:{K} {b}")
+                if not r:
+                    continue
+                print(f"  {D:11s} b{b:<3d} P1a-opt K_f={K:<3d} {r['ms']:7.3f} +- {r['ms_std']:.3f}  "
+                      f"C-fast {cf['ms'] if cf else float('nan'):7.2f} ({r['speedup_vs_Cfast'] or float('nan'):5.1f}x)  "
+                      f"C {c['ms'] if c else float('nan'):7.2f} ({r['speedup_vs_C'] or float('nan'):5.1f}x)  "
+                      f"HR@10 {r['hr10']:.4f} match {r['hr10_match']}  peak {r['peak_gb']:.2f} GB")
+    v = {D: load(f"{T}/{D}/p1aopt_verify.json") for D in DS}
+    res["p1aopt_verify"] = v
+    for D, d in v.items():
+        if d:
+            for K, r in d["K"].items():
+                print(f"  verify {D} K_f={K}: match rate top-10 {r['match_rate_top10']:.6f}, same target rank {r['share_same_target_rank']:.6f}, "
+                      f"max |dscore| {r['max_abs_score_diff']:.2e}, restricted variant {r['restricted_variant_match_rate_top10']:.4f}, ok {r['ok']}")
+    print("\n== 1 end-to-end (ms/user mean +- std over 3 passes; speedup vs C / C-fast at the same batch) ==")
     for D in DS:
         for b in (1, 64, 256):
             for m in ORDER:
@@ -224,7 +248,7 @@ def main():
                     continue
                 sc = f"{r['speedup_vs_C']:.1f}x" if r["speedup_vs_C"] else "-"
                 sf = f"{r['speedup_vs_Cfast']:.1f}x" if r["speedup_vs_Cfast"] else "-"
-                chk = "" if b == 1 else f" HR@10 {r['hr10']:.4f} vs {r['hr10_reported']} match {r['hr10_match']}"
+                chk = "" if b == 1 or r["hr10"] is None else f" HR@10 {r['hr10']:.4f} vs {r['hr10_reported']} match {r['hr10_match']}"
                 print(f"{D:11s} b{b:<3d}{'(' + str(r['batch_used']) + ')' if r['batch_used'] != b else '':6s} {LABEL[m]:15s} "
                       f"{r['ms']:8.3f} +- {r['ms_std']:.3f} ms/user {r['users_per_s']:9.0f} users/s  vs C {sc:>7s} vs C-fast {sf:>7s} "
                       f"peak {r['peak_gb']:.2f} GB{chk}")

@@ -49,6 +49,7 @@ from mfd_eval import excl_cumsum, load_mfd_model, load_split, rank_lists
 from mfd_model import BRANCH_TOKENS
 from mfd_mv_infer import encode, f_logprobs, infer
 from r23_cfast import GPUTrieProcessor
+from r23_p1aopt import P1aOpt
 from utils import parse_dataset_args, parse_global_args, parse_test_args, prefix_allowed_tokens_fn
 
 R = "/scratch/yw8866/mmgen_runs"
@@ -59,7 +60,8 @@ BEAM = {   # method -> (baseline dir, text index, image index, lists)
     "TIGER": ("tiger_text", ".index_lemb_tiger.json", ".index_lemb_tiger.json", ("seqrec",)),
     "chain": ("md122_a05_ep500_reassign", I122, I122, ("seqrec",)),
 }
-MFD = {"P1a": "mfd122_mv_geoP1a", "A01": "r21_A01"}
+MFD = {"P1a": "mfd122_mv_geoP1a", "A01": "r21_A01", "P1aopt": "mfd122_mv_geoP1a", "P1aoptr": "mfd122_mv_geoP1a"}
+# P1aopt = r23_p1aopt.P1aOpt (exact, same scores as P1a up to rounding); P1aoptr = its restricted-normaliser variant (not exact)
 NB = 20
 OUT_DIR = os.environ.get("R23_OUT", f"{R}/timing/r23")          # R23_OUT: smoke-test output dir
 
@@ -355,6 +357,8 @@ class MFDMethod:
         self.U = len(self.targets)
         self.order = list(range(self.U))                          # dataset order (r21_eval)
         self.cfg = dict(variant="plain", K=self.K, w_t=0.5, w_i=0.5, a=(1, 0, 0), b=(1, 0, 0))
+        self.popt = P1aOpt(self.model, self.cat, self.T, self.I) if run.startswith("P1aopt") else None
+        self.restrict = run == "P1aoptr"
 
     def collate(self, idx):
         b = [dict(input_ids="".join(self.vmap["full"][h] for h in self.ds.inter_data[j]["inters"]),
@@ -369,6 +373,14 @@ class MFDMethod:
 
     def run(self, batch, st=NULL, raw=None):
         ids, mask = batch
+        if self.popt is not None:
+            with st("input_copy"):
+                ids, mask = ids.to("cuda", non_blocking=True), mask.to("cuda", non_blocking=True)
+            user, item, score = self.popt.infer(ids, mask, self.K, restrict=self.restrict, st=st if isinstance(st, Stages) else None)
+            if raw is not None:
+                raw.append((user.cpu(), item.cpu(), score.cpu()))
+            with st("top10"):
+                return self.top10(user, item, score, ids.shape[0])
         if isinstance(st, Stages):
             return self.run_stages(ids, mask, st, raw)
         vb = {"full": {"input_ids": ids, "attention_mask": mask}}           # infer() moves them to the GPU
@@ -502,6 +514,7 @@ def run_bs(m, order, bs, repeats, warmup):
 def reported_hr10(D, name):
     if ":" in name:                     # K_f 50: r21_eval (the reported main setting); K_f 100: eval_ii (§19 setting (ii));
         run, K = name.split(":")        # K_f 20 at w = 1/.5/.5 was never reported: r23_prep's exact-scoring reference
+        run = "P1a" if run.startswith("P1aopt") else run   # P1a-opt must reproduce P1a's reported numbers
         ck = f"{R}/mfd/{D}/{MFD[run]}/seed42"
         if K == "50":
             f = f"{ck}/r21_eval/eval.json"
@@ -616,6 +629,16 @@ def flops(m, order):
     pre = precollate(m, order, 64)
     fc = FlopCounterMode(display=False, depth=None)
     acc, start, hs = defaultdict(int), {}, []
+    po = getattr(m, "popt", None)
+    if po is not None:                                       # P1a-opt never calls model.decoder / lm_head: wrap its own parts
+        def wrap(fn, part):
+            def w(*a, **k):
+                s0 = fc.get_total_flops()
+                r = fn(*a, **k)
+                acc[part] += fc.get_total_flops() - s0
+                return r
+            return w
+        po._depth, po._crosskv, po._out = wrap(po._depth, "decoder"), wrap(po._crosskv, "decoder"), wrap(po._out, "lm_head")
     for part in ("encoder", "decoder", "lm_head"):
         mod = getattr(m.model, part)
         def pre_h(mod, args, part=part):
@@ -630,6 +653,8 @@ def flops(m, order):
     finally:
         for h in hs:
             h.remove()
+        if po is not None:
+            del po._depth, po._crosskv, po._out
     glob, n = fc.get_total_flops(), len(order)
     enc, dec, lm = acc["encoder"], acc["decoder"], acc["lm_head"]
     return {"users": n, "encoder_gflop_per_user": enc / n / 1e9, "decoder_incl_lm_head_gflop_per_user": (dec + lm) / n / 1e9,
@@ -663,7 +688,29 @@ def beam_counts(m, order):
 
 
 @torch.no_grad()
+def popt_counts(m, order):
+    """P1a-opt: one decoder position per tree node (KV cache), output projection only at depths 0, 2, 3."""
+    c = defaultdict(float)
+    for idx, (ids, mask) in precollate(m, order, 64):
+        k = {}
+        m.popt.infer(ids.cuda(), mask.cuda(), m.K, restrict=m.restrict, counts=k)
+        for d, n in enumerate(k["rows_depth"]):
+            c[f"d{d}"] += n
+        c["candidates"] += k["candidates"]; c["users"] += ids.shape[0]
+        c["enc_len"] += k["enc_len"]; c["positions"] += k["positions_computed"]
+    U = c["users"]
+    rows = [c[f"d{d}"] / U for d in range(4)]
+    return {"users": U, "sequential_decoder_steps": 3, "mean_encoder_len": c["enc_len"] / U, "cross_attention_memory_len": c["enc_len"] / U,
+            "decoder_rows_per_step": [rows[0], rows[1] + rows[2], rows[3]], "decoder_rows_per_depth": rows,
+            "decoder_token_positions_per_user": c["positions"] / U, "output_projection_rows_per_user": rows[0] + rows[2] + rows[3],
+            "candidates_scored_per_user": c["candidates"] / U, "K_f": m.K,
+            "note": "tree KV cache: one new position per node; decoder calls = depth 0 | depths 1+2 | depth 3 (both branches)"}
+
+
+@torch.no_grad()
 def mfd_counts(m, order):
+    if m.popt is not None:
+        return popt_counts(m, order)
     c = defaultdict(float)
     st = Stages()
     for idx, (ids, mask) in precollate(m, order, 64):
