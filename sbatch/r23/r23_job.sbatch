@@ -35,7 +35,7 @@ case $STEP in
   prep)    CMD="python -u r23_prep.py --dataset $D ${PREPARGS:-}" ;;   # Games: PREPARGS="--skip cfast", then "--resume --skip p1a_ref,reimpl,instrumented"
   time)    CMD="python -u r23_timing.py --mode time --dataset $D --methods $METHODS --batches ${BATCHES:-64,256} --repeats ${REPEATS:-3} \
                 --warmup 200 --anchor --out_file $OUT/time_${TAG}.json" ;;
-  profile) CMD="python -u r23_timing.py --mode profile --dataset $D --methods $METHODS --stage_batches ${STAGEB:-} \
+  profile) CMD="python -u r23_timing.py --mode profile --dataset $D --methods $METHODS ${STAGEB:+--stage_batches $STAGEB} \
                 --out_file $OUT/profile_${TAG}.json" ;;
   smoke)   # every code path on a few users, outputs under tmp_smoke (never the real r23 folder)
            export R23_OUT=$RUNS/tmp_smoke/r23; OUT=$R23_OUT/$D; mkdir -p $OUT; ALL=P1a:20,P1a:50,A01:50,C,Cfast,D,TIGER,chain
