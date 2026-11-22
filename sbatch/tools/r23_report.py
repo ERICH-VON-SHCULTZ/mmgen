@@ -21,6 +21,7 @@ DS = ("Arts", "Instruments", "Games")
 BASE = {"C": "mql", "D": "macrecpaper", "TIGER": "tiger_text", "chain": "md122_a05_ep500_reassign"}
 LABEL = {"P1a:20": "P1a K_f=20", "P1a:50": "P1a K_f=50", "P1a:100": "P1a K_f=100", "A01:50": "A01 K_f=50", "C": "C merged",
          "Cfast": "C-fast", "D": "D merged", "TIGER": "TIGER-text", "chain": "MD chain 1+2+2"}
+OPT = {"Copt": "C-opt (forwards only)", "Coptk": "C-opt + top-k", "Dopt": "D-opt", "TIGERopt": "TIGER-opt", "chainopt": "chain-opt"}
 ORDER = list(LABEL)
 
 
@@ -34,6 +35,8 @@ def e2e():
         for f in sorted(glob.glob(f"{T}/{D}/time_*.json")):
             d = load(f)
             tag = os.path.basename(f)[5:-5]
+            if tag.startswith("copt"):                        # model-forwards-only lower bounds: separate same-job table (copt())
+                continue
             envs[f"{D}/{tag}"] = {k: d["env"].get(k) for k in ("host", "gpu", "nvidia_smi", "torch", "cuda_torch", "cpu", "job")}
             if "anchor" in d:
                 anchors[f"{D}/{tag}"] = {k: v["ms_per_user"] for k, v in d["anchor"].items()}
@@ -59,6 +62,29 @@ def e2e():
                                    hr10=r.get("hr10"), hr10_reported=r.get("hr10_reported"), hr10_match=r.get("hr10_match"),
                                    passes=len(r["ms_per_user"]), jobs=r.get("jobs", 1))
     return out, anchors, envs
+
+
+def copt():
+    """Same-job comparison: P1a K_f 50 vs the forwards-only lower bounds (time_copt.json per dataset), plus the speedups of the
+    main e2e table's C / C-fast at the same batch for reference."""
+    out = {}
+    for D in DS:
+        d = load(f"{T}/{D}/time_copt.json")
+        if not d:
+            continue
+        runs = {(r["method"], r["batch"]): r for r in d["runs"].values()}
+        for b in (1, 64):
+            p = runs.get(("P1a:50", b))
+            for m in OPT:
+                r = runs.get((m, b))
+                if not r:
+                    continue
+                out[f"{D} {m} {b}"] = dict(dataset=D, method=m, batch=b, ms=r["ms_mean"], ms_std=r["ms_std"], peak_gb=r["peak_alloc_gb"],
+                                           steps=r.get("replay_steps_per_list"), p1a50_ms=p["ms_mean"] if p else None,
+                                           p1a50_speedup_vs_opt=(r["ms_mean"] / p["ms_mean"]) if p else None)
+        out[f"{D} flop_check"] = d.get("flop_check")
+        out[f"{D} anchor"] = d.get("anchor")
+    return out
 
 
 def three_seed(D):
@@ -202,6 +228,15 @@ def main():
                 print(f"{D:11s} b{b:<3d}{'(' + str(r['batch_used']) + ')' if r['batch_used'] != b else '':6s} {LABEL[m]:15s} "
                       f"{r['ms']:8.3f} +- {r['ms_std']:.3f} ms/user {r['users_per_s']:9.0f} users/s  vs C {sc:>7s} vs C-fast {sf:>7s} "
                       f"peak {r['peak_gb']:.2f} GB{chk}")
+    res["copt"] = co = copt()
+    print("\n== 1b model-forwards-only lower bounds (same job as P1a K_f 50; speedup = opt ms / P1a ms, < 1 = P1a slower) ==")
+    for k, r in co.items():
+        if k.endswith(("flop_check", "anchor")):
+            print(f"  {k}: {json.dumps(r)[:600]}")
+            continue
+        print(f"  {r['dataset']:11s} b{r['batch']:<3d} {OPT[r['method']]:22s} {r['ms']:8.3f} +- {r['ms_std']:.3f} ms/user  P1a K_f=50 "
+              f"{r['p1a50_ms']:.3f}  P1a speedup {r['p1a50_speedup_vs_opt']:.2f}x  steps/list {r['steps']}")
+    json.dump(res, open(f"{T}/r23_report.json", "w"), indent=1)
     print("\n== anchors (ms/user; same measurement in every job) ==")
     for k, v in anchors.items():
         print(f"  {k:30s} {json.dumps({a: round(b, 3) for a, b in v.items()})}  {envs[k]['host']}")
@@ -213,6 +248,16 @@ def main():
             for st, ms in s["stages_ms_per_user"].items():
                 dv = s.get("device_kernel_ms_per_user", {}).get(st)
                 print(f"   {st:45s} {ms:8.3f} ms  {100 * ms / tot:5.1f}%" + (f"   device {dv:.3f} ms" if dv is not None else ""))
+    print("\n== 3a hardware-independent summary per user (sequential decoder forwards, encoder / memory length, GFLOP measured) ==")
+    for k, v in res["profile"].items():
+        c, f = v["counts"], v["flops"]
+        if "lists" in c:
+            steps, mem = c["sequential_decoder_steps_total"], [round(c[t]["cross_attention_memory_len"], 1) for t in c if isinstance(c[t], dict)]
+            rows = "20 beams x 1 new token"
+        else:
+            steps, mem, rows = c["sequential_decoder_steps"], [round(c["cross_attention_memory_len"], 1)], c["decoder_rows_per_step"]
+        print(f"  {k:24s} seq. decoder forwards {steps}  memory len {mem}  rows/step {rows}  "
+              f"GFLOP enc {f['encoder_gflop_per_user']:.3f} dec {f['decoder_incl_lm_head_gflop_per_user']:.3f} (lm_head {f['lm_head_gflop_per_user']:.3f})")
     print("\n== 3 counts / FLOPs per user ==")
     for k, v in res["profile"].items():
         print(f"  {k:22s} {json.dumps(v['counts'])[:400]}")

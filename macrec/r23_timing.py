@@ -184,6 +184,59 @@ class BeamMethod:
         return top
 
 
+
+class OptMethod(BeamMethod):
+    """C-opt lower bound (round-23 addition): only the model forwards of the beam search, replayed at the real shapes:
+    per list the encoder on the B users, then n_steps decoder forwards (model.forward with KV cache, one new token) on the
+    B x 20 beam rows, exactly the calls HF generate makes (n_steps counted from a real generate of this list). Excluded:
+    trie constraint, log_softmax / top-k / BeamSearchScorer, cache reordering, finalize, beam-to-text decoding, merge.
+    'optk' adds the minimal GPU beam step back (log_softmax + top-2k over B x 20 x V, no constraint).
+    Token values are the decoder start token (compute does not depend on them). Returns no lists."""
+    def __init__(self, D, name):
+        self.with_topk = name.endswith("optk")
+        base = name[:-4] if self.with_topk else name[:-3]
+        super().__init__(D, base)
+        self.name, self.base = name, base
+        self.replay = True
+        self.steps = {}
+        for l in self.lists:                                 # count model.forward calls of one real generate per list
+            ids, mask = l.collate(self.order[:8])
+            n = [0]
+            f0 = self.model.forward
+            def cnt(*a, **k):
+                n[0] += 1
+                return f0(*a, **k)
+            self.model.forward = cnt
+            try:
+                self.gen(l, ids.cuda(), mask.cuda(), NULL)
+            finally:
+                del self.model.forward
+            self.steps[l.task] = n[0]
+
+    @torch.no_grad()
+    def run(self, batch, st=NULL, raw=None):
+        if not self.replay:
+            return BeamMethod.run(self, batch, st, raw)
+        from transformers.modeling_outputs import BaseModelOutput
+        model, start = self.model, self.model.config.decoder_start_token_id
+        B = batch[0][0].shape[0]
+        for l, (ids, mask) in zip(self.lists, batch):
+            ids, mask = ids.to("cuda", non_blocking=True), mask.to("cuda", non_blocking=True)
+            h = model.encoder(input_ids=ids, attention_mask=mask, return_dict=True).last_hidden_state
+            eo = BaseModelOutput(last_hidden_state=h.repeat_interleave(NB, 0))
+            am = mask.repeat_interleave(NB, 0)
+            dec = torch.full((B * NB, 1), start, dtype=torch.long, device="cuda")
+            past = None
+            for t in range(self.steps[l.task]):
+                out = model(encoder_outputs=eo, attention_mask=am, decoder_input_ids=dec, past_key_values=past,
+                            use_cache=True, return_dict=True)
+                past = out.past_key_values
+                if self.with_topk:
+                    lp = torch.log_softmax(out.logits[:, -1, :], dim=-1).view(B, -1)
+                    lp.topk(2 * NB, dim=1)
+        return [[-1] * 10 for _ in range(B)]
+
+
 def single_top10(l, pred, sc):
     """evaluate.get_topk_results with filter_items: beams not in the catalog get -1000; stable sort by score; top 10."""
     out = []
@@ -401,7 +454,9 @@ class MFDMethod:
 
 
 def make(D, name):
-    return MFDMethod(D, name) if ":" in name else BeamMethod(D, name)
+    if ":" in name:
+        return MFDMethod(D, name)
+    return OptMethod(D, name) if name.endswith(("opt", "optk")) else BeamMethod(D, name)
 
 
 # ------------------------------------------------------------------ timing
@@ -520,7 +575,20 @@ def mode_time(a):
                  "users_per_s": float(len(order) / np.mean(secs)), "peak_alloc_gb": peak, "peak_reserved_gb": peak_res}
             tg = [m.targets[j] for j in order]
             r["hr10"] = hr10(lists, tg)
-            if bs != 1 and not a.limit:
+            if isinstance(m, OptMethod):                     # no outputs; check the replay does the same model FLOPs as the real run
+                r["hr10"] = None
+                r["replay_steps_per_list"] = m.steps
+                if bs == 64 and "flop_check" not in res:
+                    res["flop_check"] = {}
+                if bs == 64 and m.base not in res["flop_check"]:
+                    first = m.order[:256]
+                    fr = flops(m, first); m.replay = False; fb = flops(m, first); m.replay = True
+                    ok = all(abs(fr[k] - fb[k]) <= 1e-6 * max(1.0, fb[k]) for k in ("encoder_gflop_per_user", "decoder_incl_lm_head_gflop_per_user"))
+                    res["flop_check"][m.base] = {"replay": fr, "real": fb, "model_flops_equal": ok}
+                    print(f"[copt] {m.base} replay model FLOPs == real beam search: {ok} "
+                          f"(enc {fr['encoder_gflop_per_user']:.4f}/{fb['encoder_gflop_per_user']:.4f}, "
+                          f"dec {fr['decoder_incl_lm_head_gflop_per_user']:.4f}/{fb['decoder_incl_lm_head_gflop_per_user']:.4f} GFLOP/user)", flush=True)
+            elif bs != 1 and not a.limit:
                 rep, src = reported_hr10(a.dataset, name)
                 r["hr10_reported"], r["hr10_reported_source"] = rep, src
                 r["hr10_match"] = None if rep is None else abs(r["hr10"] - rep) < 0.5 / len(order)
@@ -532,7 +600,7 @@ def mode_time(a):
                 r["lists_file"] = lf
             res["runs"][f"{name}@{bs}"] = r
             print(f"[time] {a.dataset} {name} batch {used}: {r['ms_mean']:.3f} +- {r['ms_std']:.3f} ms/user, "
-                  f"HR@10 {r['hr10']:.4f} (reported {r.get('hr10_reported')}, match {r.get('hr10_match')}), peak {peak:.2f} GB", flush=True)
+                  f"HR@10 {r['hr10'] if r['hr10'] is None else round(r['hr10'], 4)} (reported {r.get('hr10_reported')}, match {r.get('hr10_match')}), peak {peak:.2f} GB", flush=True)
             json.dump(res, open(a.out_file, "w"), indent=1)
         del m
         torch.cuda.empty_cache()
@@ -694,7 +762,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=("time", "profile"), required=True)
     p.add_argument("--dataset", required=True)
-    p.add_argument("--methods", required=True, help="comma list: P1a:20,P1a:50,P1a:100,A01:50,C,Cfast,D,TIGER,chain")
+    p.add_argument("--methods", required=True, help="comma list: P1a:20,P1a:50,P1a:100,A01:50,C,Cfast,D,TIGER,chain; Copt / Coptk etc. = model forwards only (C-opt lower bound)")
     p.add_argument("--batches", default="1,64,256")
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--warmup", type=int, default=200)
