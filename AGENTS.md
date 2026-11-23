@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-22 (round 23: P1a-opt (exact faster P1a inference) is the §23 headline vs C-fast; C-opt internal reference; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-22 (round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -189,7 +189,7 @@ are reference-only, not part of the main line.
   Games on repeat-f; A01's valid − test gap is positive on all 6 Instruments/Games seeds (+0.0017 mean); on Instruments the KL adds
   nothing on top of grouping (A01 − G0 +0.0001). All E10 / E8 / E9 gates passed (E10c: β=0 = P1a exactly, KL = independent
   recomputation, 1.6x compute per micro-batch ≈ +13–38 s/epoch).
-- **Round 23 (2026-11-20, running), `docs/MFD_REPORT.md` §23; jobs `mmgen_runs/logs/round23_jobs.txt`:** inference speed of P1a
+- **Round 23 (2026-11-20, done 2026-11-22), `docs/MFD_REPORT.md` §23; jobs `mmgen_runs/logs/round23_jobs.txt`:** inference speed of P1a
   (K_f 20/50/100; A01 once on Arts) vs C, C-fast (C with a GPU-side trie mask, `macrec/r23_cfast.py`), D, TIGER-text and the MD
   chain on one H200 per job; measurement only (no training, model code untouched). The "round 21b" latency task was never run;
   nothing reused. Prep gate per dataset (`macrec/r23_prep.py`): C-fast == C bitwise on the full test set, harness == saved eval
@@ -205,6 +205,13 @@ are reference-only, not part of the main line.
   set: same f / candidates / target ranks, top-10 match rate), variant benchmark `r23_p1aopt_bench.py`. Smoke (Arts): 2.47 ms/user
   at K_f 50 batch 64 (P1a 10.5), 13.8 at batch 1 (P1a 24.4). C-opt (beam-search model forwards only, FLOP-checked) = internal
   lower bound: 0.63 ms/user batch 64, 41.3 batch 1 (Arts smoke). Arts profile: C's model forwards are 1.4% of its batch-64 time.
+  **Results (§23.2–23.12):** all checks pass on the full test sets (C-fast top-10 match 1.0; P1a-opt same f / candidates / target
+  rank for every user, top-10 match 0.99986–1.0, the 13 differing lists are fp32 ties ≤ 3.3e−6; HR@10 recomputed = reported for
+  every method). Headline, P1a-opt K_f 50 ms/user vs C-fast / C: batch 1 13.7–15.3 vs 112–116 / 118–123 (7.3–8.5× / 7.7–9.0×);
+  batch 64 1.99–2.51 vs 52–53 / 64–65 (21–26× / 26–33×); batch 256 1.87–2.38 (22–28×). Attribution (§23.7): at batch 64 the gain
+  is HF beam-search implementation vs batched exact scoring (P1a-opt does 8× C's FLOPs, 47 vs 5.9 GFLOP/user; 3.1–3.9× slower than
+  C-opt); at batch 1 ≈ 2.7× is algorithmic (3 vs 10 sequential decoder calls; 2.7–2.9× faster than C-opt). Training: P1a ≈ half of
+  C's optimizer steps, 0.2–0.5× its GPU-hours. Figures `mmgen_runs/timing/r23/r23_acc_latency_<D>.png`.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -694,6 +701,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `8b3e050` | §23 inference-speed code (C-fast, timing harness, prep gate, jobs, report), §23.1 setup |
 | `cad4463`…`2f0d2aa` | r23 submit / prep-resume / profile-flag fixes; C-opt lower bound; r22 E9k4 cross-dataset stage |
 | `8c7caee` | §23 P1a-opt (exact faster P1a inference), its check and benchmark; report headline P1a-opt vs C-fast |
+| `f918ba0` | r22 E9k4 x-dataset stage: round-22 gate on Instruments/Games |
+| (this) | §23.2–23.12 results (headline, all methods, figure, attribution, stage / FLOP / C-opt appendices, training cost); figure layout |
 
 ---
 

@@ -129,14 +129,15 @@ def figure(tab):
                                  test_hr10=hs[m][0], n_seeds=hs[m][1], hr10_seed42_batch64_lists=r["hr10"]))
         if not pts:
             continue
-        fig, ax = plt.subplots(figsize=(6.4, 4.4))
+        fig, ax = plt.subplots(figsize=(8.6, 4.4))
         for pref, sty, col, lab in (("P1aopt:", "-o", "#1f6fb4", "P1a-opt (K_f = 20 / 50 / 100)"),
                                     ("P1a:", "--o", "#9ecae1", "P1a reference implementation")):
             p1 = [p for p in pts if p[0].startswith(pref)]
             if p1:
                 ax.plot([p[1] for p in p1], [p[3] for p in p1], sty, color=col, label=lab, mfc="white" if pref == "P1a:" else col)
-                for p in p1:
-                    ax.annotate(f"K_f={p[0].split(':')[1]}", (p[1], p[3]), textcoords="offset points", xytext=(5, -11), fontsize=8)
+                for p in p1:                                  # opt labels below, reference labels above (no overlap)
+                    ax.annotate(f"K_f={p[0].split(':')[1]}", (p[1], p[3]), textcoords="offset points",
+                                xytext=(4, -11) if pref == "P1aopt:" else (4, 6), fontsize=7, color=col if pref == "P1a:" else "black")
         mk = {"A01:50": ("#1f6fb4", "D"), "C": ("#c0392b", "s"), "Cfast": ("#e67e22", "s"), "D": ("#8e44ad", "^"),
               "TIGER": ("#7f8c8d", "v"), "chain": ("#27ae60", "P")}
         for p in pts:
@@ -147,7 +148,7 @@ def figure(tab):
         ax.set_ylabel("test HR@10 (3-seed mean where available)")
         ax.set_title(f"{D}: accuracy vs latency")
         ax.grid(alpha=0.3, which="both")
-        ax.legend(fontsize=8, loc="lower right")
+        ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0)
         fig.tight_layout()
         fig.savefig(f"{T}/r23_acc_latency_{D}.png", dpi=160)
         plt.close(fig)

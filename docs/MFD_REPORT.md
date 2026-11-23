@@ -2827,7 +2827,7 @@ report `sbatch/tools/r23_report.py`. Outputs go to `mmgen_runs/timing/r23/`, and
 - So the processed scores are bitwise identical whenever the allowed sets are. One device→host sync per step remains (the
   output size of `repeat_interleave`, and HF's empty-set error).
 - Everything else is unchanged: HF's Python beam scorer, the KV-cache reorder, string decode and merge. C-fast therefore
-  bounds the cost of the constraint callbacks only, not all implementation overhead (§23.4).
+  bounds the cost of the constraint callbacks only, not all implementation overhead (§23.7).
 
 **Verification before timing** (`r23_prep.py`, one GPU job per dataset; the timing jobs depend on it with `afterok`):
 - (0) Every method's test set has the same users, in the same order, with the same target item.
@@ -2876,3 +2876,319 @@ So the measurement is split into jobs of under 2 h each:
 
 Speedups are computed only within a dataset, from these jobs, and never against earlier numbers.
 
+### 23.2 Checks, hardware, comparability between jobs
+
+**Hardware and software (every job).** NVIDIA H200 (143,771 MiB), driver 610.43.02, torch 2.6.0+cu124 (CUDA 12.4, cuDNN
+9.1.0), transformers 4.47.0, Python 3.10.20, host CPU Intel Xeon Platinum 8592+, 8 cores per job, fp32 with TF32 off, no
+`torch.compile`, no CUDA graphs. Hosts gh116–gh134 of `h200_tandon`; every job's host, GPU UUID and job ID are in
+`r23_report.json` (`envs`).
+
+**Verification before timing: all checks pass on the full test set of all three datasets** (`<D>/prep.json`):
+
+| check | Arts (22,171 users) | Instruments (17,112) | Games (42,259) |
+|---|---|---|---|
+| (0) same users / targets for every method | pass | pass | pass |
+| (1) C-fast vs C: same 20 sequences, bitwise same scores, both lists | 22,171 / 22,171 | 17,112 / 17,112 | 42,259 / 42,259 |
+| (1) **C-fast match rate (merged top 10)** | **1.0** | **1.0** | **1.0** |
+| (1b) harness C == reported save files (strings, scores) | 1.0 / 1.0 | 1.0 / 1.0 | 1.0 / 1.0 |
+| (2) top-10 / merge reimplementation == MACRec's, C D TIGER chain | all users | all users | all users |
+| (3) stage-timed copies == plain paths | pass | pass | pass |
+| (4) P1a exact ranks == reported (K_f 50 r21_eval, K_f 100 eval_ii) | pass | pass | pass |
+
+Games' prep ran as two jobs (the C-fast step alone takes about 1.5 h on 42k users): checks 0/2/3/4 in 23925376, which hit its
+time limit after writing them, and checks 1/1b in 23967710 (`r23_prep.py --resume`).
+
+**HR@10 recomputed from the timed batch-64 / 256 lists equals the reported test HR@10 for every method and dataset** (P1a K_f
+20 / 50 / 100, A01, C, C-fast, D, TIGER, chain, P1a-opt; 0 mismatches; tolerance half a user).
+
+**Anchors.** Each timing job repeated P1a K_f 50 (batch 64, 2,048 users) and C (batch 64, 512 users) on its own dataset:
+
+| dataset | jobs | P1a K_f 50 anchor (ms/user) | C anchor (ms/user) |
+|---|---|---|---|
+| Arts | 13 | 10.43 – 10.52 | 62.3 – 64.6 (one outlier: 70.4 in the P1a-opt timing job) |
+| Instruments | 12 | 8.29 – 8.36 | 61.6 – 64.2 |
+| Games | 25 | 10.61 – 10.72 | 61.6 – 64.3 |
+
+The P1a anchor varies by ≤ 1% across all 50 jobs and hosts; the C anchor by about ±2% (its Python share depends on the host
+CPU). The 70.4 outlier is a C anchor inside the Arts P1a-opt job (whose own P1a anchor is normal, 10.52); C and C-fast were
+timed in their own jobs, so no reported number depends on it. Speedups below are therefore comparable across jobs within a
+dataset to about ±2%.
+
+### 23.3 P1a-opt: an exact faster implementation of P1a's inference
+
+P1a's reference inference (`mfd_model.last_logprobs`, used by every evaluation so far) is simple but wasteful: every decoder
+call recomputes all positions of every row without a KV cache, copies the user's encoder memory into every candidate row (and
+recomputes its cross-attention keys / values per row), and applies the full-vocabulary output projection at every position
+although only the last one is used. P1a-opt (`macrec/r23_p1aopt.py`) evaluates the same decoder, with the same weights, as a
+prefix tree with one new token per node:
+
+| depth | decoder input | nodes per user (Arts, K_f 50) | output used |
+|---|---|---|---|
+| 0 | [start] | 1 | log P(f) |
+| 1 | [start, f] | K_f = 50 | — |
+| 2 | [start, f, ⟨T⟩ \| ⟨I⟩] | 2 K_f = 100 | log P(t1 \| f), log P(i1 \| f) |
+| 3 | [start, f, ⟨T⟩ \| ⟨I⟩, c1] | 3,425 (catalog prefixes under the kept f) | log P(t2 \| f, t1), log P(i2 \| f, i1) |
+
+- **KV cache over the tree:** each node's self-attention keys / values are computed once and read by its descendants.
+- **Cross-attention once per user:** the encoder memory's keys / values are computed once per user; every row attends to its
+  user's memory in a per-user batched matmul (no per-row copies).
+- **Output projection only where used:** at the node's own position, only at depths 0, 2, 3. The normaliser stays the
+  **full vocabulary**, as in P1a. Restricting the softmax to the current level's codes would change every row's normaliser by
+  its own log-mass outside those codes; that variant (P1aoptr) is not ranking-exact (95–99% top-10 match below) and is
+  excluded from every result.
+- **Fewer calls:** depths 1 and 2 run as one decoder call (two new positions per row, causal); depth 3 of both branches is
+  one call; fused q/k/v and cross-attention key/value projections. Candidate enumeration, exact scoring and top 10 are P1a's.
+- **Deduplication:** depth-3 rows are the distinct catalog prefixes (f, c1) under each kept f, already unique per user, and
+  rows of different users have different encoder memories, so there is nothing to deduplicate (counted on every batch: 0
+  duplicates).
+- Implementation variants (einsum vs elementwise attention, `log_softmax` vs `logsumexp`, chunk size) were chosen once on Arts
+  by `r23_p1aopt_bench.py`; all are exact.
+
+**Exactness** (`r23_p1aopt_verify.py`, full test set, batch 64; per batch the encoder output is computed once and decoded by
+P1a's reference path and by P1a-opt, so the comparison isolates the decoder):
+
+| dataset | K_f | same kept f / candidates / target rank | top-10 match rate | differing users | max ref-score gap in differing lists | max \|Δscore\| | HR@10 / NDCG@10 ref = opt |
+|---|---|---|---|---|---|---|---|
+| Arts | 20 | 1.0 / 1.0 / 1.0 | 0.99991 | 2 | 7.2e−7 | 1.5e−5 | 0.1214 / 0.0899 |
+| Arts | 50 | 1.0 / 1.0 / 1.0 | 0.99986 | 3 | 1.4e−6 | 1.5e−5 | 0.1227 / 0.0904 |
+| Arts | 100 | 1.0 / 1.0 / 1.0 | 1.0 | 0 | — | 1.5e−5 | 0.1227 / 0.0904 |
+| Instruments | 20 | 1.0 / 1.0 / 1.0 | 1.0 | 0 | — | 1.5e−5 | 0.1270 / 0.0999 |
+| Instruments | 50 | 1.0 / 1.0 / 1.0 | 1.0 | 0 | — | 1.5e−5 | 0.1291 / 0.1006 |
+| Instruments | 100 | 1.0 / 1.0 / 1.0 | 0.99994 | 1 | 1.9e−6 | 1.5e−5 | 0.1291 / 0.1006 |
+| Games | 20 | 1.0 / 1.0 / 1.0 | 0.99995 | 2 | 4.8e−7 | 1.9e−5 | 0.1002 / 0.0531 |
+| Games | 50 | 1.0 / 1.0 / 1.0 | 0.99998 | 1 | 1.2e−6 | 1.6e−5 | 0.1009 / 0.0533 |
+| Games | 100 | 1.0 / 1.0 / 1.0 | 0.99995 | 2 | 3.3e−6 | 1.7e−5 | 0.1009 / 0.0534 |
+
+- Every user has the same kept f codes, the same candidate set and the same target rank, so HR@10 and NDCG@10 are identical.
+- The 13 differing top-10 lists (of 244,626 user × K_f lists) swap two items whose reference scores differ by at most
+  3.3e−6, i.e. fp32 rounding ties (scores are sums of log-probabilities around −20).
+- Noise floor: P1a itself, re-run with a fresh encoder pass (its item-level `scatter_add` is not bit-reproducible), matches
+  its own top 10 for 0.99991 (Arts), 1.0 (Instruments), 0.99988 (Games) of users at K_f 50; P1a-opt vs P1a is within that.
+- The restricted-normaliser variant (excluded) matches 0.955 – 0.986 of top-10 lists.
+
+### 23.4 Headline: end-to-end latency, P1a-opt vs C-fast and C
+
+ms/user, mean ± std over 3 full passes (batch 64 / 256: full test set; batch 1: the fixed 2,000-user subset). Speedup =
+baseline ms / P1a-opt ms at the same batch size. C-fast returns exactly C's outputs (§23.2), so it is the faster of the two
+implementations of the same baseline. Test HR@10 = 3-seed mean (P1a-opt has P1a's rankings, §23.3).
+
+| dataset | batch | P1a-opt K_f 20 | **P1a-opt K_f 50** | P1a-opt K_f 100 | C-fast | C (official) | K_f 50 vs C-fast | K_f 50 vs C |
+|---|---|---|---|---|---|---|---|---|
+| Arts | 1 | 14.90 ± 0.04 | **15.31 ± 0.05** | 16.43 ± 0.09 | 111.91 ± 0.41 | 118.24 ± 0.04 | **7.3×** | 7.7× |
+| Arts | 64 | 1.189 ± 0.002 | **2.511 ± 0.012** | 4.649 ± 0.004 | 52.44 ± 0.28 | 64.31 ± 0.11 | **20.9×** | 25.6× |
+| Arts | 256 | 1.053 ± 0.012 | **2.380 ± 0.001** | 4.519 ± 0.001 | 52.48 ± 0.48 | 63.28 ± 0.03 | **22.0×** | 26.6× |
+| Instruments | 1 | 13.42 ± 0.02 | **13.97 ± 0.05** | 14.85 ± 0.03 | 115.73 ± 0.17 | 121.60 ± 0.21 | **8.3×** | 8.7× |
+| Instruments | 64 | 0.941 ± 0.007 | **1.985 ± 0.001** | 3.598 ± 0.000 | 51.81 ± 0.08 | 64.79 ± 0.07 | **26.1×** | 32.6× |
+| Instruments | 256 | 0.810 ± 0.000 | **1.866 ± 0.001** | 3.499 ± 0.009 | 52.27 ± 0.44 | 62.95 ± 0.20 | **28.0×** | 33.7× |
+| Games | 1 | 12.67 ± 0.01 | **13.71 ± 0.04** | 14.79 ± 0.00 | 116.47 ± 0.25 | 122.91 ± 0.56 | **8.5×** | 9.0× |
+| Games | 64 | 1.085 ± 0.003 | **2.481 ± 0.003** | 4.789 ± 0.006 | 53.14 ± 0.62 | 65.05 ± 0.15 | **21.4×** | 26.2× |
+| Games | 256 | 0.979 ± 0.001 | **2.377 ± 0.000** | 4.686 ± 0.003 | 52.74 ± 0.30 | 63.80 ± 0.52 | **22.2×** | 26.8× |
+
+| dataset | test HR@10 (3 seeds): P1a K_f 20 / 50 / 100 | C | throughput at batch 256, users/s: P1a-opt K_f 50 / C-fast / C |
+|---|---|---|---|
+| Arts | 0.1225 / 0.1233 / 0.1233 | 0.1262 | 420 / 19 / 16 |
+| Instruments | 0.1274 / 0.1294 / 0.1293 | 0.1310 | 536 / 19 / 16 |
+| Games | 0.0992 / 0.1004 / 0.1004 | 0.1007 | 421 / 19 / 16 |
+
+- At the main setting (K_f 50), P1a-opt is **7.3–8.5× faster than C-fast at batch 1** (13.7–15.3 vs 112–116 ms/user) and
+  **21–28× faster at batch 64 / 256** (1.9–2.5 vs 52–53 ms/user), at 0.0003–0.0029 lower 3-seed test HR@10 than C (§20.5 /
+  §21.9: the per-seed paired CIs vs C include 0).
+- K_f 20 halves P1a-opt's batch-64 cost again (0.9–1.2 ms/user, 44–55× vs C-fast) for −0.0008 to −0.0020 HR@10; K_f 100 adds
+  nothing over K_f 50 in accuracy at twice the cost.
+- Batch 256 is no faster per user than batch 64 for any beam method (their cost is per-row Python, §23.8), and only 5–14% faster
+  for P1a-opt.
+- Peak GPU memory: P1a-opt 9.8–10.6 GB at batch 64 and 10.4–13.6 GB at batch 256 (the 32,768-row output-projection chunk;
+  smaller chunks trade speed for memory, §23.3), 0.5–2.3 GB at batch 1; C / C-fast 3.0 GB at batch 64, 11.9 GB at batch 256,
+  0.12 GB at batch 1.
+
+### 23.5 All methods, end to end
+
+ms/user (mean over 3 passes; std ≤ 0.8 ms for every beam row, ≤ 0.2 ms for every MFD row; full values with std, users/s and
+peak memory in `r23_report.json` → `e2e`).
+
+| method | Arts b1 | Arts b64 | Arts b256 | Instr. b1 | Instr. b64 | Instr. b256 | Games b1 | Games b64 | Games b256 |
+|---|---|---|---|---|---|---|---|---|---|
+| P1a-opt K_f 50 | 15.3 | 2.51 | 2.38 | 14.0 | 1.99 | 1.87 | 13.7 | 2.48 | 2.38 |
+| P1a (reference impl.) K_f 20 | 20.7 | 4.40 | 4.33 | 21.0 | 3.49 | 3.41 | 21.8 | 4.24 | 4.16 |
+| P1a (reference impl.) K_f 50 | 23.3 | 10.04 | 10.10 | 22.9 | 7.96 | 7.99 | 24.1 | 10.24 | 10.24 |
+| P1a (reference impl.) K_f 100 | 30.6 | 19.11 | 19.32 | 27.2 | 14.86 | 15.01 | 32.1 | 20.12 | 20.23 |
+| A01 K_f 50 (reference impl.) | 23.2 | 10.09 | 10.14 | — | — | — | — | — | — |
+| C merged | 118.2 | 64.31 | 63.28 | 121.6 | 64.79 | 62.95 | 122.9 | 65.05 | 63.80 |
+| C-fast | 111.9 | 52.44 | 52.48 | 115.7 | 51.81 | 52.27 | 116.5 | 53.14 | 52.74 |
+| D merged | 118.1 | 64.55 | 63.47 | 123.4 | 63.98 | 63.40 | 121.7 | 64.16 | 63.77 |
+| TIGER-text | 56.2 | 29.47 | 29.34 | 58.3 | 28.94 | 28.25 | 58.5 | 28.91 | 29.48 |
+| MD chain 1+2+2 | 67.2 | 35.47 | 36.07 | 70.0 | 36.19 | 36.30 | 69.1 | 36.17 | 35.14 |
+
+- A01 costs the same as P1a (10.09 vs 10.04 ms/user), as expected from the same architecture and inference.
+- P1a-opt vs P1a's reference implementation (same rankings): 4.0–4.3× at batch 64 / 256, 1.5–1.8× at batch 1.
+- D costs the same as C; TIGER-text and the chain are about half of C (one list instead of two; the chain has one more step).
+
+### 23.6 Accuracy–latency figure
+
+`mmgen_runs/timing/r23/r23_acc_latency_{Arts,Instruments,Games}.png` and `r23_acc_latency.csv`: x = ms/user at batch 64 (H200,
+log scale), y = test HR@10, 3-seed mean where available (P1a / P1a-opt K_f 20/50/100 from r23_prep's exact ranks of seeds 42–44;
+C, D, TIGER-text from the 3 baseline seeds; A01 and the chain are seed 42 only, marked in the CSV's `n_seeds`). P1a-opt is
+drawn as a solid line with P1a's reference implementation dashed (same accuracy, about 4× the time); C and C-fast are one accuracy
+at two costs.
+
+### 23.7 Where the speedup comes from
+
+Measured on Arts at K_f 50 (stage times from the profile jobs; their per-stage synchronisation inflates totals slightly):
+
+| | batch 64 | batch 1 |
+|---|---|---|
+| C (official), end to end | 64.3 | 118.2 |
+| C-fast (GPU-side trie mask), end to end | 52.4 | 111.9 |
+| of which C-fast's model forwards (encoder + 10 decoder steps) | 0.86 | 50.5 |
+| of which HF beam scorer (process + finalize + cache reorder) | 25.1 | 38.7 |
+| of which beam → text decoding (`batch_decode`, both lists) | 22.1 | 23.5 |
+| of which other `generate` overhead + residual trie step | 4.0 | 25.4 |
+| C-opt: C's model forwards replayed alone at the real beam shapes (§23.10) | 0.65 | 41.1 |
+| P1a-opt K_f 50, end to end | 2.51 | 15.3 |
+| of which P1a-opt's model forwards (encoder, depth 0, depths 1+2, depth 3) | 2.49 | 16.1 |
+| of which candidate enumeration, exact scoring, top 10 | 0.03 | 2.2 |
+
+The speedup over C-fast splits into an algorithmic and an implementation part, and the split depends on the batch size:
+**(a) Fewer sequential decoder steps** — P1a makes 3 sequential decoder calls (plus the encoder) where C makes 10 (5 per list,
+plus 2 encoders). At batch 1 every call costs about 3–5 ms of fixed launch latency regardless of its rows, so this is what
+survives any implementation of C: P1a-opt (15.3 ms) is 2.7× faster than C-opt (41.1 ms), the time C's model forwards alone
+need. **(b) Shorter encoder memory** — 8.3 item positions instead of 27.7 code tokens per list (encoder 0.08 vs 0.66
+GFLOP/user); it saves at most C's encoder time, 0.10 ms/user at batch 64 and 3–6 ms at batch 1, a minor part. **(c) Exact
+scoring instead of beam search** — it costs MORE arithmetic (P1a-opt 47 GFLOP/user, mostly the full-vocabulary output projection
+over 3,425 prefix rows, vs C's 5.9), but it replaces beam search's sequential, per-row bookkeeping (HF's beam scorer, 25 ms/user
+at batch 64, and the beam → text decoding, 22 ms/user) with one batched gather, sum and sort (0.03 ms/user). **(d)
+Implementation** — C → C-fast removes the Python trie (18%); everything else in C-fast's 52 ms at batch 64 is HF `generate`'s
+Python beam bookkeeping and string decoding, which C-opt shows its model needs only 0.65 ms of. So the bound is: at batch 64,
+the 21× over C-fast is entirely (c)+(d) — HF's beam-search implementation against P1a's batched exact scoring — and against an
+idealised beam search that costs only its forwards (C-opt) P1a-opt would be 3.9× slower (2.51 vs 0.65 ms/user), because it
+does 8× the FLOPs; at batch 1, about 2.7× of the 7.3× over C-fast is algorithmic (a, with a small part of b) and the remaining
+2.7× is C-fast's implementation overhead (111.9 / 41.1). The latency claim that does not depend on how C is implemented is
+the batch-1 one; the throughput claim at large batches is a claim about practical beam-search implementations.
+
+### 23.8 Appendix A: stage breakdown (Arts)
+
+Instrumented ms/user (`torch.cuda.synchronize()` at every stage boundary) and share of the instrumented total; device kernel
+time from `torch.profiler` in `profile_*.json`. Batch 64: first 2,560 test users; batch 1: first 500 users of the fixed subset.
+
+**P1a-opt and P1a (reference implementation), K_f 50:**
+
+| stage | P1a-opt b64 | P1a-opt b1 | P1a b64 | P1a b1 |
+|---|---|---|---|---|
+| input copy | 0.00 (0%) | 0.07 (0%) | 0.00 (0%) | 0.08 (0%) |
+| encoder (+ cross-attention K/V for P1a-opt) | 0.06 (2%) | 3.71 (20%) | 0.05 (0%) | 3.53 (13%) |
+| f step (depth 0) | 0.05 (2%) | 2.94 (16%) | 0.06 (1%) | 4.42 (16%) |
+| branch step 1 (depths 1+2: t1, i1) | 0.12 (5%) | 3.93 (21%) | 0.27 (3%) | 5.30 (19%) |
+| prefix enumeration | 0.01 (0%) | 0.83 (4%) | 0.01 (0%) | 0.84 (3%) |
+| branch step 2 (depth 3: t2, i2, both branches) | 2.26 (89%) | 5.53 (30%) | 10.09 (96%) | 12.23 (44%) |
+| candidate enumeration + exact scoring | 0.01 (0%) | 0.75 (4%) | 0.01 (0%) | 0.76 (3%) |
+| top 10 (sort, host copy) | 0.01 (0%) | 0.59 (3%) | 0.01 (0%) | 0.58 (2%) |
+| total | 2.54 | 18.70 | 10.51 | 28.05 |
+
+Model compute (encoder + decoder steps) is 99% of P1a-opt's time at batch 64 and 87% at batch 1; enumeration / scoring / top
+10 are 0.03 ms at batch 64 and 2.2 ms at batch 1 (launch-bound small ops). At batch 64 the depth-3 step is 89%: its GPU time
+is 43% the full-vocabulary output matmul and 15% the fused log-softmax (profiler, `r23_p1aopt_bench.py`). **Why batch 1 costs
+13–16 ms at every K_f:** each of the four model calls costs about 3–5 ms of fixed kernel-launch and Python latency (about
+150 small kernels per call; device time is about a third of wall time), independent of its row count; only depth 3 grows
+with K_f (4.9 / 5.5 / 6.5 ms at K_f 20 / 50 / 100). The same holds for P1a's reference implementation (5 calls, 21–31 ms).
+
+**C and C-fast (two lists, merge):**
+
+| stage | C b64 | C-fast b64 | C b1 | C-fast b1 |
+|---|---|---|---|---|
+| encoder (2 lists) | 0.10 (0%) | 0.10 (0%) | 6.43 (4%) | 6.17 (4%) |
+| decoder forwards, 5 steps × 2 lists | 0.80 (1%) | 0.76 (1%) | 45.73 (31%) | 44.28 (32%) |
+| constraint: Python trie (C) / GPU mask (C-fast) | 11.33 (18%) | 0.15 (0%) | 15.54 (11%) | 9.03 (7%) |
+| — of which trie callbacks on the CPU (C) | 3.40 | — | 4.27 | — |
+| — of which per-row mask writes (C) | 7.64 | — | 9.72 | — |
+| beam scorer `process` | 19.06 (30%) | 18.42 (35%) | 25.41 (17%) | 25.44 (18%) |
+| beam scorer `finalize` | 6.45 (10%) | 6.23 (12%) | 8.07 (5%) | 7.97 (6%) |
+| KV-cache reorder | 0.47 (1%) | 0.40 (1%) | 5.42 (4%) | 5.25 (4%) |
+| other `generate` overhead | 4.02 (6%) | 3.86 (7%) | 16.95 (11%) | 16.36 (12%) |
+| beam → text decoding (both lists) | 21.91 (34%) | 22.07 (42%) | 23.67 (16%) | 23.47 (17%) |
+| merge (`ensemble.py` rule) | 0.03 (0%) | 0.03 (0%) | 0.13 (0%) | 0.12 (0%) |
+| total | 64.18 | 52.03 | 147.73 | 138.47 |
+
+C's model forwards are 1.4% of its batch-64 time and 35% at batch 1 (where every forward is launch-bound, about 4.5 ms per
+decoder step). C-fast's GPU mask takes the constraint from 11.3 to 0.15 ms/user at batch 64; at batch 1 its remaining 9 ms are
+its per-step `searchsorted` / `repeat_interleave` launches and the one host sync per step. D's breakdown equals C's (64.18 vs
+63.92 ms total); TIGER-text and the chain are one list (29.3 / 35.5 ms at batch 64; model forwards 1.4% in both).
+
+### 23.9 Appendix B: hardware-independent counts and FLOPs per user
+
+Measured with `torch.utils.flop_counter.FlopCounterMode` (matmul / bmm / addmm / attention ops, 2 FLOP per multiply–add) on
+the first 256 test users at batch 64, split by forward hooks on the encoder / decoder / output projection (P1a-opt: its own
+decoder and output functions). Sequential decoder forwards = decoder calls one after another per user; memory length = mean
+number of encoder positions each decoder row cross-attends to.
+
+| method | seq. encoder calls | seq. decoder forwards | memory length | decoder rows per forward | decoder positions computed | GFLOP encoder | GFLOP decoder (of which output proj.) |
+|---|---|---|---|---|---|---|---|
+| P1a-opt K_f 20 / 50 / 100 (Arts) | 1 | 3 | 8.3 items | 1 / 150 / 3,425 (K_f 50) | 3,626 (K_f 50) | 0.08 | 20.1 (12.9) / 46.8 (30.1) / 89.6 (57.6) |
+| P1a reference K_f 20 / 50 / 100 (Arts) | 1 | 3 | 8.3 items | 1 / 100 / 3,425 (K_f 50) | 14,003 (K_f 50) | 0.08 | 102.9 (51.4) / 239.6 (119.7) / 458.0 (228.7) |
+| C, D (Arts) | 2 | 10 (5 per list) | 27.7 tokens per list | 20 beams × 1 new token | 200 | 0.66 | 5.21 (1.73) |
+| TIGER-text (Arts) | 1 | 5 | 27.7 tokens | 20 × 1 | 100 | 0.33 | 2.58 (0.84) |
+| MD chain 1+2+2 (Arts) | 1 | 6 | 34.4 tokens | 20 × 1 | 120 | 0.42 | 3.19 (1.03) |
+| P1a-opt K_f 50 (Instruments / Games) | 1 | 3 | 8.8 / 10.6 items | 1 / 150 / 2,679 (Instr.), 3,451 (Games) | — | 0.08 | 37.0 (23.8) / 47.2 (30.3) |
+| C, D (Instruments / Games) | 2 | 10 | 28.7 / 28.7 tokens per list | 20 × 1 | 200 | 0.65 / 0.68 | 5.17 / 5.27 |
+
+The analytic decomposition agrees: at d_model 128 and a 33,378-token vocabulary, one output-projection row costs 8.5 MFLOP and
+one decoder position about 5 MFLOP, so P1a-opt's 3,526 output rows ≈ 30 GFLOP. Hardware-independent statement: P1a needs
+3 sequential decoder forwards instead of 10 (C, D) / 5 (TIGER) / 6 (chain) and a 3× shorter encoder memory, but about 8× C's
+arithmetic (47 vs 5.9 GFLOP/user at K_f 50; 3.4× at K_f 20 with 20 GFLOP) — its speed comes from parallel, not from less, work.
+
+### 23.10 Appendix C: C-opt, a lower bound for any implementation of C's beam search (internal reference)
+
+C-opt replays only the model forwards of C's beam search at the real shapes: per list the encoder on the batch users, then 5
+decoder forwards with KV cache on the batch × 20 beam rows (the number of forwards counted from a real `generate` call).
+Excluded: the trie, log-softmax / top-k, HF's beam scorer, cache reordering, text decoding and the merge. Its measured model
+FLOPs equal those of the real beam search exactly (C: 0.657 + 5.205 GFLOP/user; chain 0.421 + 3.185). Same job, same GPU, as
+P1a K_f 50 (reference implementation; P1a-opt from §23.4 for the ratio):
+
+| dataset | batch | C-opt | C-opt + top-k | D-opt | TIGER-opt | chain-opt | P1a-opt K_f 50 | P1a-opt vs C-opt |
+|---|---|---|---|---|---|---|---|---|
+| Arts | 1 | 41.06 | 43.40 | 44.21 | 21.67 | 25.46 | 15.31 | 2.7× faster |
+| Arts | 64 | 0.646 | 0.705 | 0.702 | 0.348 | 0.401 | 2.511 | 3.9× slower |
+| Instruments | 1 | 39.53 | 41.26 | 39.62 | 19.67 | 23.14 | 13.97 | 2.8× faster |
+| Instruments | 64 | 0.632 | 0.715 | 0.629 | 0.321 | 0.391 | 1.985 | 3.1× slower |
+| Games | 1 | 40.36 | 41.24 | 39.54 | 20.03 | 23.47 | 13.71 | 2.9× faster |
+| Games | 64 | 0.650 | 0.716 | 0.635 | 0.321 | 0.399 | 2.481 | 3.8× slower |
+
+C-opt is not a working recommender (no constraint, no beam selection), so it is a bound, not a baseline: no implementation of
+C's beam search can be faster than its forwards. It is reported for the attribution in §23.7 only; the headline compares
+working implementations (§23.4).
+
+### 23.11 Training cost (seed 42, from the existing training logs)
+
+All runs were trained packed several per GPU (§4 policy), so wall-clock is that of the shared pack; GPU-h share = pack wall
+time / runs in the pack (approximate: packed runs slow each other). Steps = optimizer steps; to best = the checkpoint chosen by
+early stopping (wall to best estimated proportionally).
+
+| dataset | method | optimizer steps (to best) | epochs (best) | wall h, pack (to best) | runs in pack | ≈ GPU-h share | GPU | train job |
+|---|---|---|---|---|---|---|---|---|
+| Arts | P1a | 20,856 (17,696) | 66 (56) | 2.84 (2.41) | 8 | 0.35 | H100 | 21971478 |
+| Arts | C | 39,960 (36,630) | 120 (110) | 5.00 (4.58) | 6 | 0.83 | H100 | 20839400 |
+| Arts | D | 12,210 (11,110) | 111 (101) | 7.96 (7.24) | 6 | 1.33 | H100 | 20839400 |
+| Arts | TIGER-text | 11,342 (10,282) | 107 (97) | 4.67 (4.23) | 9 | 0.52 | A100 | 20981379 |
+| Arts | MD chain | 19,716 (18,656) | 186 (176) | 1.43 (1.35) | 4 | 0.36 | H100 | 21258335 |
+| Instruments | P1a | 14,136 (11,656) | 57 (47) | 1.25 (1.03) | 6 | 0.21 | H100 | 22071268 |
+| Instruments | C | 26,622 (24,012) | 102 (92) | 2.20 (1.98) | 5 | 0.44 | H100 | 20637308 |
+| Instruments | D | 9,116 (8,256) | 106 (96) | 3.40 (3.08) | 5 | 0.68 | H100 | 20637308 |
+| Instruments | TIGER-text | 9,711 (8,881) | 117 (107) | 1.17 (1.07) | 5 | 0.23 | H100 | 20637308 |
+| Instruments | MD chain | 16,019 (15,189) | 193 (183) | 1.18 (1.12) | 4 | 0.30 | H100 | 21164568 |
+| Games | P1a | 54,225 (46,995) | 75 (65) | 3.16 (2.74) | 6 | 0.53 | H100 | 22071268 |
+| Games | C | 111,750 (104,250) | 149 (139) | 14.89 (13.89) | 6 | 2.48 | H100 | 20839401 |
+| Games | D | 29,393 (26,923) | 119 (109) | 18.83 (17.25) | 6 | 3.14 | H100 | 20839401 |
+| Games | TIGER-text | 23,136 (20,726) | 96 (86) | 3.88 (3.48) | 8 | 0.49 | H100 | 20980527 |
+| Games | MD chain | 33,499 (31,089) | 139 (129) | 1.94 (1.80) | 4 | 0.49 | H100 | 21258335 |
+
+P1a needs about half of C's optimizer steps at the same effective batch (1,024) and 0.2–0.5× C's GPU-hours; D runs fewer
+but much slower steps (its contrastive training). P1a-opt changes inference only; training is P1a's.
+
+### 23.12 Files and reproduction
+
+- Code (commit `8c7caee` for the P1a-opt jobs; `cad4463` / `cc20eeb` for the rest; frozen snapshots in
+  `mmgen_runs/timing/r23/code_<commit>`): `macrec/r23_cfast.py`, `r23_timing.py`, `r23_prep.py`, `r23_p1aopt.py`,
+  `r23_p1aopt_verify.py`, `r23_p1aopt_bench.py`; jobs `sbatch/r23/r23_job.sbatch` (STEPs), `r23_submit.sh`; report
+  `sbatch/tools/r23_report.py`.
+- Outputs: `mmgen_runs/timing/r23/<D>/{prep,p1aopt_verify}.json`, `time_<TAG>.json` (per job: env, anchor, every pass),
+  `profile_<TAG>.json` (stages, counts, FLOPs), `lists/` (batch-64 top-10 lists), `r23_report.json` (all tables),
+  `r23_acc_latency*.{png,csv}`; job IDs in `mmgen_runs/logs/round23_jobs.txt`.
