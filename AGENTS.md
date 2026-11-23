@@ -537,6 +537,7 @@ the MACRec number. Splits are leave-one-out: train = prefixes of `items[:-2]`, v
 | `config_dryrun` stops before `trainer.train()`, so gate dry runs never draw a batch: a collator / dataset mismatch passed both gates and crashed packs 23398867 / 23291837 at step 0 | `finetune_r21.py` collates one training example at trainer init (also in dry runs); from §22.7 on, gates also run 5 real optimizer steps (`--smoke_steps 5`) |
 | a timing job of Python-trie beam search keeps the GPU ~12% busy, so it is cancelled after 2 h like the evals; one protocol job for all methods would take ~35 h | §23 splits into serial jobs < 2 h on the same GPU type, each repeating an anchor measurement (P1a K_f 50 + C on fixed users); Games C / D / C-fast run one pass per job |
 | P1a inference calls `model.encoder` / `model.decoder` directly, so `FlopCounterMode` names both `T5Stack` and a name-based encoder/decoder split gives 0 | split FLOPs with forward hooks on the modules (`r23_timing.flops`) |
+| dry runs (`config_dryrun`) never pass through `transformers.TrainingArguments` wrappers (finetune_mfd's `prediction_loss_only`, finetune_ext's workers, §24's max_grad_norm), so a dry-run dump shows HF defaults for those fields | check such settings in the 5-step smoke run of the exact command (`smoke.json`), as `tools/r24_config_diff.py` does for gn5; gate scripts must make a failing config diff fatal (no `&&` chains under `set -e`) |
 | `amazon_text_emb.py` sets `local_files_only=True` whenever `--model_cache_dir` exists | pre-download (`snapshot_download`) into that dir first |
 | HF Trainer `report_to=None` means *all*, so it logs to W&B and TensorBoard; upstream `finetune_full.sh` sets `WANDB_MODE=disabled` | our jobs keep W&B on (offline when there is no key) |
 | `evaluation_strategy=` is deprecated | works in transformers 4.47; **do not upgrade transformers past 4.47** |
@@ -726,7 +727,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `7a59aa8` | §22.8–22.11 results (E8, E9 incl. E9k4 seeds + Instruments/Games + pooled, E10b, E10c, round-22 summary); `r22_e9_pooled.py` |
 | `055af48` | §24.2 Track B step 0 |
 | `c39d593` | §24 code: finetune_r24 / r24_items / r24_check, run / gate / pack / stage / submit scripts, r24_report / r24_config_diff, P1a-opt on any checkpoint (opt@<dir>); §24.0–24.3 setup |
-| (this) | §24 A1 carry rule: lr is part of A-best (lr + regularisation carried together into A2 and A+B), reasons logged |
+| `537883c` | §24 A1 carry rule: lr is part of A-best (lr + regularisation carried together into A2 and A+B), reasons logged |
+| `ea7e3d0`, `dec0610`, (this) | r24 gate fixes: check-script label unpacking, float32 item-weight assertion, gn5 config diff via the smoke run, fatal config diff |
 
 ---
 

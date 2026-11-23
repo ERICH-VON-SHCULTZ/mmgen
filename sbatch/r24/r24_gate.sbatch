@@ -37,7 +37,9 @@ python -u r24_check.py --dataset $D --out_file $RUNS/geo/$D/r24_check.json > $RU
   || { tail -40 $RUNS/geo/$D/r24_check.log; echo 'R24 CHECK FAILED'; exit 1; }
 grep -E '\"ok\"|all_pass' $RUNS/geo/$D/r24_check.log
 for V in P1aref $VARS; do M=$M D=$D VAR=\$V SEED=42 DRYRUN=1 bash $RR; done
-cd $T && python r24_config_diff.py $D $VARS && cd $M
+cd $T
+python r24_config_diff.py $D $VARS || { echo 'R24 CONFIG DIFF NOT OK'; exit 1; }
+cd $M
 for V in $VARS; do
   M=$M D=$D VAR=\$V SEED=42 SMOKE=1 bash $RR
   python -c \"import json; r = json.load(open('$RUNS/geo/gate/r24_smoke/$D/r24_\$V/smoke.json')); print('smoke r24_\$V', 'OK' if r['ok'] else 'NOT OK', r['steps'], [round(x, 4) for x in r['losses']], [round(x, 2) for x in r['grad_norms']], r['info']['t5'], r['max_grad_norm'], r['learning_rate'], r['weight_decay'])\"

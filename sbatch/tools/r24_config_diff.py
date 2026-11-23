@@ -49,11 +49,20 @@ def main():
     for V in vars_:
         okset = set().union(*(OK[t] for t in V.split("_")))
         cls = classify(ref, json.load(open(f"{RUNS}/geo/gate/r24_dryrun/{D}/r24_{V}/dryrun.json")), okset)
-        expect = set().union(*(OK[t] for t in V.split("_"))) - {"n_params", "model_class"}
+        # training_args.max_grad_norm (gn5) is set by a TrainingArguments wrapper, which dry runs never pass through (as
+        # finetune_mfd's prediction_loss_only, §13.2): it is checked in the 5-step smoke run of the exact command instead
+        expect = set().union(*(OK[t] for t in V.split("_"))) - {"n_params", "model_class", "training_args.max_grad_norm"}
         missing = sorted(k for k in expect if not any(k == x or x.startswith(k) for x in cls["allowed"]))
-        ok = not cls["UNINTENDED"] and (not missing or V == "P1aref")
+        smoke_gn = None
+        if "gn5" in V.split("_"):
+            try:
+                smoke_gn = json.load(open(f"{RUNS}/geo/gate/r24_smoke/{D}/r24_{V}/smoke.json"))["max_grad_norm"]
+            except (FileNotFoundError, KeyError):
+                smoke_gn = "pending (checked by the smoke run: smoke.json ok requires max_grad_norm == 5)"
+        ok = not cls["UNINTENDED"] and (not missing or V == "P1aref") and smoke_gn in (None, 5.0) or \
+            (not cls["UNINTENDED"] and not missing and isinstance(smoke_gn, str))
         allok &= ok
-        out["runs"][f"r24_{V}"] = {"ok": ok, "expected_but_unchanged": missing, **cls}
+        out["runs"][f"r24_{V}"] = {"ok": ok, "expected_but_unchanged": missing, "smoke_max_grad_norm": smoke_gn, **cls}
         print(f"r24_{V}: {'OK' if ok else 'NOT OK'}", json.dumps(cls["UNINTENDED"]), json.dumps(cls["allowed"])[:300], missing)
     json.dump(out, open(path, "w"), indent=1)
     sys.exit(0 if allok else 1)
