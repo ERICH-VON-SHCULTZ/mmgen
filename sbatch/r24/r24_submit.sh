@@ -5,11 +5,13 @@
 #  A1 + B  Arts + Instruments seed 42: r24 gates (VARS = A1 + B1 B2) -> packs of 4 -> evals + fdumps -> STAGE a1 (after the A1
 #          evals; carries the B eval IDs so STAGE ab waits for both tracks; see sbatch/r24/r24_stage.sbatch)
 set -euo pipefail
+PART=${PART:-all}                                           # all | task0 | ab (resubmit one chain)
 REPO=/scratch/yw8866/mmgen; RUNS=/scratch/yw8866/mmgen_runs; L=$RUNS/logs/round24_jobs.txt
 cd $REPO
 [ -z "$(git status --porcelain -- macrec sbatch)" ] || { echo "commit macrec/ and sbatch/ first"; exit 1; }
 echo "=== $(date +%F) round 24 submit, commit $(git rev-parse --short HEAD)" | tee -a $L
 # Task 0
+if [ $PART != ab ]; then
 G1=$(sbatch --parsable --export=ALL,D=Instruments,VARS=E9k4 sbatch/r22/r22_e89_gate.sbatch)
 G2=$(sbatch --parsable --export=ALL,D=Games,VARS=E9k4 sbatch/r22/r22_e89_gate.sbatch)
 P=$(sbatch --parsable --dependency=afterok:$G1:$G2 --export=ALL,RUNS="Instruments:E9k4:43 Instruments:E9k4:44 Games:E9k4:43 Games:E9k4:44" sbatch/r22/pack_r22_train.sbatch)
@@ -22,6 +24,8 @@ done; done
 R1=$(sbatch --parsable --dependency=afterok$EV --export=ALL,TOOL="r22_runs_report.py E9" sbatch/r21/r21_tool.sbatch)
 R2=$(sbatch --parsable --dependency=afterok$EV --export=ALL,TOOL="r22_e10_report.py --final E9k4" sbatch/r21/r21_tool.sbatch)
 echo "Task 0 (E9k4 seeds 43/44, Instruments + Games): gates $G1 $G2 pack $P evals+fdumps ${EV#:} runs report $R1 3x3 $R2" | tee -a $L
+fi
+[ $PART = task0 ] && exit 0
 # Track A1 + Track B
 VARS="lr3e4 lr1e3 do02 do03 wd01 gn5 B1 B2"
 GA=$(sbatch --parsable --export=ALL,D=Arts,VARS="$VARS" sbatch/r24/r24_gate.sbatch)

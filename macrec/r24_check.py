@@ -80,7 +80,7 @@ def main():
     from mfd_data import item_token_table
     T = item_token_table(args, tok).cuda()
     for k, i in enumerate(sel):
-        _, it, mod, _ = items[i]["labels"]
+        it, _, mod, _ = items[i]["labels"]                               # (item, "item", modality, weight)
         row = T[it]
         L = (T.shape[1] - 1) // 2
         cols = row[1:1 + L] if mod == "text" else row[1 + L:]
