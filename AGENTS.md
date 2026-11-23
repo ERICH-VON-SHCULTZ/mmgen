@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-22 (round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-23 (round 22 DONE, §22.8–22.11 written: E9k4 beats A01/P1a on pooled valid, ties on test, not promoted; round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -189,6 +189,13 @@ are reference-only, not part of the main line.
   Games on repeat-f; A01's valid − test gap is positive on all 6 Instruments/Games seeds (+0.0017 mean); on Instruments the KL adds
   nothing on top of grouping (A01 − G0 +0.0001). All E10 / E8 / E9 gates passed (E10c: β=0 = P1a exactly, KL = independent
   recomputation, 1.6x compute per micro-batch ≈ +13–38 s/epoch).
+  **E8 / E9 / E10 done (2026-11-23, §22.8–22.11):** E8a / E8b below A01 (test −0.0025 / −0.0040, E8b CI < 0) → closed; E9k2 neutral;
+  **E9k4** beats A01 on validation on all 3 Arts seeds (+0.0020 to +0.0026) and Instruments (+0.0035, CI > 0), Games flat; pooled
+  seed-42 valid 0.1324 vs A01 0.1313 / P1a 0.1298 (vs P1a CI > 0) but test ties everywhere (pooled 0.1127 vs A01 0.1125 / P1a 0.1128 /
+  C 0.1144; `geo/r22_e9k4_pooled.json`, `tools/r22_e9_pooled.py`). E10c (KL without grouping): pooled valid +0.0004 vs P1a,
+  −0.0011 vs A01, test +0.0003 → not chained; recovers ~half of A01's Arts test gain. E10b: β = 0.1 best on valid on Instruments /
+  Games → A01 everywhere, not chained. Nothing promoted; seeds 43/44 of E9k4 on Instruments / Games would qualify under the pooled
+  rule but were NOT run (user decision). E9k4 cross-dataset stage: `sbatch/r22/r22_e9x_stage.sbatch`.
 - **Round 23 (2026-11-20, done 2026-11-22), `docs/MFD_REPORT.md` §23; jobs `mmgen_runs/logs/round23_jobs.txt`:** inference speed of P1a
   (K_f 20/50/100; A01 once on Arts) vs C, C-fast (C with a GPU-side trie mask, `macrec/r23_cfast.py`), D, TIGER-text and the MD
   chain on one H200 per job; measurement only (no training, model code untouched). The "round 21b" latency task was never run;
@@ -346,7 +353,7 @@ mmgen/
     ├── mfd/p2_stage2.sbatch       §20 Task 2 stage 2 (CPU): lambda chosen on Arts validation -> Instruments/Games pack, eval and dense eval
     ├── r21/run_r21_train.sh, r21_gate.sbatch, pack_r21_train.sbatch, r21_eval.sbatch, r21_stage2.sbatch, r21_collect.sbatch   §21 runs (VAR G0|A01|A05|B01|B05|C033|C060|G0acc|A01acc|AC1|AC0; P1aref = dry-run reference; pack entry <D>:<VAR>[:<SEED>]), gate (macrec/r21_check.py + tools/r21_config_diff.py; writes only r21_* files), packs, H200 eval (K_f 50 plain + 1c + f diagnostics), Arts -> Instruments family choice (tools/r21_family_choice.py), CIs (tools/r21_collect.py -> geo/r21_<D>.json)
     ├── r21/r21_gain.sbatch, r21_combo_stage.sbatch, r21_tool.sbatch   §21.6 gain diagnostic (macrec/r21_gain_diag.py + tools/r21_gain_report.py), §21.4 combo -> Instruments stage (tools/r21_combo_choice.py), any §21 CPU tool (e.g. TOOL="r21_seeds.py Arts" = §21.5 3-seed table)
-    ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1|E7a|E7b|E8a|E8b|E9k2|E9k4|E10b005|E10b02|E10b05|E10c; E10c = P1a's 256 x 4 path; SMOKE=1 = 5 real optimizer steps -> geo/gate/r22_smoke; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|e5|fdump|eval, SID=1+2+2|1+3+3); E5 partitions r22_e5_regions.sbatch (CPU), report tools/r22_e5_report.py; E6 tools/r22_e6_report.py (history-f competitors); E7 gate r22_e7_gate.sbatch, stage r22_e7_stage.sbatch (CPU), report tools/r22_e7_report.py; E8/E9 gate r22_e89_gate.sbatch, stage r22_e89_stage.sbatch (CPU); common E1/E7/E8/E9 report tools/r22_runs_report.py; E10a r22_e10a_views.sbatch + tools/r22_e10a_report.py; E10 gate r22_e10_gate.sbatch (E10c check + dry runs + smoke), stage r22_e10_stage.sbatch (CPU; pooled-valid selection, seeds 43/44 chaining), report tools/r22_e10_report.py (--stage / --final 3x3 table); reports tools/r22_e3_report.py, r22_e2_report.py; E4 r22_e4.sbatch + tools/r22_e4_report.py (level-1 predictability, HR@10 by level-1 rank, partition NMI/ARI); §21.9 table tools/r21_seeds_all.py
+    ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1|E7a|E7b|E8a|E8b|E9k2|E9k4|E10b005|E10b02|E10b05|E10c; E10c = P1a's 256 x 4 path; SMOKE=1 = 5 real optimizer steps -> geo/gate/r22_smoke; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|e5|fdump|eval, SID=1+2+2|1+3+3); E5 partitions r22_e5_regions.sbatch (CPU), report tools/r22_e5_report.py; E6 tools/r22_e6_report.py (history-f competitors); E7 gate r22_e7_gate.sbatch, stage r22_e7_stage.sbatch (CPU), report tools/r22_e7_report.py; E8/E9 gate r22_e89_gate.sbatch, stage r22_e89_stage.sbatch (CPU), E9k4 cross-dataset stage r22_e9x_stage.sbatch (CPU), pooled E9k4 tool tools/r22_e9_pooled.py; common E1/E7/E8/E9 report tools/r22_runs_report.py; E10a r22_e10a_views.sbatch + tools/r22_e10a_report.py; E10 gate r22_e10_gate.sbatch (E10c check + dry runs + smoke), stage r22_e10_stage.sbatch (CPU; pooled-valid selection, seeds 43/44 chaining), report tools/r22_e10_report.py (--stage / --final 3x3 table); reports tools/r22_e3_report.py, r22_e2_report.py; E4 r22_e4.sbatch + tools/r22_e4_report.py (level-1 predictability, HR@10 by level-1 rank, partition NMI/ARI); §21.9 table tools/r21_seeds_all.py
     ├── r23/r23_job.sbatch, r23/r23_submit.sh   §23 timing jobs (STEP prep|time|profile|p1aoptverify|p1aoptbench|smoke|smokeprof|smoketime|smokeopt; one H200, frozen code snapshot timing/r23/code_<commit>), per-dataset serial chains + CPU report (tools/r23_report.py)
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
@@ -702,7 +709,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `cad4463`…`2f0d2aa` | r23 submit / prep-resume / profile-flag fixes; C-opt lower bound; r22 E9k4 cross-dataset stage |
 | `8c7caee` | §23 P1a-opt (exact faster P1a inference), its check and benchmark; report headline P1a-opt vs C-fast |
 | `f918ba0` | r22 E9k4 x-dataset stage: round-22 gate on Instruments/Games |
-| (this) | §23.2–23.12 results (headline, all methods, figure, attribution, stage / FLOP / C-opt appendices, training cost); figure layout |
+| `4a53745` | §23.2–23.12 results (headline, all methods, figure, attribution, stage / FLOP / C-opt appendices, training cost); figure layout |
+| (this) | §22.8–22.11 results (E8, E9 incl. E9k4 seeds + Instruments/Games + pooled, E10b, E10c, round-22 summary); `r22_e9_pooled.py` |
 
 ---
 

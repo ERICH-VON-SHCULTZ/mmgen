@@ -2688,7 +2688,65 @@ already-queued jobs (Part-1 evals, E1 eval, E7 pack and evals).
 E1 is analysed in its own 1+3+3 f space. Its f codes are not comparable to A01's, but its competitor counts are.
 
 **Stage** (`sbatch/r22/r22_e89_stage.sbatch`, CPU): every E8 / E9 variant whose Arts seed-42 valid HR@10 beats A01's (0.1435) is
-chained on Arts seeds 43 / 44. Not on Instruments. **TODO (pending).**
+chained on Arts seeds 43 / 44. Not on Instruments. Only E9k4 qualified. Follow-up rule (user, 2026-11-22): if E9k4 also beats A01 on
+validation on BOTH Arts seeds 43 and 44, run Instruments and Games seed 42 before anything else; no promotion on Arts alone
+(`sbatch/r22/r22_e9x_stage.sbatch`, decision in `geo/r22_e9x_stage.json`). It did (+0.0026 / +0.0020), so Instruments / Games seed
+42 ran (gates incl. the round-22 gate, which those datasets lacked: the first pack 24090105 stopped at start on the missing
+`r22_check.json`; resubmitted 24146568).
+
+### 22.8 / 22.9 results (done 2026-11-23)
+
+Plain K_f = 50, test unless noted; paired 95% CIs vs A01 of the same seed (`geo/r22_runs.json`, `logs/mmgen_r21_tool_*.out`).
+
+| run | valid HR@10 (A01) | test HR@10 / NDCG@10 | test HR@10 − A01 | test NDCG@10 − A01 | ms/user |
+|---|---|---|---|---|---|
+| Arts E8a s42 | 0.1428 (0.1435) | 0.1235 / 0.0912 | −0.0025 [−0.0051, +0.0002] | −0.0008 [−0.0022, +0.0008] | 10.0 |
+| Arts E8b s42 | 0.1411 (0.1435) | 0.1221 / 0.0908 | −0.0040 [−0.0067, −0.0014] | −0.0012 [−0.0027, +0.0002] | 10.2 |
+| Arts E9k2 s42 | 0.1428 (0.1435) | 0.1267 / 0.0934 | +0.0007 [−0.0019, +0.0033] | +0.0013 [−0.0000, +0.0028] | 10.1 |
+| **Arts E9k4 s42** | **0.1460** (0.1435) | 0.1260 / 0.0920 | +0.0000 [−0.0028, +0.0028] | −0.0000 [−0.0016, +0.0014] | 10.0 |
+| **Arts E9k4 s43** | **0.1444** (0.1419) | 0.1269 / 0.0930 | +0.0000 [−0.0028, +0.0027] | +0.0003 [−0.0012, +0.0017] | 10.3 |
+| **Arts E9k4 s44** | **0.1447** (0.1427) | 0.1267 / 0.0930 | +0.0007 [−0.0020, +0.0035] | +0.0007 [−0.0007, +0.0022] | 10.2 |
+| **Instruments E9k4 s42** | **0.1609** (0.1574; +0.0035 [+0.0006, +0.0064]) | 0.1293 / 0.1006 | +0.0013 [−0.0015, +0.0043] | +0.0011 [−0.0003, +0.0026] | 8.1 |
+| **Games E9k4 s42** | 0.1138 (0.1143) | 0.0991 / 0.0528 | +0.0000 [−0.0020, +0.0021] | +0.0006 [−0.0004, +0.0017] | 10.3 |
+
+Arts 3-seed means: E9k4 valid 0.1450 vs A01 0.1427 (+0.0024, + on every seed); test 0.1265 vs A01 0.1263 (+0.0002).
+
+**Pooled seed 42 over Arts + Instruments + Games** (the §22.10.4 selection rule; 81,542 users, stratified paired bootstrap;
+`tools/r22_e9_pooled.py` → `geo/r22_e9k4_pooled.json`):
+
+| split | E9k4 | P1a | A01 | C | E9k4 − P1a | E9k4 − A01 | E9k4 − C |
+|---|---|---|---|---|---|---|---|
+| valid HR@10 | 0.1324 | 0.1298 | 0.1313 | 0.1329 | **+0.0026 [+0.0009, +0.0042]** | +0.0011 [−0.0003, +0.0026] | −0.0005 [−0.0023, +0.0013] |
+| valid NDCG@10 | 0.0853 | 0.0842 | 0.0849 | 0.0853 | +0.0011 [+0.0003, +0.0020] | +0.0004 [−0.0003, +0.0012] | +0.0000 [−0.0009, +0.0011] |
+| test HR@10 | 0.1127 | 0.1128 | 0.1125 | 0.1144 | −0.0000 [−0.0016, +0.0016] | +0.0003 [−0.0011, +0.0017] | −0.0017 [−0.0034, +0.0000] |
+| test NDCG@10 | 0.0735 | 0.0733 | 0.0729 | 0.0735 | +0.0001 [−0.0007, +0.0010] | +0.0006 [−0.0002, +0.0013] | −0.0000 [−0.0010, +0.0009] |
+
+**E6 split** (test, C − model HR@10 on repeat-f / new-f users; median rank of the true f on new-f users; A01 in brackets):
+
+| run | repeat-f (share) | new-f | true-f median rank, new-f |
+|---|---|---|---|
+| Arts E8a s42 | −0.0114 (0.19) [−0.0076] | +0.0066 [+0.0026] | 41 [40] |
+| Arts E8b s42 | +0.0021 [−0.0076] | +0.0052 [+0.0026] | 41 [40] |
+| Arts E9k2 s42 | −0.0140 [−0.0076] | +0.0032 [+0.0026] | 40 [40] |
+| Arts E9k4 s42 / s43 / s44 | −0.0048 / −0.0024 / −0.0114 [−0.0076 / −0.0045 / −0.0121] | +0.0019 / +0.0007 / +0.0004 [+0.0026 / +0.0012 / +0.0014] | 41 / 40 / 41 [40 / 41 / 39] |
+| Instruments E9k4 s42 | −0.0055 (0.13) [−0.0051] | +0.0017 [+0.0032] | 43 [44] |
+| Games E9k4 s42 | −0.0124 (0.17) [−0.0156] | +0.0056 [+0.0062] | 27 [27] |
+
+**Reading.**
+- E8 (f embedding composed from its children) does not help: both variants are below A01 on validation and test (E8b CI < 0 on
+  test). On the new-f users it was built for, the gap to C grows (+0.0066 / +0.0052 vs A01's +0.0026) and the true f's rank does
+  not move. Closed.
+- E9 (mixture of softmaxes at the f step): K = 2 is neutral. **K = 4 is the only round-22 change that raises validation
+  consistently**: on all three Arts seeds (+0.0020 to +0.0026), on Instruments (+0.0035, CI > 0), and pooled (+0.0011 vs A01,
+  +0.0026 vs P1a with CI > 0); Games is flat (−0.0006). By the pooled rule it beats both P1a and A01.
+- **None of it reaches test.** Every test comparison is a tie: Arts +0.0000 / +0.0000 / +0.0007, Instruments +0.0013, Games
+  +0.0000, pooled +0.0003 vs A01 and −0.0000 vs P1a; NDCG@10 is +0.0000 to +0.0011 everywhere. The true f's rank is unchanged on
+  every dataset; E9k4 narrows C's lead on new-f users slightly on Arts (seeds 42–44) and Games, and gives back about as much on
+  repeat-f users in most runs (Arts s42 / s43, Instruments, Games). This matches E10a: Instruments / Games validation is optimistic relative to test for A01-type
+  changes, and here the optimism also shows on Arts.
+- Cost: no change (8–10 ms/user, same as A01).
+- **Not promoted, nothing further chained.** By the §22.10.4 rule (pooled validation beats both P1a and A01), E9k4 would qualify for
+  seeds 43 / 44 on Instruments and Games (4 runs, one pack); that is left to the user, given the flat test results.
 
 ## 22.10 E10: why does A01 help only on Arts, and can it be made general?
 
@@ -2772,13 +2830,46 @@ seed); 2 p_text / p_image have no autograd graph and the gradient equals P1a's C
 copy; 3 the KL term equals a float64 recomputation from P1a's own full / text / image rows; 4 the training class path (Geo + geometry)
 reaches the KL, bake / reload as `ItemMFDT5`; 5 cost per micro-batch (info). Dry run + config diff vs P1a's dry run (model_class only);
 5-step smoke run (β, batch 256, accumulation 4 checked; KL active on full rows; pre-clip norms printed). Clipping and wall time per
-epoch come from the run's stats. Results: **TODO (pending).**
+epoch come from the run's stats.
+
+**Results (done 2026-11-21; pack 23745120, mean GPU utilisation 72%; `geo/r22_e10.json`, `logs/mmgen_r22_e10stage_23745180.out`).**
+Gate passed on all three datasets (β = 0 equals P1a exactly; the KL equals an independent float64 recomputation). Training kept P1a's
+regime: every step clipped (pre-clip median 2.3–2.6, P1a 2.7), 57–77 epochs.
+
+| seed 42 | valid HR@10: E10c / P1a / A01 | valid E10c − P1a | test HR@10 / NDCG@10 | test − P1a | test − A01 |
+|---|---|---|---|---|---|
+| Arts | 0.1445 / 0.1415 / 0.1435 | +0.0029 [+0.0001, +0.0057] | 0.1244 / 0.0913 | +0.0016 [−0.0011, +0.0043] | −0.0017 [−0.0044, +0.0009] |
+| Instruments | 0.1560 / 0.1545 / 0.1574 | +0.0016 [−0.0013, +0.0043] | 0.1300 / 0.1007 | +0.0008 [−0.0019, +0.0037] | +0.0020 [−0.0006, +0.0047] |
+| Games | 0.1123 / 0.1138 / 0.1143 | −0.0014 [−0.0036, +0.0010] | 0.1002 / 0.0524 | −0.0007 [−0.0029, +0.0016] | +0.0011 [−0.0013, +0.0034] |
+| **pooled** | 0.1302 / 0.1298 / 0.1313 | +0.0004 [−0.0012, +0.0019]; − A01 −0.0011 [−0.0027, +0.0005] | 0.1130 | +0.0003 [−0.0013, +0.0017] | +0.0006 [−0.0009, +0.0020] |
+
+E6 split, C − model on test (P1a / A01 in brackets): Arts repeat-f −0.0048 (−0.0014 / −0.0076), new-f +0.0040 (+0.0052 / +0.0026);
+Instruments repeat-f −0.0110 (−0.0074 / −0.0051), new-f +0.0018 (+0.0022 / +0.0032); Games repeat-f −0.0160 (−0.0184 / −0.0156),
+new-f +0.0049 (+0.0046 / +0.0062). ms/user 8.1–10.2, as P1a.
+
+Reading: the KL alone, on P1a's exact optimisation path, recovers about half of A01's Arts gain over P1a (test +0.0016 vs A01's
++0.0033) and none elsewhere (pooled test +0.0003). It does not beat A01 on pooled validation, so it was not chained. Together with
+E10a (on Instruments the KL adds nothing on top of grouping), the Arts-only gain is the KL transferring a large view disagreement
+that exists mainly on Arts, not an artefact of grouping or clipping.
 
 ### 22.10.3 E10b: per-dataset β (training)
 
 A01 exactly (grouped, 341 × 1) with β ∈ {0.05, 0.2, 0.5} (`run_r22_train.sh VAR=E10b005|E10b02|E10b05`), Instruments and Games seed
 42 (β = 0.1 = A01 exists). β per dataset chosen on seed-42 validation HR@10 (tie NDCG@10); its test result reported. Arts keeps 0.1.
-Gate: dry run + config diff vs A01 (no difference allowed; β is checked in the smoke run) + 5-step smoke. Results: **TODO (pending).**
+Gate: dry run + config diff vs A01 (no difference allowed; β is checked in the smoke run) + 5-step smoke.
+
+**Results (done 2026-11-21; packs 23745172 / 23745173; `logs/mmgen_r22_e10stage_23745193.out`).** Seed 42, plain K_f = 50:
+
+| β | Instruments valid HR@10 / NDCG@10 | Instruments test HR@10 (− A01) | Games valid HR@10 / NDCG@10 | Games test HR@10 (− A01) |
+|---|---|---|---|---|
+| 0.05 | 0.1558 / 0.1194 | 0.1278 (−0.0002 [−0.0028, +0.0026]) | 0.1113 / 0.0590 | 0.0993 (+0.0003 [−0.0018, +0.0024]) |
+| **0.1 (A01, chosen)** | **0.1574 / 0.1202** | 0.1280 | **0.1143 / 0.0609** | 0.0991 |
+| 0.2 | 0.1564 / 0.1197 | 0.1294 (+0.0015 [−0.0012, +0.0041]) | 0.1108 / 0.0590 | 0.0993 (+0.0002 [−0.0020, +0.0024]) |
+| 0.5 | 0.1552 / 0.1192 | 0.1258 (−0.0022 [−0.0045, +0.0002]) | 0.1118 / 0.0592 | 0.0993 (+0.0002 [−0.0018, +0.0025]) |
+
+β = 0.1 has the best validation on both datasets, so the per-dataset choice is A01 everywhere (pooled valid 0.1313 vs P1a +0.0014
+[−0.0001, +0.0030]; pooled test 0.1125 vs P1a −0.0003). No other β beats A01 on validation; on test every β is within ±0.0022 of A01
+(only β = 0.5 on Instruments is below P1a, −0.0033, CI < 0). Not chained: β is not what limits A01 on Instruments / Games.
 
 ### 22.10.4 Evaluation, selection and chaining
 
@@ -2787,6 +2878,18 @@ seed, E6 split, f diagnostics, ms/user (`tools/r22_e10_report.py` → `geo/r22_e
 STAGE=e10c|e10b): if E10c, or A01 with the per-dataset β of E10b, beats **both** P1a and A01 on pooled seed-42 validation HR@10, it is
 chained on seeds 43 / 44 for all three datasets, then the 3 × 3 table with the pooled paired bootstrap vs P1a, A01 and C
 (`r22_e10_report.py --final`). Priority: E10a now; E10c pack ahead of the E8 / E9 pack; E10b packs after.
+
+### 22.11 Round 22 summary (2026-11-23)
+
+- Inference-only probes (E3 codebook smoothing, E5 region mass) and the structural changes E1 (1+3+3), E2 (aux heads), E7 (item
+  vector), E8 (child-composed f) do not improve A01; E2, E7b and E8b hurt (test CI < 0).
+- The diagnosis is stable across every checkpoint (E2 step 1, E4, E6): the miss against C is choosing f on users who move to a new
+  f, where the true f sits around rank 40; f is as predictable as C's first level, just finer and cutting across C's buckets.
+- A01's gain over P1a is Arts-only because the view disagreement it distils is large only on Arts (E10a), and the KL alone carries
+  half of it (E10c); retuning β does not move Instruments / Games (E10b).
+- E9k4 is the only change that raises validation consistently (pooled +0.0011 vs A01, +0.0026 vs P1a), but test ties A01, P1a and
+  (on HR@10, within CI) C everywhere. Validation-to-test optimism, not model quality, is the limiting factor for this line.
+- No round-22 variant is promoted; P1a (K_f = 50) remains the main method, A01 the Arts-favoured ablation (§21.9).
 
 ## 23. Round 23: inference speed of P1a vs the baselines (measurement only)
 
