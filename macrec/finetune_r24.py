@@ -82,7 +82,7 @@ if __name__ == "__main__":
             info["learning_rate"], info["weight_decay"] = self.args.learning_rate, self.args.weight_decay
             b = self.data_collator([self.train_dataset[0], self.train_dataset[len(self.train_dataset) - 1]])
             if ITEM_W is not None:                          # last example = an item example (ConcatDataset order)
-                assert "example_weight" in b and float(b["example_weight"][-1]) == ITEM_W, b.get("example_weight")
+                assert "example_weight" in b and abs(float(b["example_weight"][-1]) - ITEM_W) < 1e-6, b.get("example_weight")   # float32
                 info["item_examples_per_epoch"] = len(self.train_dataset.datasets[1])
                 info["sequence_examples_per_epoch"] = len(self.train_dataset.datasets[0])
             clip = self.accelerator.clip_grad_norm_
