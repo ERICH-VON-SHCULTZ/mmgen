@@ -53,7 +53,7 @@ case $STEP in
            CMD="python -u r23_timing.py --mode time --dataset $D --methods $METHODS --batches ${BATCHES:-1,64} --repeats 2 --warmup 64 \
                   --limit 256 --out_file $OUT/time_smoke_${TAG:-x}.json" ;;
   p1aoptbench) CMD="python -u r23_p1aopt_bench.py --dataset $D --bs ${BS:-64} && python -u r23_p1aopt_bench.py --dataset $D --bs 1 --users 200" ;;
-  p1aoptverify) CMD="python -u r23_p1aopt_verify.py --dataset $D" ;;   # P1a-opt == P1a, full test set, K_f 20/50/100
+  p1aoptverify) CMD="python -u r23_p1aopt_verify.py --dataset $D ${VRUN:+--run $VRUN --Ks 50 --limit ${VLIMIT:-4096}}" ;;   # VRUN: §24 A2 checkpoint   # P1a-opt == P1a, full test set, K_f 20/50/100
   smokeopt) export R23_OUT=$RUNS/tmp_smoke/r23; OUT=$R23_OUT/$D; mkdir -p $OUT
            CMD="python -u r23_p1aopt_verify.py --dataset $D --limit 256 && \
                 python -u r23_timing.py --mode time --dataset $D --methods P1aopt:20,P1aopt:50,P1aopt:100,P1a:50 --batches 1,64,256 \

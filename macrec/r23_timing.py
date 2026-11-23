@@ -344,7 +344,8 @@ class MFDMethod:
         self.name = name
         run, K = name.split(":")
         self.K = int(K)
-        self.ck = f"{R}/mfd/{D}/{MFD[run]}/seed{seed}"
+        # "opt@<run dir>": any 1+2+2 MFD checkpoint mfd/<D>/<run dir>/seed<S> on the P1a-opt path (§24 A2 latency)
+        self.ck = f"{R}/mfd/{D}/{run[4:]}/seed{seed}" if run.startswith("opt@") else f"{R}/mfd/{D}/{MFD[run]}/seed{seed}"
         self.args = mk_args(D, I122, I122, ["--max_his_len", "20", "--tasks", "seqrec_mv", "--prompt_num", "4"])
         self.tok = T5Tokenizer.from_pretrained(self.ck)
         self.model = load_mfd_model(self.ck).cuda().eval()
@@ -357,7 +358,7 @@ class MFDMethod:
         self.U = len(self.targets)
         self.order = list(range(self.U))                          # dataset order (r21_eval)
         self.cfg = dict(variant="plain", K=self.K, w_t=0.5, w_i=0.5, a=(1, 0, 0), b=(1, 0, 0))
-        self.popt = P1aOpt(self.model, self.cat, self.T, self.I) if run.startswith("P1aopt") else None
+        self.popt = P1aOpt(self.model, self.cat, self.T, self.I) if run.startswith(("P1aopt", "opt@")) else None
         self.restrict = run == "P1aoptr"
 
     def collate(self, idx):
@@ -515,6 +516,9 @@ def reported_hr10(D, name):
     if ":" in name:                     # K_f 50: r21_eval (the reported main setting); K_f 100: eval_ii (§19 setting (ii));
         run, K = name.split(":")        # K_f 20 at w = 1/.5/.5 was never reported: r23_prep's exact-scoring reference
         run = "P1a" if run.startswith("P1aopt") else run   # P1a-opt must reproduce P1a's reported numbers
+        if run.startswith("opt@"):                          # a round-24 run on the P1a-opt path: its own r21_eval (K_f 50)
+            f = f"{R}/mfd/{D}/{run[4:]}/seed42/r21_eval/eval.json"
+            return (json.load(open(f))["test"]["plain"]["hr10"] if K == "50" else None), f
         ck = f"{R}/mfd/{D}/{MFD[run]}/seed42"
         if K == "50":
             f = f"{ck}/r21_eval/eval.json"

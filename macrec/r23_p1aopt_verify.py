@@ -57,14 +57,15 @@ def main():
     p.add_argument("--Ks", default="20,50,100")
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--bs", type=int, default=64)
+    p.add_argument("--run", default="", help="§24: check P1a-opt on another 1+2+2 MFD checkpoint mfd/<D>/<run>/seed42 (opt@<run>)")
     a = p.parse_args()
     D = a.dataset
     out = {"env": RT.env_info(), "dataset": D, "batch": a.bs, "K": {}}
-    f = f"{RT.OUT_DIR}/{D}/p1aopt_verify.json"
+    f = f"{RT.OUT_DIR}/{D}/p1aopt_verify{'_' + a.run if a.run else ''}.json"
     os.makedirs(os.path.dirname(f), exist_ok=True)
     ok_all = True
     for K in [int(x) for x in a.Ks.split(",")]:
-        m = RT.MFDMethod(D, f"P1aopt:{K}")
+        m = RT.MFDMethod(D, f"opt@{a.run}:{K}" if a.run else f"P1aopt:{K}")
         order = list(range(m.U))[: a.limit or None]
         tg_all = torch.tensor(m.targets)
         acc = dict(users=0, same_fsel=0, same_cand_users=0, same_top10=0, same_rank=0, same_top10_r=0, dup=0, max_abs=0.0,

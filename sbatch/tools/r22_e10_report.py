@@ -35,7 +35,7 @@ hr = lambda r: (r < 10).astype(float)
 
 
 def run_dir(D, name, S):
-    d = {"P1a": "mfd122_mv_geoP1a", "A01": "r21_A01"}.get(name, f"r22_{name}")
+    d = {"P1a": "mfd122_mv_geoP1a", "A01": "r21_A01"}.get(name, name if name.startswith("r24_") else f"r22_{name}")
     return f"{R}/mfd/{D}/{d}/seed{S}"
 
 
@@ -154,7 +154,12 @@ def pooled_valid(model_by_D, S=42, sp="valid"):
 
 def final(name):
     """3 x 3 table (seeds 42-44) of candidate `name` vs P1a, A01, C; per-seed CIs and the pooled stratified bootstrap."""
-    sel = {D: "E10c" for D in DS} if name == "e10c" else {D: choose_beta(D)[0] for D in DS}
+    if name == "e10c":
+        sel = {D: "E10c" for D in DS}
+    elif name == "e10b":
+        sel = {D: choose_beta(D)[0] for D in DS}
+    else:                                                    # any fixed run name on every dataset (e.g. E9k4, §22.9)
+        sel = {D: name for D in DS}
     out = {"model_by_dataset": sel, "datasets": {}, "pooled": {}}
     diffs, rng = {}, np.random.default_rng(0)
     for D in DS:

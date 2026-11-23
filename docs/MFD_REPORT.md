@@ -3305,6 +3305,32 @@ over Arts + Instruments (seed 42); per-dataset and test numbers always reported.
 validation, test once per selected config, H200 batch-64 eval at K_f = 50 plain full view, dependency chains, gate with ≥ 5 real
 steps before every pack). Job IDs: `mmgen_runs/logs/round24_jobs.txt`.
 
+### 24.0 Task 0: E9k4 seeds 43 / 44 on Instruments and Games
+
+E9k4 qualified under the round-22 pooled-validation rule (§22.9). Four runs (Instruments, Games × seeds 43 / 44), the seed-42 config
+(`run_r22_train.sh VAR=E9k4`), after the E8 / E9 gate on both datasets; same evaluation (plain K_f = 50, E6 split via
+`tools/r22_runs_report.py E9`), then the 3 × 3 table of E9k4 vs P1a, A01 and C with the pooled stratified bootstrap on validation and
+test (`tools/r22_e10_report.py --final E9k4` → `geo/r22_e10_E9k4_final.json`). Results go to §22.9. No promotion call.
+
+### 24.1 Track A: tuning and capacity of P1a (setup)
+
+P1a's hyperparameters were inherited from TIGER / MACRec (lr 5e-4, weight decay 0.01, dropout 0.1, max_grad_norm 1.0 with every
+step clipped, §21.3; d_model 128, 4 + 4 layers). Arts + Instruments seed 42, everything else exactly §19 (data, multi-view
+history, codebook init, item-level encoder, 256 × 4, cosine schedule with warmup 0.01, ≤ 400 epochs, early stopping on validation
+loss with patience 10).
+- **A1, one factor at a time** (6 runs per dataset): lr 3e-4 / 1e-3 (`lr3e4`, `lr1e3`); dropout 0.2 / 0.3 (`do02`, `do03`);
+  weight decay 0.1 = 10 × (`wd01`); max_grad_norm 5 (`gn5`).
+- **A2, capacity** (after A1; 4 runs): d_model 256 with d_ff 2048 and 12 heads (per-head dimension 64 unchanged; `dm256`), and
+  6 + 6 layers at d_model 128 (`l6`), each with A1's best regularisation (best of `do02`, `do03`, `wd01`, `gn5` by pooled
+  Arts + Instruments validation HR@10, used only if it beats P1a; else P1a's). A2 runs are also timed end to end on the
+  P1a-opt path (round-23 harness, H200, batch 1 and 64, with P1a-opt K_f 50 in the same job), after a P1a-opt equality check on
+  4,096 test users of each A2 checkpoint.
+
+Implementation: `macrec/finetune_r24.py` (P1a's exact command through finetune_geo / finetune_mfd; `--r24_max_grad_norm` overrides
+the HF default, the other factors are P1a's flags or an edited copy of `config/ckpt` given as `--base_model`); `sbatch/r24/run_r24_train.sh`
+(VAR = tokens joined by "_", e.g. `dm256_do02`; `P1aref` = P1a's exact command). Every run logs the pre-clipping gradient norm of
+every step.
+
 ### 24.2 Track B, step 0: what §13 trained, and how Track B differs (no training)
 
 **What §13 ("MFD with MQL4GRec's task mix", 2026-11-02) trained** (`macrec/mfd_mt_data.py`, runs `mfd/Instruments/mfd122_mt{A,B,C}`):
@@ -3339,3 +3365,35 @@ Both use one example per catalog item and modality per epoch (§13: 6,250 + 6,25
 
 **Verdict: Track B is not §13 again.** The defining difference is that f is absent from the item input and is the first target,
 so the item examples carry exactly the signal §13's could not (and the base model is P1a, not the §13 baseline). Proceeding.
+
+**Track B implementation** (`macrec/r24_items.py`, `finetune_r24.py --r24_item W`):
+- `ItemSemDataset`: per catalog item one B-text example (input string = the item's t1 t2 code tokens only) and one B-image example
+  (i1 i2), label = the item (full SID: f + both branches, MFD rows, P1a's loss), weight W. 2 × catalog examples per epoch, concatenated
+  with P1a's MVMFDDataset; the Trainer's sampler shuffles them in.
+- Encoder input: P1a's item-level structure starts an item at each f token, so an f-less row would be empty. `R24StructInput` adds one
+  rule: in a row that contains no f token, the first code token starts the (single) item. Every P1a row contains f tokens, so P1a's
+  structure is unchanged for all sequence, validation and test rows. The item row's encoder input is then exactly E(t1) + E(t2) +
+  recency 0 (resp. E(i1) + E(i2)).
+- Loss: the batch loss is the weighted mean token CE, Σ w · CE / Σ w over target tokens (sequence rows w = 1, item rows W). With every
+  w = 1 this is P1a's loss exactly. The baked checkpoint is P1a's layout (`ItemMFDT5`); evaluation is unchanged.
+- Gate (`macrec/r24_check.py`, on P1a seed 42): (1) structure identical on 2,048 random training rows (all three views) + 1,024 validation
+  rows; (2) item inputs contain no f token, form one item at recency 0, equal E(t1) + E(t2) to < 1e-5 (and the real `struct_encode` path
+  builds the same vector), and differ from the same vector with E(f) added; (3) collated item rows carry the full SID, weight W, sequence
+  rows weight 1 and unchanged labels; (4) all-ones weights give P1a's loss, weights W give Σ w CE / Σ w (float64 recompute); (5) examples
+  per epoch next to P1a's and C's.
+- Runs: **B1** (W = 1.0), **B2** (W = 0.3), Arts + Instruments seed 42.
+
+### 24.3 Gate, evaluation and chaining (setup)
+
+- **Gate before every pack** (`sbatch/r24/r24_gate.sbatch`, per dataset): r24_check, dry runs of P1aref and every VAR, config diff
+  (`tools/r24_config_diff.py`: r24 P1aref must equal round 21's P1a dry run apart from the base-model path; each VAR may differ only in the
+  fields its tokens name), and 5 real optimizer steps of every VAR (`smoke.json`: losses / gradient norms finite, the clipping threshold, lr,
+  wd and T5 config as named). `run_r24_train.sh` refuses to train otherwise.
+- **Evaluation of every run**: H200, batch 64, plain K_f = 50 full view (`sbatch/r22/r22_run.sbatch STEP=eval`, `r21_eval.py`) + fdump
+  for the E6 split; `tools/r24_report.py` → `geo/r24_report.json`: val / test HR@1/5/10, NDCG@5/10, paired CIs vs P1a and C (seed 42),
+  pooled Arts + Instruments validation and test (stratified paired bootstrap), E6 split, f diagnostics, best epoch / steps / wall time /
+  clipping / examples per epoch, ms/user.
+- **Chaining** (`sbatch/r24/r24_stage.sbatch`, CPU, decisions on pooled Arts + Instruments seed-42 VALIDATION only; a config qualifies
+  when its pooled valid HR@10 > P1a's): STAGE a1 → A2; STAGE ab (after A2 and B) → A-best, B-best, combination A-best + B-best on
+  Arts + Instruments; STAGE best → the best of {A-best, B-best, A+B} on Games seed 42; STAGE seeds → seeds 43 / 44 on all three
+  datasets, then the 3 × 3 table with the pooled paired bootstrap vs P1a, A01 and C. Nothing is promoted.

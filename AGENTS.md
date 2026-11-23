@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-23 (round 22 DONE, §22.8–22.11 written: E9k4 beats A01/P1a on pooled valid, ties on test, not promoted; round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-23 (round 24 set up, §24: Task 0 E9k4 seeds, Track A tuning/capacity, Track B item-level semantic tasks; round 22 DONE, §22.8–22.11 written: E9k4 beats A01/P1a on pooled valid, ties on test, not promoted; round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -219,6 +219,16 @@ are reference-only, not part of the main line.
   is HF beam-search implementation vs batched exact scoring (P1a-opt does 8× C's FLOPs, 47 vs 5.9 GFLOP/user; 3.1–3.9× slower than
   C-opt); at batch 1 ≈ 2.7× is algorithmic (3 vs 10 sequential decoder calls; 2.7–2.9× faster than C-opt). Training: P1a ≈ half of
   C's optimizer steps, 0.2–0.5× its GPU-hours. Figures `mmgen_runs/timing/r23/r23_acc_latency_<D>.png`.
+- **Round 24 (2026-11-23, running), `docs/MFD_REPORT.md` §24; jobs `mmgen_runs/logs/round24_jobs.txt`:** target = a general metric
+  win over C (pooled 3 datasets × 3 seeds, HR@10 and NDCG@10 CI > 0, no dataset significantly below C); exploratory, no promotion.
+  Screening = pooled Arts + Instruments seed-42 VALIDATION; a config qualifies when its pooled valid HR@10 > P1a's.
+  Task 0: E9k4 seeds 43/44 on Instruments + Games (→ §22.9, 3×3 table). Track A (`macrec/finetune_r24.py`, `sbatch/r24/run_r24_train.sh`
+  VAR tokens): A1 one factor at a time (lr 3e-4 / 1e-3, dropout 0.2 / 0.3, wd 0.1, max_grad_norm 5), A2 capacity (d_model 256 /
+  6+6 layers with A1's best regularisation; timed on the P1a-opt path). Track B (`macrec/r24_items.py`): per catalog item a B-text /
+  B-image example, encoder input E(t1)+E(t2) (or E(i1)+E(i2)) WITHOUT E(f), target the full SID, weight 1.0 (B1) / 0.3 (B2); step 0:
+  §13's item tasks fed f in the input (copy), so B is not §13 again. Gate `r24_gate.sbatch` (r24_check + dry runs + config diff +
+  5-step smoke), packs `pack_r24_train.sbatch`, chaining `r24_stage.sbatch` (STAGE a1 → ab → best → seeds), report
+  `tools/r24_report.py`, submit `sbatch/r24/r24_submit.sh`.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -277,6 +287,7 @@ mmgen/
 │   ├── r22_aux.py, r22_e3_smooth.py, r22_e2_diag.py, r22_e2_eval.py, r22_check.py, r22_e4_first.py, r22_e5_regions.py, r22_e5_eval.py, r22_e7.py, r22_e7_check.py, r22_e8.py, r22_e9.py, r22_e89_check.py, r22_e10_views.py, r22_e10c.py, r22_e10c_check.py   §22: aux t1/i1 heads (AuxGroupedItemMFDT5, loaded by mfd_eval.load_mfd_model), codebook-smoothed P(f), t1/i1 rank diagnostic, aux-score eval, gate checks, E4 level-1 (first-step) distributions of A01 / C / TIGER A / B, E5 coarse partitions + region-mass score eval, E7 structured item vector (E7GroupedItemMFDT5, loaded by load_mfd_model) + gate checks, E8 child-composed f embedding (E8Embedding, folded at bake), E9 mixture of softmaxes at the f step (MoSHead, E9GroupedItemMFDT5 loaded by load_mfd_model) + their gate checks, E10a per-view f distributions, E10c A01's KL without grouping (E10cDataset / E10cCollator / E10cItemMFDT5; saved model = plain ItemMFDT5) + its gate checks
 │   ├── r23_cfast.py, r23_timing.py, r23_prep.py   §23 inference speed: GPU-side trie mask for HF beam search (C-fast, bitwise = C), timing / stage profile / counts / FLOPs harness (reimplements test_ddp_save + ensemble ranking; methods P1a:K, P1aopt:K, P1aoptr:K, C, Cfast, D, TIGER, chain, <beam>opt = C-opt replay), prep gate (batch-1 subset, C-fast == C, reimplementation checks, P1a exact reference ranks)
 │   ├── r23_p1aopt.py, r23_p1aopt_verify.py, r23_p1aopt_bench.py   §23 P1a-opt: exact tree-KV-cache P1a inference (1+2+2), its full-test-set equality check vs P1a, implementation-variant benchmark
+│   ├── finetune_r24.py, r24_items.py, r24_check.py   §24: P1a + Track A overrides (max_grad_norm; base-model dir for dropout / capacity) and Track B item-level semantic examples (R24StructInput, ItemSemDataset, R24Collator, weighted-loss R24ItemMFDT5), gate checks
 │   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -355,6 +366,7 @@ mmgen/
     ├── r21/r21_gain.sbatch, r21_combo_stage.sbatch, r21_tool.sbatch   §21.6 gain diagnostic (macrec/r21_gain_diag.py + tools/r21_gain_report.py), §21.4 combo -> Instruments stage (tools/r21_combo_choice.py), any §21 CPU tool (e.g. TOOL="r21_seeds.py Arts" = §21.5 3-seed table)
     ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1|E7a|E7b|E8a|E8b|E9k2|E9k4|E10b005|E10b02|E10b05|E10c; E10c = P1a's 256 x 4 path; SMOKE=1 = 5 real optimizer steps -> geo/gate/r22_smoke; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|e5|fdump|eval, SID=1+2+2|1+3+3); E5 partitions r22_e5_regions.sbatch (CPU), report tools/r22_e5_report.py; E6 tools/r22_e6_report.py (history-f competitors); E7 gate r22_e7_gate.sbatch, stage r22_e7_stage.sbatch (CPU), report tools/r22_e7_report.py; E8/E9 gate r22_e89_gate.sbatch, stage r22_e89_stage.sbatch (CPU), E9k4 cross-dataset stage r22_e9x_stage.sbatch (CPU), pooled E9k4 tool tools/r22_e9_pooled.py; common E1/E7/E8/E9 report tools/r22_runs_report.py; E10a r22_e10a_views.sbatch + tools/r22_e10a_report.py; E10 gate r22_e10_gate.sbatch (E10c check + dry runs + smoke), stage r22_e10_stage.sbatch (CPU; pooled-valid selection, seeds 43/44 chaining), report tools/r22_e10_report.py (--stage / --final 3x3 table); reports tools/r22_e3_report.py, r22_e2_report.py; E4 r22_e4.sbatch + tools/r22_e4_report.py (level-1 predictability, HR@10 by level-1 rank, partition NMI/ARI); §21.9 table tools/r21_seeds_all.py
     ├── r23/r23_job.sbatch, r23/r23_submit.sh   §23 timing jobs (STEP prep|time|profile|p1aoptverify|p1aoptbench|smoke|smokeprof|smoketime|smokeopt; one H200, frozen code snapshot timing/r23/code_<commit>), per-dataset serial chains + CPU report (tools/r23_report.py)
+    ├── r24/run_r24_train.sh, r24_gate.sbatch, pack_r24_train.sbatch, r24_stage.sbatch, r24_submit.sh   §24 runs (VAR tokens lr3e4 lr1e3 do02 do03 wd01 gn5 dm256 l6 B1 B2 joined by _; P1aref), gate, packs, chaining stages (CPU), submission; tools/r24_report.py (report + selection), tools/r24_config_diff.py
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
@@ -710,7 +722,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `8c7caee` | §23 P1a-opt (exact faster P1a inference), its check and benchmark; report headline P1a-opt vs C-fast |
 | `f918ba0` | r22 E9k4 x-dataset stage: round-22 gate on Instruments/Games |
 | `4a53745` | §23.2–23.12 results (headline, all methods, figure, attribution, stage / FLOP / C-opt appendices, training cost); figure layout |
-| (this) | §22.8–22.11 results (E8, E9 incl. E9k4 seeds + Instruments/Games + pooled, E10b, E10c, round-22 summary); `r22_e9_pooled.py` |
+| `7a59aa8` | §22.8–22.11 results (E8, E9 incl. E9k4 seeds + Instruments/Games + pooled, E10b, E10c, round-22 summary); `r22_e9_pooled.py` |
+| `055af48` | §24.2 Track B step 0 |
+| (this) | §24 code: finetune_r24 / r24_items / r24_check, run / gate / pack / stage / submit scripts, r24_report / r24_config_diff, P1a-opt on any checkpoint (opt@<dir>); §24.0–24.3 setup |
 
 ---
 
