@@ -1,7 +1,7 @@
 #!/bin/bash
 # Round-24 chaining stage (CPU; docs/MFD_REPORT.md §24). Runs tools/r24_report.py (selection on POOLED Arts + Instruments seed-42
 # VALIDATION only; a config qualifies when its pooled valid HR@10 > P1a's) and submits the next step as Slurm dependencies:
-#   STAGE=a1    best A1 regularisation -> A2 = dm256[_reg], l6[_reg] on Arts + Instruments seed 42: gates -> pack -> evals + fdumps;
+#   STAGE=a1    best A1 lr and regularisation (carried together) -> A2 = dm256[_lr][_reg], l6[_lr][_reg] on Arts + Instruments seed 42: gates -> pack -> evals + fdumps;
 #               P1a-opt check + timing (round-23 harness, batch 1 / 64, H200) per dataset; then STAGE=ab after A2 + B evals (B_EVALS)
 #   STAGE=ab    A-best, B-best -> combo (A-best + B tokens) on Arts + Instruments seed 42 -> STAGE=best after its evals
 #   STAGE=best  best of {A-best, B-best, combo} -> Games seed 42 (gate, pack, eval + fdump) -> STAGE=seeds
@@ -50,10 +50,12 @@ train_eval() {   # $1 = "D:VAR:SEED ..." entries
 case $STAGE in
   a1)
     report --stage a1
-    REG=$(jget $RUNS/geo/r24_stage_a1.json best_regularisation)
-    S1=${REG:+_$REG}
+    CARRY=$(jget $RUNS/geo/r24_stage_a1.json carry)          # best qualifying lr and / or regularisation, e.g. lr1e3_do02
+    S1=${CARRY:+_$CARRY}
     A2="dm256$S1 l6$S1"
-    echo "--- $(date +%F) STAGE a1: best A1 regularisation '${REG:-none (no A1 regularisation qualifies)}' -> A2 VARS $A2" | tee -a $L
+    echo "--- $(date +%F) STAGE a1: carried A1 settings '${CARRY:-none (no A1 setting beats P1a on pooled validation)}' -> A2 VARS $A2" | tee -a $L
+    python3 -c "import json; r = json.load(open('$RUNS/geo/r24_stage_a1.json')); [print('  ' + x) for x in r['reasons']]; \
+print('  NOTE: best lr and best regularisation come from different A1 runs; A2 uses them together, a combination A1 never tested' if r['lr_and_reg_untested_together'] else '')" | tee -a $L
     EV=$(train_eval "Arts:dm256$S1:42 Arts:l6$S1:42 Instruments:dm256$S1:42 Instruments:l6$S1:42")
     COMMIT=$(cd $REPO && git rev-parse --short HEAD); CODE=$RUNS/timing/r23/code_$COMMIT
     mkdir -p $CODE; cp $REPO/macrec/*.py $CODE/; cp -r $REPO/macrec/config $CODE/; echo $COMMIT > $CODE/COMMIT

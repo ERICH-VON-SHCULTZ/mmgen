@@ -4,10 +4,11 @@ of the same seed; E6 split (repeat-f / new-f HR@10, C - model, true-f median ran
 best epoch, optimizer steps, wall time, clipping, examples per epoch; ms/user. POOLED seed-42 Arts + Instruments (the screening
 set) per VAR: HR@10 / NDCG@10 vs P1a and C, stratified paired bootstrap (r22_e10_report.strat_boot), valid and test.
 Selection (validation only): a VAR "qualifies" when its pooled Arts + Instruments seed-42 valid HR@10 > P1a's.
-  --stage a1     A1 (lr3e4 lr1e3 do02 do03 wd01 gn5): best regularisation token among do02 do03 wd01 gn5 by pooled valid HR@10
-                 (NDCG@10 tie-break), only if it qualifies, else none -> geo/r24_stage_a1.json
-  --stage ab     A-best = best qualifying Track A VAR (A1 + A2), B-best = best qualifying of B1 / B2; combo = A-best tokens + B
-                 token (if both exist) -> geo/r24_stage_ab.json
+  --stage a1     A1 (lr3e4 lr1e3 do02 do03 wd01 gn5): best qualifying lr (lr3e4 / lr1e3) and best qualifying regularisation
+                 (do02 do03 wd01 gn5) by pooled valid HR@10 (NDCG@10 tie-break); both carried into A2 / the combination (together if
+                 both exist: a combination A1 never tested) -> geo/r24_stage_a1.json (carry, reasons)
+  --stage ab     A-best = best qualifying Track A VAR (A1 + A2), B-best = best qualifying of B1 / B2; combo = A-best tokens
+                 (+ the carried lr if A-best has none) + B token (if both exist) -> geo/r24_stage_ab.json
   --stage best   best of {A-best, B-best, combo} by pooled valid HR@10 (qualifying only) -> geo/r24_stage_best.json
 Out: geo/r24_report.json + printed tables.  Usage: python r24_report.py [--stage a1|ab|best]"""
 import glob
@@ -122,19 +123,42 @@ def main():
         print(f"  train epochs {t['epochs_run']} best {t['best_epoch']} steps {t['global_steps']} wall {t['train_wall_seconds']} s "
               f"{t['gpu']} examples/epoch {t['train_examples_per_task']} | {json.dumps((t['r24'] or {}).get('clip'))}")
     if stage == "a1":
-        reg = [V for V in REG if V in P and P[V]["qualifies"]]
-        best = max(reg, key=lambda V: key(P[V])) if reg else ""
-        res = {"qualifying_A1": [V for V in A1 if V in P and P[V]["qualifies"]], "best_regularisation": best,
-               "pooled_valid_hr10": {V: P[V]["valid"]["model"]["hr10"] for V in A1 if V in P},
-               "P1a_pooled_valid_hr10": next(iter(P.values()))["valid"]["P1a"]["hr10"] if P else None}
+        # lr is part of A-best (user, 2026-11-23): the best qualifying lr and the best qualifying regularisation are carried
+        # into A2 and into the A+B combination, together if both exist (each A1 run changes one factor, so lr + reg together
+        # is a combination A1 never tested).
+        p1a = next(iter(P.values()))["valid"]["P1a"]["hr10"] if P else None
+        q = lambda Vs: [V for V in Vs if V in P and P[V]["qualifies"]]
+        lr, reg = q(("lr3e4", "lr1e3")), q(REG)
+        best_lr = max(lr, key=lambda V: key(P[V])) if lr else ""
+        best_reg = max(reg, key=lambda V: key(P[V])) if reg else ""
+        carry = "_".join(t for t in (best_lr, best_reg) if t)
+        why = []
+        for V in A1:
+            if V not in P:
+                why.append(f"{V}: no pooled result (missing eval)")
+                continue
+            v = P[V]["valid"]["model"]
+            tag = "carried (best lr)" if V == best_lr else "carried (best regularisation)" if V == best_reg else \
+                ("qualifies but not the best of its kind" if P[V]["qualifies"] else "does not beat P1a")
+            why.append(f"{V}: pooled valid HR@10 {v['hr10']:.4f} / NDCG@10 {v['ndcg10']:.4f} vs P1a {p1a:.4f} -> {tag}")
+        res = {"qualifying_A1": q(A1), "best_lr": best_lr, "best_regularisation": best_reg, "carry": carry,
+               "lr_and_reg_untested_together": bool(best_lr and best_reg), "reasons": why,
+               "pooled_valid_hr10": {V: P[V]["valid"]["model"]["hr10"] for V in A1 if V in P}, "P1a_pooled_valid_hr10": p1a}
         json.dump(res, open(f"{R}/geo/r24_stage_a1.json", "w"), indent=1)
-        print("\nSTAGE a1:", json.dumps(res))
+        print("\nSTAGE a1:", json.dumps(res, indent=1))
     elif stage == "ab":
         A = [V for V in P if P[V]["qualifies"] and not any(t in V.split("_") for t in ("B1", "B2"))]
         B = [V for V in ("B1", "B2") if V in P and P[V]["qualifies"]]
         a = max(A, key=lambda V: key(P[V])) if A else None
         b = max(B, key=lambda V: key(P[V])) if B else None
-        res = {"A_best": a, "B_best": b, "combo": f"{a}_{b}" if a and b else None, "A_qualifying": A, "B_qualifying": B}
+        a1 = json.load(open(f"{R}/geo/r24_stage_a1.json"))
+        lr = a1.get("best_lr") or ""
+        ca = a                                                   # the carried lr goes into the combination (user, 2026-11-23)
+        if a and lr and not any(t.startswith("lr") for t in a.split("_")):
+            ca = f"{a}_{lr}"
+        res = {"A_best": a, "B_best": b, "combo": f"{ca}_{b}" if a and b else None, "A_qualifying": A, "B_qualifying": B,
+               "carried_lr": lr or None, "combo_adds_carried_lr": ca != a,
+               "note": None if ca == a else f"A-best {a} has no lr token; the carried lr {lr} is added to the combination (untested with {a})"}
         json.dump(res, open(f"{R}/geo/r24_stage_ab.json", "w"), indent=1)
         print("\nSTAGE ab:", json.dumps(res))
     elif stage == "best":

@@ -3321,8 +3321,13 @@ loss with patience 10).
 - **A1, one factor at a time** (6 runs per dataset): lr 3e-4 / 1e-3 (`lr3e4`, `lr1e3`); dropout 0.2 / 0.3 (`do02`, `do03`);
   weight decay 0.1 = 10 × (`wd01`); max_grad_norm 5 (`gn5`).
 - **A2, capacity** (after A1; 4 runs): d_model 256 with d_ff 2048 and 12 heads (per-head dimension 64 unchanged; `dm256`), and
-  6 + 6 layers at d_model 128 (`l6`), each with A1's best regularisation (best of `do02`, `do03`, `wd01`, `gn5` by pooled
-  Arts + Instruments validation HR@10, used only if it beats P1a; else P1a's). A2 runs are also timed end to end on the
+  6 + 6 layers at d_model 128 (`l6`), each with the A1 settings carried forward. **Carry rule (user, 2026-11-23): learning rate is
+  part of A-best.** The best qualifying lr (`lr3e4` / `lr1e3`) and the best qualifying regularisation (`do02`, `do03`, `wd01`,
+  `gn5`), each by pooled Arts + Instruments validation HR@10 (NDCG@10 tie-break) and only if it beats P1a, are carried into A2 and
+  into the A+B combination; if both exist they are used together (e.g. `dm256_lr1e3_do02`), a combination A1 never tested
+  directly, reported as such. The stage logs every A1 setting's pooled validation and why it was or was not carried
+  (`geo/r24_stage_a1.json` → `reasons`; `round24_jobs.txt`). If A-best has no lr token, the carried lr is added to the A+B
+  combination. A2 runs are also timed end to end on the
   P1a-opt path (round-23 harness, H200, batch 1 and 64, with P1a-opt K_f 50 in the same job), after a P1a-opt equality check on
   4,096 test users of each A2 checkpoint.
 
@@ -3394,6 +3399,6 @@ so the item examples carry exactly the signal §13's could not (and the base mod
   pooled Arts + Instruments validation and test (stratified paired bootstrap), E6 split, f diagnostics, best epoch / steps / wall time /
   clipping / examples per epoch, ms/user.
 - **Chaining** (`sbatch/r24/r24_stage.sbatch`, CPU, decisions on pooled Arts + Instruments seed-42 VALIDATION only; a config qualifies
-  when its pooled valid HR@10 > P1a's): STAGE a1 → A2; STAGE ab (after A2 and B) → A-best, B-best, combination A-best + B-best on
+  when its pooled valid HR@10 > P1a's): STAGE a1 → A2 (carried lr + regularisation); STAGE ab (after A2 and B) → A-best, B-best, combination A-best + B-best on
   Arts + Instruments; STAGE best → the best of {A-best, B-best, A+B} on Games seed 42; STAGE seeds → seeds 43 / 44 on all three
   datasets, then the 3 × 3 table with the pooled paired bootstrap vs P1a, A01 and C. Nothing is promoted.

@@ -224,7 +224,8 @@ are reference-only, not part of the main line.
   Screening = pooled Arts + Instruments seed-42 VALIDATION; a config qualifies when its pooled valid HR@10 > P1a's.
   Task 0: E9k4 seeds 43/44 on Instruments + Games (→ §22.9, 3×3 table). Track A (`macrec/finetune_r24.py`, `sbatch/r24/run_r24_train.sh`
   VAR tokens): A1 one factor at a time (lr 3e-4 / 1e-3, dropout 0.2 / 0.3, wd 0.1, max_grad_norm 5), A2 capacity (d_model 256 /
-  6+6 layers with A1's best regularisation; timed on the P1a-opt path). Track B (`macrec/r24_items.py`): per catalog item a B-text /
+  6+6 layers with the carried A1 settings: best qualifying lr AND best qualifying regularisation, together if both; the lr also goes
+  into the A+B combination; timed on the P1a-opt path). Track B (`macrec/r24_items.py`): per catalog item a B-text /
   B-image example, encoder input E(t1)+E(t2) (or E(i1)+E(i2)) WITHOUT E(f), target the full SID, weight 1.0 (B1) / 0.3 (B2); step 0:
   §13's item tasks fed f in the input (copy), so B is not §13 again. Gate `r24_gate.sbatch` (r24_check + dry runs + config diff +
   5-step smoke), packs `pack_r24_train.sbatch`, chaining `r24_stage.sbatch` (STAGE a1 → ab → best → seeds), report
@@ -724,7 +725,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `4a53745` | §23.2–23.12 results (headline, all methods, figure, attribution, stage / FLOP / C-opt appendices, training cost); figure layout |
 | `7a59aa8` | §22.8–22.11 results (E8, E9 incl. E9k4 seeds + Instruments/Games + pooled, E10b, E10c, round-22 summary); `r22_e9_pooled.py` |
 | `055af48` | §24.2 Track B step 0 |
-| (this) | §24 code: finetune_r24 / r24_items / r24_check, run / gate / pack / stage / submit scripts, r24_report / r24_config_diff, P1a-opt on any checkpoint (opt@<dir>); §24.0–24.3 setup |
+| `c39d593` | §24 code: finetune_r24 / r24_items / r24_check, run / gate / pack / stage / submit scripts, r24_report / r24_config_diff, P1a-opt on any checkpoint (opt@<dir>); §24.0–24.3 setup |
+| (this) | §24 A1 carry rule: lr is part of A-best (lr + regularisation carried together into A2 and A+B), reasons logged |
 
 ---
 
