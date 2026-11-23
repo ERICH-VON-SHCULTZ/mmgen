@@ -3295,3 +3295,47 @@ but much slower steps (its contrastive training). P1a-opt changes inference only
 - Outputs: `mmgen_runs/timing/r23/<D>/{prep,p1aopt_verify}.json`, `time_<TAG>.json` (per job: env, anchor, every pass),
   `profile_<TAG>.json` (stages, counts, FLOPs), `lists/` (batch-64 top-10 lists), `r23_report.json` (all tables),
   `r23_acc_latency*.{png,csv}`; job IDs in `mmgen_runs/logs/round23_jobs.txt`.
+
+## 24. Round 24: general-metric gains for P1a (A: tuning and capacity, B: item-level semantic tasks)
+
+**Goal (professor sync, 2026-11-23).** A general metric win over C: pooled over Instruments, Arts and Games and over 3 seeds,
+HR@10 and NDCG@10 above C with CI > 0, and no single dataset significantly below C. Current pooled seed-42 test gap −0.0017
+HR@10 (§22.9). Exploratory: which directions move the metric; nothing is promoted in this round. Screening = pooled validation
+over Arts + Instruments (seed 42); per-dataset and test numbers always reported. Rules as before (locked v1 1+2+2 SIDs, select on
+validation, test once per selected config, H200 batch-64 eval at K_f = 50 plain full view, dependency chains, gate with ≥ 5 real
+steps before every pack). Job IDs: `mmgen_runs/logs/round24_jobs.txt`.
+
+### 24.2 Track B, step 0: what §13 trained, and how Track B differs (no training)
+
+**What §13 ("MFD with MQL4GRec's task mix", 2026-11-02) trained** (`macrec/mfd_mt_data.py`, runs `mfd/Instruments/mfd122_mt{A,B,C}`):
+
+| | §13 |
+|---|---|
+| dataset / seed | Instruments only, seed 42 (the Arts rule was not triggered) |
+| base model | mfd122_mv: **token-level** encoder (every SID token of the history is a position, up to 20 × 5 + prompt), **no codebook init** (§14 came later), no item-level input (§17 came later) |
+| sequence tasks | A: seqrec (text-view history → text branch), seqimage (image-view history → image branch), fullseqrec (prompt + full-view history → both branches); C adds crossseqrec (C's fusionseqrec coin flip) |
+| item tasks (B only) | **item2image**: soft prompt + the item's text view **[f t1 t2]** → image branch; **image2item**: prompt + the item's image view **[f i1 i2]** → text branch. One example per catalog item per epoch (6,250 each) |
+| targets | single-branch tasks: the other branch's codes + f once (text row, position 0); the input branch masked |
+| weights | every example weight 1 (per-example CE, mixed by count: 84,890 per sequence task, 6,250 per item task, 267,170 / epoch for B) |
+| result | B's item tasks **hurt**: −0.0035 test HR@10 vs mfd122_mv (CI < 0), f top-1 −0.003, f top-20 −0.017 |
+
+**The item tasks of §13 could not teach f.** Their input already contains the item's f token, which is also their target at
+position 0, so predicting f there is a copy. What they trained is t ↔ i translation *given* f, which MFD's factorisation makes
+conditionally independent anyway (the branch losses already learn P(t | f) and P(i | f)). That is consistent with them not helping.
+
+**How Track B differs.**
+
+| | §13 item tasks | Track B |
+|---|---|---|
+| input | item's text (or image) view **including its f token**, plus a soft prompt | one encoder position: **E(t1) + E(t2)** (or E(i1) + E(i2)), **no E(f)**, recency embedding 0, as P1a's item-level encoder represents a history item minus its f |
+| target | the other branch (+ f, copied from the input) | the item's **full SID**: f, both branches (MFD rows, same loss as the sequence examples) |
+| what is learned | t ↔ i translation given f | **infer f from one modality's chain** (and the other branch): which f a text or image chain belongs to — the step where P1a loses to C on new-f users (§20, §22.4, §22.6) |
+| base model | token-level mfd122_mv, no codebook init | P1a (item-level encoder, codebook-initialised embeddings, multi-view history) |
+| datasets | Instruments | Arts + Instruments (screening), then Games |
+| weight | 1 | B1: 1.0, B2: 0.3 |
+
+Both use one example per catalog item and modality per epoch (§13: 6,250 + 6,250 on Instruments; Track B: 2 × catalog size, i.e.
+12,500 on Instruments and 2 × 9,416 on Arts, against P1a's 254,670 / 322,698 sequence examples).
+
+**Verdict: Track B is not §13 again.** The defining difference is that f is absent from the item input and is the first target,
+so the item examples carry exactly the signal §13's could not (and the base model is P1a, not the §13 baseline). Proceeding.
