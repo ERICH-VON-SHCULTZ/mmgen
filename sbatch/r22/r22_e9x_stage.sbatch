@@ -35,9 +35,12 @@ echo "$HOLDS"
 if ! echo "$HOLDS" | grep -q '"holds": true'; then
   echo "E9k4 x-dataset stage: E9k4 does not hold on Arts seeds 43/44 validation ($HOLDS); Instruments/Games not run" | tee -a $L; exit 0
 fi
+# run_r22_train.sh needs BOTH gate files per dataset: geo/<D>/r22_check.json (round-22 gate, r22_gate.sbatch) and
+# geo/<D>/r22_e89_check.json (E8/E9 gate); only Arts had the first (2026-11-22 pack 24090105 failed on it at start)
+G0=""; for D in Instruments Games; do [ -f $RUNS/geo/$D/r22_check.json ] || G0="$G0:$(sbatch --parsable --export=ALL,D=$D,VARS=E9k4 $REPO/sbatch/r22/r22_gate.sbatch)"; done
 G1=$(sbatch --parsable --export=ALL,D=Instruments,VARS=E9k4 $REPO/sbatch/r22/r22_e89_gate.sbatch)
 G2=$(sbatch --parsable --export=ALL,D=Games,VARS=E9k4 $REPO/sbatch/r22/r22_e89_gate.sbatch)
-P=$(sbatch --parsable --dependency=afterok:$G1:$G2 --export=ALL,RUNS="Instruments:E9k4:42 Games:E9k4:42" $REPO/sbatch/r22/pack_r22_train.sbatch)
+P=$(sbatch --parsable --dependency=afterok:$G1:$G2$G0 --export=ALL,RUNS="Instruments:E9k4:42 Games:E9k4:42" $REPO/sbatch/r22/pack_r22_train.sbatch)
 EV=""
 for D in Instruments Games; do
   e=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r22_E9k4,SEED=42,STEP=eval $REPO/sbatch/r22/r22_run.sbatch)
@@ -45,4 +48,4 @@ for D in Instruments Games; do
   EV="$EV:$e:$f"
 done
 R=$(sbatch --parsable --dependency=afterok$EV --export=ALL,TOOL="r22_runs_report.py E9" $REPO/sbatch/r21/r21_tool.sbatch)
-echo "E9k4 x-dataset stage: holds on Arts 43/44 valid; gates $G1 $G2 pack $P (Instruments:E9k4:42 Games:E9k4:42) evals+fdumps ${EV#:} report $R" | tee -a $L
+echo "E9k4 x-dataset stage: holds on Arts 43/44 valid; r22 gates ${G0#:} e89 gates $G1 $G2 pack $P (Instruments:E9k4:42 Games:E9k4:42) evals+fdumps ${EV#:} report $R" | tee -a $L

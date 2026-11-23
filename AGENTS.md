@@ -693,7 +693,7 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `7518dc3` | §22.10 E10a results; E10b/E10c pending |
 | `8b3e050` | §23 inference-speed code (C-fast, timing harness, prep gate, jobs, report), §23.1 setup |
 | `cad4463`…`2f0d2aa` | r23 submit / prep-resume / profile-flag fixes; C-opt lower bound; r22 E9k4 cross-dataset stage |
-| (this) | §23 P1a-opt (exact faster P1a inference), its check and benchmark; report headline P1a-opt vs C-fast |
+| `8c7caee` | §23 P1a-opt (exact faster P1a inference), its check and benchmark; report headline P1a-opt vs C-fast |
 
 ---
 
