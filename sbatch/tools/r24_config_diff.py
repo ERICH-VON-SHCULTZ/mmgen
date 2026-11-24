@@ -15,7 +15,7 @@ from r21_config_diff import PATHS, VOLATILE, comparable
 
 RUNS = "/scratch/yw8866/mmgen_runs"
 LR = {"resolved_args.learning_rate", "training_args.learning_rate"}
-OK = {"lr3e4": LR, "lr1e3": LR, "wd01": {"resolved_args.weight_decay", "training_args.weight_decay"},
+OK = {"lr3e4": LR, "lr1e3": LR, "lr2e3": LR, "wd01": {"resolved_args.weight_decay", "training_args.weight_decay"},
       "gn5": {"training_args.max_grad_norm"}, "do02": {"model_config.dropout_rate"}, "do03": {"model_config.dropout_rate"},
       "dm256": {"model_config.d_model", "model_config.d_ff", "model_config.num_heads", "n_params"},
       "l6": {"model_config.num_layers", "model_config.num_decoder_layers", "n_params"},

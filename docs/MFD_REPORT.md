@@ -3327,7 +3327,15 @@ loss with patience 10).
   into the A+B combination; if both exist they are used together (e.g. `dm256_lr1e3_do02`), a combination A1 never tested
   directly, reported as such. The stage logs every A1 setting's pooled validation and why it was or was not carried
   (`geo/r24_stage_a1.json` → `reasons`; `round24_jobs.txt`). If A-best has no lr token, the carried lr is added to the A+B
-  combination. A2 runs are also timed end to end on the
+  combination.
+- **A1 additions (user, 2026-11-24):** lr 1e-3 was the top of the tested range and had the lowest validation loss, so lr 2e-3
+  (`lr2e3`) and the pair lr 1e-3 + dropout 0.2 (`lr1e3_do02`) were added on Arts + Instruments, same gate, evals and E6 dumps, and enter
+  the A1 decision. Carry rule with a measured pair (my reading of the user's rule, stated here): (1) if the pair is the best A1 run by
+  pooled validation HR@10, it is carried; (2) if best lr + best regularisation is exactly this pair but a single setting measured
+  better, that single setting is carried; (3) otherwise best lr + best regularisation are carried together, as before (untested). The
+  decision stops instead of proceeding when any A1 result is missing.
+- **Time limits (2026-11-24):** the waiting evals were resubmitted with 2 h (eval) / 30 min (E6 dump) instead of 6 h
+  (`sbatch/r24/r24_wave2.sh`); later stages use the same limits. A2 runs are also timed end to end on the
   P1a-opt path (round-23 harness, H200, batch 1 and 64, with P1a-opt K_f 50 in the same job), after a P1a-opt equality check on
   4,096 test users of each A2 checkpoint.
 
@@ -3387,6 +3395,10 @@ so the item examples carry exactly the signal §13's could not (and the base mod
   rows weight 1 and unchanged labels; (4) all-ones weights give P1a's loss, weights W give Σ w CE / Σ w (float64 recompute); (5) examples
   per epoch next to P1a's and C's.
 - Runs: **B1** (W = 1.0), **B2** (W = 0.3), Arts + Instruments seed 42.
+- **Validation loss of B1 / B2 is computed on sequence examples only** (checked 2026-11-24). The validation set is P1a's `MFDDataset`
+  (22,171 / 17,112 examples, no item examples; all weights 1). `tools/r24_valid_loss.py` recomputes it from the saved checkpoints with
+  P1a's dataset, collator and loss: P1a / B1 / B2 Arts 2.2712 / 2.2415 / 2.2543, Instruments 2.1082 / 2.0853 / 2.0981, all equal to the
+  recorded best eval loss within 2e-7 (`geo/r24_valid_loss.json`). The losses, and early stopping, are comparable with P1a's.
 
 ### 24.3 Gate, evaluation and chaining (setup)
 

@@ -4,9 +4,9 @@ of the same seed; E6 split (repeat-f / new-f HR@10, C - model, true-f median ran
 best epoch, optimizer steps, wall time, clipping, examples per epoch; ms/user. POOLED seed-42 Arts + Instruments (the screening
 set) per VAR: HR@10 / NDCG@10 vs P1a and C, stratified paired bootstrap (r22_e10_report.strat_boot), valid and test.
 Selection (validation only): a VAR "qualifies" when its pooled Arts + Instruments seed-42 valid HR@10 > P1a's.
-  --stage a1     A1 (lr3e4 lr1e3 do02 do03 wd01 gn5): best qualifying lr (lr3e4 / lr1e3) and best qualifying regularisation
-                 (do02 do03 wd01 gn5) by pooled valid HR@10 (NDCG@10 tie-break); both carried into A2 / the combination (together if
-                 both exist: a combination A1 never tested) -> geo/r24_stage_a1.json (carry, reasons)
+  --stage a1     A1 = lr3e4 lr1e3 lr2e3 | do02 do03 wd01 gn5 | the pair lr1e3_do02: carry rule in main() (tested pair if it is the
+                 best run; else best qualifying lr + best qualifying regularisation); stops (exit 2) if any A1 result is missing
+                 -> geo/r24_stage_a1.json (carry, rule, reasons)
   --stage ab     A-best = best qualifying Track A VAR (A1 + A2), B-best = best qualifying of B1 / B2; combo = A-best tokens
                  (+ the carried lr if A-best has none) + B token (if both exist) -> geo/r24_stage_ab.json
   --stage best   best of {A-best, B-best, combo} by pooled valid HR@10 (qualifying only) -> geo/r24_stage_best.json
@@ -26,8 +26,10 @@ from r22_runs_report import ev, f_analysis  # noqa: E402
 R = E.R
 KEYS = ("hr1", "hr5", "hr10", "ndcg5", "ndcg10")
 SCREEN = ("Arts", "Instruments")
-A1 = ("lr3e4", "lr1e3", "do02", "do03", "wd01", "gn5")
+LRS = ("lr3e4", "lr1e3", "lr2e3")
 REG = ("do02", "do03", "wd01", "gn5")
+COMBO = "lr1e3_do02"                                        # the one lr + regularisation pair A1 tests directly (added 2026-11-24)
+A1 = LRS + REG + (COMBO,)
 
 
 def runs():
@@ -123,27 +125,41 @@ def main():
         print(f"  train epochs {t['epochs_run']} best {t['best_epoch']} steps {t['global_steps']} wall {t['train_wall_seconds']} s "
               f"{t['gpu']} examples/epoch {t['train_examples_per_task']} | {json.dumps((t['r24'] or {}).get('clip'))}")
     if stage == "a1":
-        # lr is part of A-best (user, 2026-11-23): the best qualifying lr and the best qualifying regularisation are carried
-        # into A2 and into the A+B combination, together if both exist (each A1 run changes one factor, so lr + reg together
-        # is a combination A1 never tested).
-        p1a = next(iter(P.values()))["valid"]["P1a"]["hr10"] if P else None
-        q = lambda Vs: [V for V in Vs if V in P and P[V]["qualifies"]]
-        lr, reg = q(("lr3e4", "lr1e3")), q(REG)
-        best_lr = max(lr, key=lambda V: key(P[V])) if lr else ""
-        best_reg = max(reg, key=lambda V: key(P[V])) if reg else ""
-        carry = "_".join(t for t in (best_lr, best_reg) if t)
+        # Pooled Arts + Instruments seed-42 validation HR@10 (NDCG@10 tie-break); only settings above P1a count.
+        # User rule (2026-11-23): best lr and best regularisation are carried together, even if never tested together.
+        # 2026-11-24: lr2e3 and the pair lr1e3_do02 were added, so for that pair the measurement replaces the assumption:
+        #   1 the pair is the best A1 run                      -> carry the pair
+        #   2 best lr + best regularisation IS the pair, but a single setting measured better -> carry that single setting
+        #   3 otherwise                                        -> carry best lr + best regularisation (untested if both exist)
+        missing = [V for V in A1 if V not in P]
+        if missing:
+            print("\nSTAGE a1: NOT DECIDED, no pooled result for", missing, "(missing eval)")
+            raise SystemExit(2)
+        p1a = P[COMBO]["valid"]["P1a"]["hr10"]
+        q = lambda Vs: [V for V in Vs if P[V]["qualifies"]]
+        top = lambda Vs: max(Vs, key=lambda V: key(P[V])) if Vs else ""
+        best_lr, best_reg, best_all = top(q(LRS)), top(q(REG)), top(q(A1))
+        union = "_".join(t for t in (best_lr, best_reg) if t)
+        if best_all == COMBO:
+            carry, rule = COMBO, "1: the directly tested pair is the best A1 run"
+        elif union == COMBO:
+            carry, rule = best_all, f"2: best lr + best regularisation is the tested pair {COMBO}, but {best_all} alone measured better"
+        else:
+            carry, rule = union, "3: best lr + best regularisation" if union else "no A1 setting beats P1a on pooled validation"
+        toks = carry.split("_") if carry else []
+        carried_lr = next((t for t in toks if t in LRS), "")
+        untested = carry not in A1 and bool(carry)
         why = []
         for V in A1:
-            if V not in P:
-                why.append(f"{V}: no pooled result (missing eval)")
-                continue
             v = P[V]["valid"]["model"]
-            tag = "carried (best lr)" if V == best_lr else "carried (best regularisation)" if V == best_reg else \
-                ("qualifies but not the best of its kind" if P[V]["qualifies"] else "does not beat P1a")
+            tag = "does not beat P1a" if not P[V]["qualifies"] else "carried" if V == carry else \
+                "carried as part of the combination" if V in toks else \
+                "best of its kind, not carried (rule 2 or 1)" if V in (best_lr, best_reg) else "qualifies, not the best of its kind"
             why.append(f"{V}: pooled valid HR@10 {v['hr10']:.4f} / NDCG@10 {v['ndcg10']:.4f} vs P1a {p1a:.4f} -> {tag}")
-        res = {"qualifying_A1": q(A1), "best_lr": best_lr, "best_regularisation": best_reg, "carry": carry,
-               "lr_and_reg_untested_together": bool(best_lr and best_reg), "reasons": why,
-               "pooled_valid_hr10": {V: P[V]["valid"]["model"]["hr10"] for V in A1 if V in P}, "P1a_pooled_valid_hr10": p1a}
+        res = {"qualifying_A1": q(A1), "best_lr": best_lr, "best_regularisation": best_reg, "best_A1_run": best_all, "carry": carry,
+               "rule": rule, "carried_lr": carried_lr, "lr_and_reg_untested_together": untested,
+               "best_lr_at_grid_edge": best_lr in ("lr3e4", "lr2e3"), "reasons": why,
+               "pooled_valid_hr10": {V: P[V]["valid"]["model"]["hr10"] for V in A1}, "P1a_pooled_valid_hr10": p1a}
         json.dump(res, open(f"{R}/geo/r24_stage_a1.json", "w"), indent=1)
         print("\nSTAGE a1:", json.dumps(res, indent=1))
     elif stage == "ab":
@@ -152,7 +168,7 @@ def main():
         a = max(A, key=lambda V: key(P[V])) if A else None
         b = max(B, key=lambda V: key(P[V])) if B else None
         a1 = json.load(open(f"{R}/geo/r24_stage_a1.json"))
-        lr = a1.get("best_lr") or ""
+        lr = a1.get("carried_lr") or ""
         ca = a                                                   # the carried lr goes into the combination (user, 2026-11-23)
         if a and lr and not any(t.startswith("lr") for t in a.split("_")):
             ca = f"{a}_{lr}"

@@ -18,6 +18,7 @@
 #SBATCH --job-name=mmgen_r24_stage
 #SBATCH --output=/scratch/yw8866/mmgen_runs/logs/%x_%j.out
 set -euo pipefail
+shopt -s inherit_errexit                                     # a failed sbatch inside $(train_eval ...) stops the stage
 REPO=/scratch/yw8866/mmgen; RUNS=/scratch/yw8866/mmgen_runs; L=$RUNS/logs/round24_jobs.txt
 SIF=/share/apps/images/cuda12.1.1-cudnn8.9.0-devel-ubuntu22.04.2.sif
 OVERLAY=/scratch/yw8866/envs/macrec/overlay-25GB-500K.ext3
@@ -31,16 +32,16 @@ jget() { python3 -c "import json; v = json.load(open('$1'))['$2']; print(v if v 
 train_eval() {   # $1 = "D:VAR:SEED ..." entries
   local G="" EV="" D V S P e f
   for D in $(for x in $1; do echo ${x%%:*}; done | sort -u); do
-    VS=$(for x in $1; do [ ${x%%:*} = $D ] && { y=${x#*:}; echo ${y%%:*}; }; done | sort -u | tr '\n' ' ')
+    VS=$(for x in $1; do if [ ${x%%:*} = $D ]; then y=${x#*:}; echo ${y%%:*}; fi; done | sort -u | tr '\n' ' ')
     G="$G:$(sbatch --parsable --export=ALL,D=$D,VARS="$VS" $REPO/sbatch/r24/r24_gate.sbatch)"
   done
   set -- $1; local PACKS=""
   while [ $# -gt 0 ]; do
     local GRP="$1 ${2:-} ${3:-} ${4:-}"; shift $(( $# < 4 ? $# : 4 ))
-    P=$(sbatch --parsable --dependency=afterok$G --export=ALL,RUNS="$GRP" $REPO/sbatch/r24/pack_r24_train.sbatch); PACKS="$PACKS $P"
+    P=$(sbatch --parsable --kill-on-invalid-dep=yes --dependency=afterok$G --export=ALL,RUNS="$GRP" $REPO/sbatch/r24/pack_r24_train.sbatch); PACKS="$PACKS $P"
     for x in $GRP; do IFS=: read D V S <<< "$x"
-      e=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=$S,STEP=eval $REPO/sbatch/r22/r22_run.sbatch)
-      f=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=$S,STEP=fdump $REPO/sbatch/r22/r22_run.sbatch)
+      e=$(sbatch --parsable --time=02:00:00 --kill-on-invalid-dep=yes --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=$S,STEP=eval $REPO/sbatch/r22/r22_run.sbatch)
+      f=$(sbatch --parsable --time=00:30:00 --kill-on-invalid-dep=yes --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=$S,STEP=fdump $REPO/sbatch/r22/r22_run.sbatch)
       EV="$EV:$e:$f"
     done
   done
@@ -54,8 +55,17 @@ case $STAGE in
     S1=${CARRY:+_$CARRY}
     A2="dm256$S1 l6$S1"
     echo "--- $(date +%F) STAGE a1: carried A1 settings '${CARRY:-none (no A1 setting beats P1a on pooled validation)}' -> A2 VARS $A2" | tee -a $L
-    python3 -c "import json; r = json.load(open('$RUNS/geo/r24_stage_a1.json')); [print('  ' + x) for x in r['reasons']]; \
-print('  NOTE: best lr and best regularisation come from different A1 runs; A2 uses them together, a combination A1 never tested' if r['lr_and_reg_untested_together'] else '')" | tee -a $L
+    python3 - <<PY | tee -a $L
+import json
+r = json.load(open("$RUNS/geo/r24_stage_a1.json"))
+print("  rule", r["rule"])
+for x in r["reasons"]:
+    print("  " + x)
+if r["lr_and_reg_untested_together"]:
+    print("  NOTE: the carried lr and regularisation come from different A1 runs; A2 uses a combination A1 never tested")
+if r["best_lr_at_grid_edge"]:
+    print("  NOTE: the best lr is at the edge of the tested range")
+PY
     EV=$(train_eval "Arts:dm256$S1:42 Arts:l6$S1:42 Instruments:dm256$S1:42 Instruments:l6$S1:42")
     COMMIT=$(cd $REPO && git rev-parse --short HEAD); CODE=$RUNS/timing/r23/code_$COMMIT
     mkdir -p $CODE; cp $REPO/macrec/*.py $CODE/; cp -r $REPO/macrec/config $CODE/; echo $COMMIT > $CODE/COMMIT

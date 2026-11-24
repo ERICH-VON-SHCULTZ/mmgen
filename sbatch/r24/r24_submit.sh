@@ -17,8 +17,8 @@ G2=$(sbatch --parsable --export=ALL,D=Games,VARS=E9k4 sbatch/r22/r22_e89_gate.sb
 P=$(sbatch --parsable --dependency=afterok:$G1:$G2 --export=ALL,RUNS="Instruments:E9k4:43 Instruments:E9k4:44 Games:E9k4:43 Games:E9k4:44" sbatch/r22/pack_r22_train.sbatch)
 EV=""
 for D in Instruments Games; do for S in 43 44; do
-  e=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r22_E9k4,SEED=$S,STEP=eval sbatch/r22/r22_run.sbatch)
-  f=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r22_E9k4,SEED=$S,STEP=fdump sbatch/r22/r22_run.sbatch)
+  e=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r22_E9k4,SEED=$S,STEP=eval --time=02:00:00 --kill-on-invalid-dep=yes sbatch/r22/r22_run.sbatch)
+  f=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r22_E9k4,SEED=$S,STEP=fdump --time=00:30:00 --kill-on-invalid-dep=yes sbatch/r22/r22_run.sbatch)
   EV="$EV:$e:$f"
 done; done
 R1=$(sbatch --parsable --dependency=afterok$EV --export=ALL,TOOL="r22_runs_report.py E9" sbatch/r21/r21_tool.sbatch)
@@ -35,8 +35,8 @@ for GRP in "Arts:lr3e4 Arts:lr1e3 Arts:do02 Arts:do03" "Arts:wd01 Arts:gn5 Arts:
            "Instruments:lr3e4 Instruments:lr1e3 Instruments:do02 Instruments:do03" "Instruments:wd01 Instruments:gn5 Instruments:B1 Instruments:B2"; do
   P=$(sbatch --parsable --dependency=afterok:$GA:$GI --export=ALL,RUNS="$GRP" sbatch/r24/pack_r24_train.sbatch); PACKS="$PACKS $P"
   for x in $GRP; do D=${x%%:*}; V=${x#*:}
-    e=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=42,STEP=eval sbatch/r22/r22_run.sbatch)
-    f=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=42,STEP=fdump sbatch/r22/r22_run.sbatch)
+    e=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=42,STEP=eval --time=02:00:00 --kill-on-invalid-dep=yes sbatch/r22/r22_run.sbatch)
+    f=$(sbatch --parsable --dependency=afterok:$P --export=ALL,D=$D,RUN=r24_$V,SEED=42,STEP=fdump --time=00:30:00 --kill-on-invalid-dep=yes sbatch/r22/r22_run.sbatch)
     case $V in B*) BEV="$BEV:$e:$f" ;; *) A1EV="$A1EV:$e:$f" ;; esac
   done
 done
