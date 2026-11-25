@@ -741,7 +741,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `537883c` | §24 A1 carry rule: lr is part of A-best (lr + regularisation carried together into A2 and A+B), reasons logged |
 | `ea7e3d0`, `dec0610`, `2dcf0a1` | r24 gate fixes: check-script label unpacking, float32 item-weight assertion, gn5 config diff via the smoke run, fatal config diff |
 | `480faac` | r24 wave 2: lr2e3 / lr1e3_do02, A1 decision with the tested pair, short eval limits, B validation-loss check |
-| (this) | r24 wave 3: baseline tuning path (LR_OVERRIDE / BS_OVERRIDE in run_baseline.sh), P1a lr 3e-3 / 4e-3, STAGE lrpeak, STAGE ab waits, stability metrics |
+| `acb16d4` | r24 wave 3: baseline tuning path (LR_OVERRIDE / BS_OVERRIDE in run_baseline.sh), P1a lr 3e-3 / 4e-3, STAGE lrpeak, STAGE ab waits, stability metrics |
+| (this) | §22.9 (continued) E9k4 3 x 3; §24.1 A1 results and decision, §24.2 Track B results, §24.4 baseline tuning (in progress; nothing vs baselines final) |
 
 ---
 

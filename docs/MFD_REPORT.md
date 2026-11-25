@@ -2746,7 +2746,7 @@ Arts 3-seed means: E9k4 valid 0.1450 vs A01 0.1427 (+0.0024, + on every seed); t
   changes, and here the optimism also shows on Arts.
 - Cost: no change (8–10 ms/user, same as A01).
 - **Not promoted, nothing further chained.** By the §22.10.4 rule (pooled validation beats both P1a and A01), E9k4 would qualify for
-  seeds 43 / 44 on Instruments and Games (4 runs, one pack); that is left to the user, given the flat test results.
+  seeds 43 / 44 on Instruments and Games (4 runs, one pack); run as Task 0 of round 24, see "22.9 (continued)" below.
 
 ## 22.10 E10: why does A01 help only on Arts, and can it be made general?
 
@@ -2878,6 +2878,32 @@ seed, E6 split, f diagnostics, ms/user (`tools/r22_e10_report.py` → `geo/r22_e
 STAGE=e10c|e10b): if E10c, or A01 with the per-dataset β of E10b, beats **both** P1a and A01 on pooled seed-42 validation HR@10, it is
 chained on seeds 43 / 44 for all three datasets, then the 3 × 3 table with the pooled paired bootstrap vs P1a, A01 and C
 (`r22_e10_report.py --final`). Priority: E10a now; E10c pack ahead of the E8 / E9 pack; E10b packs after.
+
+### 22.9 (continued) E9k4, 3 datasets × 3 seeds (Task 0 of round 24, done 2026-11-24)
+
+Seeds 43 / 44 on Instruments and Games added (gates passed; pack 24196133; evals 24196134/35 and 24386643–54; 3 × 3 table 24386657 →
+`geo/r22_e10_E9k4_final.json`; E6 splits in job 24386656). C is at its own settings (lr 5e-4; see §24.4).
+
+| test HR@10 / NDCG@10, mean of seeds 42–44 | P1a | A01 | E9k4 | C |
+|---|---|---|---|---|
+| Arts | 0.1233 / 0.0909 | 0.1263 / 0.0923 | 0.1265 / 0.0927 | 0.1262 / 0.0898 |
+| Instruments | 0.1294 / 0.1010 | 0.1279 / 0.0991 | 0.1297 / 0.1006 | 0.1310 / 0.1006 |
+| Games | 0.1004 / 0.0531 | 0.0994 / 0.0528 | 0.0988 / 0.0524 | 0.1007 / 0.0537 |
+
+| pooled over datasets and seeds | E9k4 − P1a | E9k4 − A01 | E9k4 − C |
+|---|---|---|---|
+| valid HR@10 | **+0.0020 [+0.0010, +0.0029]** | +0.0009 [−0.0000, +0.0019] | −0.0013 [−0.0026, −0.0000] |
+| valid NDCG@10 | **+0.0007 [+0.0002, +0.0012]** | +0.0005 [−0.0000, +0.0009] | −0.0003 [−0.0010, +0.0004] |
+| test HR@10 | +0.0001 [−0.0008, +0.0010] | +0.0001 [−0.0008, +0.0010] | −0.0011 [−0.0023, +0.0000] |
+| test NDCG@10 | +0.0001 [−0.0005, +0.0006] | +0.0002 [−0.0003, +0.0006] | +0.0001 [−0.0006, +0.0007] |
+
+Per seed, test HR@10 E9k4 − C: Arts −0.0007 / −0.0001 / +0.0018, Instruments −0.0008 / −0.0014 / −0.0016 (all CIs include 0), Games **−0.0025
+[−0.0050, −0.0001]** / −0.0009 / −0.0022. E6 (C − model, test; A01 in brackets): Instruments s43 / s44 repeat-f −0.0018 / −0.0041 [−0.0051 / −0.0078],
+new-f +0.0019 / +0.0025 [+0.0054 / +0.0046]; Games s43 / s44 repeat-f −0.0109 / −0.0088 [−0.0138 / −0.0109], new-f +0.0033 / +0.0044
+[+0.0025 / +0.0040]; true-f median rank on new-f users 44 / 44 and 27 / 27 [43 / 43, 28 / 28].
+
+Reading: with three seeds the validation gain over P1a is significant (+0.0020) and does not reach test (+0.0001 vs P1a and vs A01). On
+Games seed 42 it is significantly below C. It does not meet the round-24 target. No promotion call; the line is closed unless reopened.
 
 ### 22.11 Round 22 summary (2026-11-23)
 
@@ -3305,12 +3331,16 @@ over Arts + Instruments (seed 42); per-dataset and test numbers always reported.
 validation, test once per selected config, H200 batch-64 eval at K_f = 50 plain full view, dependency chains, gate with ≥ 5 real
 steps before every pack). Job IDs: `mmgen_runs/logs/round24_jobs.txt`.
 
+> **Status (2026-11-25): baseline tuning is in progress (§24.4). No comparison against C, D or TIGER in §24 is final until it is done.**
+> Every "C" in §24.1–24.2 is C at its own, untuned settings (lr 5e-4), while P1a was tuned over learning rate, dropout, weight decay and
+> clipping on the same two datasets. One seed (42), Arts + Instruments; Games is not included yet.
+
 ### 24.0 Task 0: E9k4 seeds 43 / 44 on Instruments and Games
 
 E9k4 qualified under the round-22 pooled-validation rule (§22.9). Four runs (Instruments, Games × seeds 43 / 44), the seed-42 config
 (`run_r22_train.sh VAR=E9k4`), after the E8 / E9 gate on both datasets; same evaluation (plain K_f = 50, E6 split via
 `tools/r22_runs_report.py E9`), then the 3 × 3 table of E9k4 vs P1a, A01 and C with the pooled stratified bootstrap on validation and
-test (`tools/r22_e10_report.py --final E9k4` → `geo/r22_e10_E9k4_final.json`). Results go to §22.9. No promotion call.
+test (`tools/r22_e10_report.py --final E9k4` → `geo/r22_e10_E9k4_final.json`). **Done 2026-11-24, results in "22.9 (continued)".** No promotion call.
 
 ### 24.1 Track A: tuning and capacity of P1a (setup)
 
@@ -3343,6 +3373,91 @@ Implementation: `macrec/finetune_r24.py` (P1a's exact command through finetune_g
 the HF default, the other factors are P1a's flags or an edited copy of `config/ckpt` given as `--base_model`); `sbatch/r24/run_r24_train.sh`
 (VAR = tokens joined by "_", e.g. `dm256_do02`; `P1aref` = P1a's exact command). Every run logs the pre-clipping gradient norm of
 every step.
+
+#### 24.1.1 A1 results (2026-11-25; seed 42; C untuned, see the status note above)
+
+Pooled Arts + Instruments (39,283 users), stratified paired bootstrap; **bold** = 95% CI excludes 0 (`geo/r24_report.json`):
+
+| run | pooled valid HR@10 / NDCG@10 | valid HR@10 − P1a | valid HR@10 − C | pooled test HR@10 / NDCG@10 | test HR@10 − P1a | test HR@10 − C | test NDCG@10 − C |
+|---|---|---|---|---|---|---|---|
+| P1a (lr 5e-4, dropout 0.1) | 0.1472 / 0.1098 | – | – | 0.1255 / 0.0948 | – | – | – |
+| C (own settings, **untuned**) | 0.1518 / 0.1104 | – | – | 0.1282 / 0.0941 | – | – | – |
+| lr 3e-4 | 0.1470 / 0.1093 | −0.0002 [−0.0021, +0.0018] | **−0.0048 [−0.0072, −0.0025]** | 0.1245 / 0.0940 | −0.0010 [−0.0030, +0.0010] | **−0.0037 [−0.0060, −0.0014]** | −0.0001 [−0.0014, +0.0012] |
+| lr 1e-3 | 0.1504 / 0.1114 | **+0.0033 [+0.0012, +0.0053]** | −0.0014 [−0.0036, +0.0008] | 0.1284 / 0.0968 | **+0.0028 [+0.0010, +0.0048]** | +0.0002 [−0.0020, +0.0023] | **+0.0028 [+0.0015, +0.0040]** |
+| lr 2e-3 | 0.1553 / 0.1136 | **+0.0081 [+0.0061, +0.0102]** | **+0.0034 [+0.0011, +0.0059]** | 0.1316 / 0.0979 | **+0.0060 [+0.0039, +0.0080]** | **+0.0034 [+0.0012, +0.0055]** | **+0.0038 [+0.0025, +0.0050]** |
+| dropout 0.2 | 0.1503 / 0.1109 | **+0.0031 [+0.0010, +0.0051]** | −0.0016 [−0.0039, +0.0007] | 0.1281 / 0.0952 | **+0.0026 [+0.0007, +0.0045]** | −0.0001 [−0.0023, +0.0020] | +0.0012 [−0.0000, +0.0023] |
+| dropout 0.3 | 0.1446 / 0.1051 | **−0.0026 [−0.0049, −0.0004]** | **−0.0073 [−0.0094, −0.0049]** | 0.1217 / 0.0893 | **−0.0038 [−0.0058, −0.0018]** | **−0.0065 [−0.0086, −0.0044]** | **−0.0048 [−0.0061, −0.0036]** |
+| weight decay 0.1 | 0.1481 / 0.1098 | +0.0009 [−0.0011, +0.0029] | **−0.0037 [−0.0061, −0.0014]** | 0.1250 / 0.0951 | −0.0005 [−0.0024, +0.0014] | **−0.0032 [−0.0054, −0.0009]** | +0.0010 [−0.0003, +0.0022] |
+| max_grad_norm 5 | 0.1479 / 0.1100 | +0.0007 [−0.0013, +0.0028] | **−0.0040 [−0.0062, −0.0017]** | 0.1258 / 0.0948 | +0.0002 [−0.0017, +0.0022] | **−0.0024 [−0.0047, −0.0001]** | +0.0007 [−0.0006, +0.0019] |
+| lr 1e-3 + dropout 0.2 | 0.1532 / 0.1124 | **+0.0060 [+0.0039, +0.0081]** | +0.0013 [−0.0009, +0.0037] | 0.1310 / 0.0970 | **+0.0055 [+0.0035, +0.0076]** | **+0.0029 [+0.0007, +0.0049]** | **+0.0029 [+0.0016, +0.0041]** |
+
+Per dataset (E6 split on test):
+
+| run | dataset | valid HR@10 | test HR@1 / 5 / 10 | test NDCG@5 / 10 | test HR@10 − P1a | test HR@10 − C | repeat-f HR@10 (C − model) | new-f HR@10 (C − model) | true-f median rank, new-f | best / run epochs | steps |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| P1a | Arts | 0.1415 | 0.0665 / 0.0975 / 0.1227 | 0.0822 / 0.0904 | – | – | 0.3707 (−0.0014) | 0.0647 (+0.0052) | 41 | – | – |
+| lr 3e-4 | Arts | 0.1409 | 0.0659 / 0.0988 / 0.1222 | 0.0826 / 0.0901 | −0.0005 [−0.0033, +0.0022] | **−0.0045 [−0.0077, −0.0014]** | 0.3722 (−0.0029) | 0.0637 (+0.0062) | 42 | 80 / 90 | 28,440 |
+| lr 1e-3 | Arts | 0.1435 | 0.0680 / 0.1000 / 0.1248 | 0.0842 / 0.0921 | +0.0020 [−0.0005, +0.0046] | −0.0019 [−0.0049, +0.0011] | 0.3681 (+0.0012) | 0.0678 (+0.0021) | 41 | 41 / 51 | 16,116 |
+| lr 2e-3 | Arts | 0.1506 | 0.0668 / 0.1038 / 0.1307 | 0.0858 / 0.0944 | **+0.0079 [+0.0051, +0.0108]** | **+0.0040 [+0.0008, +0.0071]** | 0.3779 (−0.0086) | 0.0728 (−0.0029) | 39 | 39 / 49 | 15,484 |
+| dropout 0.2 | Arts | 0.1428 | 0.0645 / 0.0997 / 0.1253 | 0.0825 / 0.0907 | +0.0025 [−0.0001, +0.0051] | −0.0014 [−0.0044, +0.0016] | 0.3779 (−0.0086) | 0.0661 (+0.0038) | 40 | 134 / 144 | 45,504 |
+| dropout 0.3 | Arts | 0.1333 | 0.0549 / 0.0914 / 0.1159 | 0.0735 / 0.0814 | **−0.0069 [−0.0095, −0.0040]** | **−0.0108 [−0.0137, −0.0079]** | 0.3534 (+0.0159) | 0.0603 (+0.0096) | 39 | 328 / 338 | 106,808 |
+| weight decay 0.1 | Arts | 0.1413 | 0.0687 / 0.0981 / 0.1234 | 0.0835 / 0.0917 | +0.0007 [−0.0021, +0.0033] | **−0.0033 [−0.0064, −0.0002]** | 0.3715 (−0.0021) | 0.0653 (+0.0046) | 41 | 50 / 60 | 18,960 |
+| max_grad_norm 5 | Arts | 0.1423 | 0.0666 / 0.0986 / 0.1251 | 0.0828 / 0.0912 | +0.0023 [−0.0003, +0.0050] | −0.0016 [−0.0047, +0.0014] | 0.3755 (−0.0062) | 0.0665 (+0.0035) | 41 | 58 / 68 | 21,488 |
+| lr 1e-3 + dropout 0.2 | Arts | 0.1463 | 0.0654 / 0.1018 / 0.1282 | 0.0838 / 0.0923 | **+0.0055 [+0.0028, +0.0082]** | +0.0015 [−0.0013, +0.0045] | 0.3762 (−0.0069) | 0.0702 (−0.0003) | 40 | 107 / 117 | 36,972 |
+| P1a | Instruments | 0.1545 | 0.0798 / 0.1074 / 0.1291 | 0.0936 / 0.1006 | – | – | 0.3791 (−0.0074) | 0.0927 (+0.0022) | 45 | – | – |
+| lr 3e-4 | Instruments | 0.1549 | 0.0784 / 0.1044 / 0.1276 | 0.0916 / 0.0990 | −0.0016 [−0.0044, +0.0013] | −0.0026 [−0.0058, +0.0008] | 0.3768 (−0.0051) | 0.0913 (+0.0037) | 45 | 69 / 79 | 19,592 |
+| lr 1e-3 | Instruments | 0.1594 | 0.0811 / 0.1090 / 0.1330 | 0.0952 / 0.1029 | **+0.0039 [+0.0011, +0.0069]** | +0.0029 [−0.0005, +0.0061] | 0.3842 (−0.0124) | 0.0964 (−0.0015) | 43 | 32 / 42 | 10,416 |
+| lr 2e-3 | Instruments | 0.1613 | 0.0804 / 0.1089 / 0.1327 | 0.0947 / 0.1023 | **+0.0036 [+0.0007, +0.0066]** | +0.0026 [−0.0004, +0.0057] | 0.3755 (−0.0037) | 0.0973 (−0.0024) | 42 | 28 / 38 | 9,424 |
+| dropout 0.2 | Instruments | 0.1600 | 0.0787 / 0.1074 / 0.1318 | 0.0932 / 0.1011 | +0.0026 [−0.0003, +0.0058] | +0.0016 [−0.0014, +0.0047] | 0.3819 (−0.0101) | 0.0953 (−0.0004) | 43 | 108 / 118 | 29,264 |
+| dropout 0.3 | Instruments | 0.1592 | 0.0780 / 0.1049 / 0.1293 | 0.0917 / 0.0995 | +0.0001 [−0.0029, +0.0033] | −0.0009 [−0.0040, +0.0022] | 0.3778 (−0.0060) | 0.0931 (+0.0019) | 42 | 254 / 264 | 65,472 |
+| weight decay 0.1 | Instruments | 0.1570 | 0.0795 / 0.1050 / 0.1270 | 0.0924 / 0.0995 | −0.0021 [−0.0048, +0.0008] | **−0.0031 [−0.0064, −0.0001]** | 0.3713 (+0.0005) | 0.0915 (+0.0035) | 45 | 42 / 52 | 12,896 |
+| max_grad_norm 5 | Instruments | 0.1550 | 0.0788 / 0.1061 / 0.1266 | 0.0927 / 0.0993 | −0.0025 [−0.0051, +0.0003] | **−0.0035 [−0.0066, −0.0003]** | 0.3796 (−0.0078) | 0.0898 (+0.0052) | 44 | 49 / 59 | 14,632 |
+| lr 1e-3 + dropout 0.2 | Instruments | 0.1621 | 0.0800 / 0.1086 / 0.1347 | 0.0946 / 0.1030 | **+0.0056 [+0.0027, +0.0086]** | **+0.0046 [+0.0013, +0.0078]** | 0.3782 (−0.0064) | 0.0992 (−0.0043) | 41 | 128 / 138 | 34,224 |
+
+Training curves (stability):
+
+| run | dataset | best valid loss | largest epoch-to-epoch rise (epoch) | last − best | non-finite losses / grad norms | grad-norm median first → last third (max) | clipped steps |
+|---|---|---|---|---|---|---|---|
+| lr 3e-4 | Arts | 2.2979 | 0.005 (81) | 0.009 | 0 / 0 | 4.16 → 3.00 (7.1) | 100.0% |
+| lr 1e-3 | Arts | 2.2347 | 0.006 (48) | 0.018 | 0 / 0 | 2.64 → 1.88 (6.4) | 100.0% |
+| lr 2e-3 | Arts | 2.2039 | 0.013 (40) | 0.026 | 0 / 0 | 1.84 → 1.63 (6.1) | 99.9% |
+| dropout 0.2 | Arts | 2.2444 | 0.006 (135) | 0.003 | 0 / 0 | 2.38 → 2.43 (24.0) | 100.0% |
+| dropout 0.3 | Arts | 2.3517 | 0.005 (182) | 0.000 | 0 / 0 | 2.25 → 3.13 (76.7) | 100.0% |
+| weight decay 0.1 | Arts | 2.2800 | 0.007 (52) | 0.001 | 0 / 0 | 3.78 → 3.32 (6.8) | 100.0% |
+| max_grad_norm 5 | Arts | 2.2705 | 0.008 (67) | 0.015 | 0 / 0 | 3.56 → 2.49 (6.3) | 2.5% |
+| lr 1e-3 + dropout 0.2 | Arts | 2.2297 | 0.007 (52) | 0.002 | 0 / 0 | 1.93 → 2.17 (12.7) | 100.0% |
+| lr 3e-4 | Instruments | 2.1421 | 0.008 (70) | 0.021 | 0 / 0 | 4.20 → 2.67 (8.5) | 100.0% |
+| lr 1e-3 | Instruments | 2.0602 | 0.006 (39) | 0.013 | 0 / 0 | 2.87 → 1.55 (7.9) | 100.0% |
+| lr 2e-3 | Instruments | 2.0230 | 0.007 (29) | 0.010 | 0 / 0 | 1.86 → 1.16 (7.8) | 100.0% |
+| dropout 0.2 | Instruments | 2.0639 | 0.007 (117) | 0.005 | 0 / 0 | 2.35 → 1.95 (9.1) | 100.0% |
+| dropout 0.3 | Instruments | 2.1010 | 0.003 (249) | 0.000 | 0 / 0 | 1.97 → 2.33 (110.7) | 100.0% |
+| weight decay 0.1 | Instruments | 2.1181 | 0.008 (52) | 0.015 | 0 / 0 | 3.86 → 2.62 (8.1) | 100.0% |
+| max_grad_norm 5 | Instruments | 2.1103 | 0.011 (54) | 0.017 | 0 / 0 | 3.68 → 2.22 (8.1) | 5.3% |
+| lr 1e-3 + dropout 0.2 | Instruments | 2.0216 | 0.005 (104) | 0.006 | 0 / 0 | 1.73 → 1.77 (35.4) | 100.0% |
+
+- **Learning rate is the main lever.** Pooled results rise from 3e-4 to 2e-3; lr 2e-3 is +0.0081 valid / +0.0060 test HR@10 over P1a (both
+  CIs > 0). It is the top of the A1 range. The rise is not uniform: on Instruments test, 1e-3 and 2e-3 are equal (0.1330 / 0.1327).
+- **Dropout 0.2 adds to learning rate.** On pooled test, lr 1e-3 alone +0.0028, dropout 0.2 alone +0.0026, both +0.0055 over P1a. lr 2e-3 is best on
+  Arts, lr 1e-3 + dropout 0.2 on Instruments. Dropout 0.3 hurts (Arts −0.0069 test), needs 254–328 epochs and has gradient-norm spikes
+  (max 77–111).
+- **Weight decay × 10 and max_grad_norm 5 do nothing.** gn5 clips 2.5–5.3% of steps instead of 100%, so clipping (§21.3) is not what limits P1a.
+- **New-f users.** At lr 2e-3 the new-f gap to (untuned) C turns from +0.0052 to −0.0029 on Arts and from +0.0022 to −0.0024 on Instruments, while
+  the true f's median rank moves little (41 → 39, 45 → 42). Part of the gap that §20 / §22 attributed to choosing f was under-training.
+- **Stability.** No non-finite value in any run. At lr 2e-3 the largest epoch-to-epoch rise of the validation loss is 0.013 (Arts) / 0.007
+  (Instruments), and it reaches its best epoch earlier (39 vs 56, 28 vs 47).
+- **Caveats.** The A1 runs trained on A100 or H100 as scheduled (P1a: H100); lr 2e-3 is the best of 8 tuned configurations on one seed, so
+  its margin is optimistically selected on validation (test was not used to choose).
+
+#### 24.1.2 A1 decision (STAGE a1 24386790, 2026-11-25; pooled validation only)
+
+Carried to A2: **lr 2e-3 + dropout 0.2** (rule 3: best lr and best regularisation; neither the pair lr 1e-3 + dropout 0.2 nor any other run
+beat lr 2e-3 alone). Every setting and its reason: `geo/r24_stage_a1.json`, `round24_jobs.txt`. Two flags: the carried pair was never tested
+at P1a's size in A1, and lr 2e-3 is at the edge of the tested range. A2 (`dm256_lr2e3_do02`, `l6_lr2e3_do02`; gates 24545132/33 passed, pack
+24545134) is training.
+
+**Additions (wave 3, 2026-11-25):** lr 3e-3, lr 4e-3 (peak) and lr 2e-3 + dropout 0.2 at P1a's size (so a capacity gain can be separated from
+this untested pair), Arts + Instruments seed 42. STAGE ab (A-best / B-best / combination) now waits for them and for A2, and stops if any
+result is missing, so A-best is the best of all Track A runs.
 
 ### 24.2 Track B, step 0: what §13 trained, and how Track B differs (no training)
 
@@ -3400,6 +3515,34 @@ so the item examples carry exactly the signal §13's could not (and the base mod
   P1a's dataset, collator and loss: P1a / B1 / B2 Arts 2.2712 / 2.2415 / 2.2543, Instruments 2.1082 / 2.0853 / 2.0981, all equal to the
   recorded best eval loss within 2e-7 (`geo/r24_valid_loss.json`). The losses, and early stopping, are comparable with P1a's.
 
+#### 24.2.1 Track B results (2026-11-25; seed 42; C untuned, see the status note above)
+
+Examples per epoch: Arts 322,698 sequence + 18,832 item (C ≈ 340,992), Instruments 254,670 + 12,500 (C ≈ 267,264; C's counts are optimizer
+steps per epoch × 1,024, its stats do not record examples).
+
+| run | pooled valid HR@10 / NDCG@10 | valid HR@10 − P1a | valid HR@10 − C | pooled test HR@10 / NDCG@10 | test HR@10 − P1a | test HR@10 − C | test NDCG@10 − C |
+|---|---|---|---|---|---|---|---|
+| P1a (lr 5e-4, dropout 0.1) | 0.1472 / 0.1098 | – | – | 0.1255 / 0.0948 | – | – | – |
+| C (own settings, **untuned**) | 0.1518 / 0.1104 | – | – | 0.1282 / 0.0941 | – | – | – |
+| B1 (W = 1.0) | 0.1479 / 0.1095 | +0.0008 [−0.0012, +0.0027] | **−0.0039 [−0.0061, −0.0016]** | 0.1263 / 0.0955 | +0.0007 [−0.0012, +0.0027] | −0.0019 [−0.0042, +0.0002] | **+0.0015 [+0.0002, +0.0027]** |
+| B2 (W = 0.3) | 0.1488 / 0.1106 | +0.0017 [−0.0003, +0.0037] | **−0.0030 [−0.0052, −0.0006]** | 0.1261 / 0.0954 | +0.0006 [−0.0014, +0.0025] | −0.0021 [−0.0043, +0.0001] | **+0.0014 [+0.0001, +0.0026]** |
+
+| run | dataset | valid HR@10 | test HR@1 / 5 / 10 | test NDCG@5 / 10 | test HR@10 − P1a | test HR@10 − C | repeat-f HR@10 (C − model) | new-f HR@10 (C − model) | true-f median rank, new-f | best / run epochs | steps |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| P1a | Arts | 0.1415 | 0.0665 / 0.0975 / 0.1227 | 0.0822 / 0.0904 | – | – | 0.3707 (−0.0014) | 0.0647 (+0.0052) | 41 | – | – |
+| B1 (W = 1.0) | Arts | 0.1412 | 0.0666 / 0.1006 / 0.1246 | 0.0840 / 0.0918 | +0.0019 [−0.0008, +0.0045] | −0.0021 [−0.0050, +0.0010] | 0.3750 (−0.0057) | 0.0660 (+0.0039) | 41 | 59 / 69 | 22,977 |
+| B2 (W = 0.3) | Arts | 0.1426 | 0.0686 / 0.1005 / 0.1240 | 0.0848 / 0.0923 | +0.0013 [−0.0014, +0.0038] | −0.0027 [−0.0058, +0.0005] | 0.3724 (−0.0031) | 0.0658 (+0.0041) | 42 | 54 / 64 | 21,312 |
+| P1a | Instruments | 0.1545 | 0.0798 / 0.1074 / 0.1291 | 0.0936 / 0.1006 | – | – | 0.3791 (−0.0074) | 0.0927 (+0.0022) | 45 | – | – |
+| B1 (W = 1.0) | Instruments | 0.1567 | 0.0801 / 0.1067 / 0.1284 | 0.0934 / 0.1004 | −0.0008 [−0.0034, +0.0021] | −0.0018 [−0.0047, +0.0015] | 0.3796 (−0.0078) | 0.0918 (+0.0031) | 44 | 43 / 53 | 13,833 |
+| B2 (W = 0.3) | Instruments | 0.1569 | 0.0784 / 0.1041 / 0.1288 | 0.0915 / 0.0994 | −0.0004 [−0.0034, +0.0026] | −0.0013 [−0.0047, +0.0019] | 0.3851 (−0.0133) | 0.0915 (+0.0035) | 43 | 47 / 57 | 14,877 |
+
+- Validation loss is lower than P1a's (Arts 2.2712 → 2.2415 / 2.2543, Instruments 2.1082 → 2.0853 / 2.0981 for B1 / B2; sequence examples only), but
+  ranking hardly changes: pooled HR@10 +0.0008 / +0.0017 on validation and +0.0007 / +0.0006 on test, all CIs include 0. Both qualify under
+  the chaining rule (pooled valid HR@10 above P1a's) only because that rule has no significance requirement; B2 is B-best.
+- **The intended effect is not there.** New-f users: C − model Arts +0.0052 → +0.0039 / +0.0041, Instruments +0.0022 → +0.0031 / +0.0035 (worse). The true
+  f's median rank does not move (41 → 41 / 42, 45 → 44 / 43). Teaching f from one modality's chain does not help to predict the next f.
+- Pooled test NDCG@10 is above untuned C (+0.0015 / +0.0014, CI > 0), as P1a's is already (+0.0007).
+
 ### 24.3 Gate, evaluation and chaining (setup)
 
 - **Gate before every pack** (`sbatch/r24/r24_gate.sbatch`, per dataset): r24_check, dry runs of P1aref and every VAR, config diff
@@ -3414,3 +3557,35 @@ so the item examples carry exactly the signal §13's could not (and the base mod
   when its pooled valid HR@10 > P1a's): STAGE a1 → A2 (carried lr + regularisation); STAGE ab (after A2 and B) → A-best, B-best, combination A-best + B-best on
   Arts + Instruments; STAGE best → the best of {A-best, B-best, A+B} on Games seed 42; STAGE seeds → seeds 43 / 44 on all three
   datasets, then the 3 × 3 table with the pooled paired bootstrap vs P1a, A01 and C. Nothing is promoted.
+
+### 24.4 Baseline fairness: tuning C, D and TIGER (in progress, 2026-11-25)
+
+**Why.** P1a gained 0.006 HR@10 from its learning rate alone. C (MQL4GRec) and TIGER were trained at lr 5e-4, 256 × 4, and D (MACRec) at
+lr 1e-3, 1024 × 4 (their own settings). A tuned P1a against untuned baselines is not a fair comparison, so **no comparison in §24 is final
+until this is done.**
+
+**Runs** (Arts + Instruments, seed 42; everything else at each baseline's own settings): C at lr 1e-3 and 2e-3; D at lr 2e-3 (own batch) and at
+lr 1e-3 with P1a's batch (256 × 4; D's in-batch contrastive loss then sees 256 instead of 1,024 examples, so this changes more than the
+optimizer); TIGER-text at lr 1e-3 and 2e-3 after C and D. If P1a's peak learning rate is 3e-3 or 4e-3 (STAGE lrpeak), C, D and TIGER are run at
+that rate too. Baselines are not tuned in dropout; if the final P1a uses dropout 0.2, that asymmetry remains.
+
+**Implementation.** `LR_OVERRIDE` / `BS_OVERRIDE` in `run_baseline.sh` (unset = unchanged), wrapper `sbatch/r24/r24_base.sh` (TAG), outputs in
+`mmgen_runs/baselines_tuned/<D>/<B>_<TAG>/seed42` (the frozen `baselines/` tree is never touched). Gate per run
+(`r24_base_gate.sbatch`): dry run vs the baseline's own settings (only lr / batch may differ, `tools/r24_base_diff.py`) and 5 real optimizer
+steps of the exact command (`macrec/baseline_smoke.py`). Evaluation: H200, batch 64, validation and test, as every baseline.
+
+**Selection and comparison** (`tools/r24_baselines.py` → `geo/r24_baselines.json`): per baseline the configuration with the best pooled
+Arts + Instruments validation HR@10 (NDCG@10 tie-break), chosen on validation only; then paired tests of P1a lr 2e-3 and of P1a's
+validation-selected learning rate against each baseline's own and selected configuration. HR@10 recomputed from the saved beams equals each
+evaluation's own number for the frozen C, D and TIGER runs.
+
+**Reference point with untuned baselines (NOT the final comparison), test:**
+
+| P1a lr 2e-3 minus | pooled HR@10 | pooled NDCG@10 | Arts HR@10 | Instruments HR@10 |
+|---|---|---|---|---|
+| C, own settings | **+0.0034 [+0.0011, +0.0057]** | **+0.0038 [+0.0026, +0.0050]** | **+0.0040 [+0.0008, +0.0071]** | +0.0026 [−0.0004, +0.0057] |
+| D, own settings | +0.0020 [−0.0003, +0.0041] | **+0.0019 [+0.0007, +0.0031]** | +0.0030 [−0.0001, +0.0059] | +0.0006 [−0.0026, +0.0039] |
+| TIGER-text, own settings | **+0.0297 [+0.0271, +0.0322]** | **+0.0254 [+0.0237, +0.0270]** | **+0.0375 [+0.0339, +0.0412]** | **+0.0196 [+0.0162, +0.0230]** |
+
+D at its own settings is closer to P1a lr 2e-3 than C is, and on HR@10 the pooled difference is not significant. D, not C, may be the
+baseline to beat. Jobs: `round24_jobs.txt`, wave 3 (commit `acb16d4`).
