@@ -3,7 +3,7 @@
 # codebook --item_enc, seqrec_mv, 256 x 4, lr 5e-4, wd 0.01, cosine, warmup 0.01, 400 epochs, patience 10 on validation loss),
 # run through macrec/finetune_r24.py with the settings named by VAR = tokens joined by "_" (one factor per token):
 #   P1aref     P1a's exact command (dry-run reference of the config diff only)
-#   lr3e4 lr1e3 lr2e3            learning rate 3e-4 / 1e-3 / 2e-3 (P1a 5e-4)
+#   lr3e4 lr1e3 lr2e3 lr3e3 lr4e3   learning rate 3e-4 / 1e-3 / 2e-3 / 3e-3 / 4e-3 (P1a 5e-4)
 #   do02 do03                    T5 dropout_rate 0.2 / 0.3 (P1a 0.1)               (edited copy of config/ckpt)
 #   wd01                         weight decay 0.1 = 10 x P1a's 0.01
 #   gn5                          max_grad_norm 5 (P1a 1.0)                          (--r24_max_grad_norm)
@@ -22,7 +22,7 @@ LR=5e-4; WD=0.01; DROP=0.1; DM=128; DFF=1024; NH=6; NL=4; EXTRA=""
 for t in ${VAR//_/ }; do
   case $t in
     P1aref) ;;
-    lr3e4) LR=3e-4 ;;  lr1e3) LR=1e-3 ;;  lr2e3) LR=2e-3 ;;
+    lr3e4) LR=3e-4 ;;  lr1e3) LR=1e-3 ;;  lr2e3) LR=2e-3 ;;  lr3e3) LR=3e-3 ;;  lr4e3) LR=4e-3 ;;
     do02)  DROP=0.2 ;; do03)  DROP=0.3 ;;
     wd01)  WD=0.1 ;;
     gn5)   EXTRA="$EXTRA --r24_max_grad_norm 5" ;;

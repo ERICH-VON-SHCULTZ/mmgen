@@ -80,6 +80,21 @@ PY
     done
     AB=$(sbatch --parsable --dependency=afterany:$EV${B_EVALS:+:$B_EVALS} --export=ALL,STAGE=ab $REPO/sbatch/r24/r24_stage.sbatch)
     echo "  A2 P1a-opt check + timing jobs ${TJ#:} (code $COMMIT); STAGE ab $AB (after A2 + B evals)" | tee -a $L ;;
+  lrpeak)                                                       # §24.4: the baselines get P1a's peak lr too when it is above 2e-3
+    report --stage lrpeak
+    X=$(jget $RUNS/geo/r24_stage_lrpeak.json extend_baselines)
+    echo "--- $(date +%F) STAGE lrpeak: $(cat $RUNS/geo/r24_stage_lrpeak.json | tr -d '\n ')" | tee -a $L
+    NEW=""
+    if [ -n "$X" ]; then
+      RL=""; for B in mql macrecpaper tiger_text; do for D in Arts Instruments; do RL="$RL $D:$B:$X"; done; done
+      G=$(sbatch --parsable --export=ALL,RUNS="${RL# }" $REPO/sbatch/r24/r24_base_gate.sbatch)
+      P=$(sbatch --parsable --kill-on-invalid-dep=yes --dependency=afterok:$G --export=ALL,RUNS="${RL# }" $REPO/sbatch/r24/r24_base_pack.sbatch)
+      for x in $RL; do NEW="$NEW:$(sbatch --parsable --kill-on-invalid-dep=yes --dependency=afterok:$P --export=ALL,RUNS="$x" $REPO/sbatch/r24/r24_base_eval.sbatch)"; done
+      echo "  baselines at $X: gate $G pack $P evals ${NEW#:}" | tee -a $L
+    fi
+    DEP="${BASE_EVALS:+:$BASE_EVALS}$NEW"
+    F=$(sbatch --parsable ${DEP:+--dependency=afterany$DEP} --export=ALL,TOOL="r24_baselines.py" $REPO/sbatch/r21/r21_tool.sbatch)
+    echo "  final baseline comparison $F" | tee -a $L ;;
   ab)
     report --stage ab
     C=$(jget $RUNS/geo/r24_stage_ab.json combo)

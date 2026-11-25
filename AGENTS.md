@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-24 (round 24 running, §24: Task 0 / A1 / B trained, evals queued; A1 additions lr 2e-3 and lr 1e-3 + dropout 0.2; round 22 DONE, §22.8–22.11 written: E9k4 beats A01/P1a on pooled valid, ties on test, not promoted; round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-25 (round 24 running, §24: A1 / B / Task 0 done, P1a lr 2e-3 above UNTUNED C, baseline tuning in progress so no comparison is final; A2 training; round 22 DONE, §22.8–22.11 written: E9k4 beats A01/P1a on pooled valid, ties on test, not promoted; round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -233,6 +233,12 @@ are reference-only, not part of the main line.
   **2026-11-24:** A1 additions `lr2e3`, `lr1e3_do02` (Arts + Instruments) enter the A1 decision (tested pair carried if it is the best
   A1 run; decision stops on missing results); waiting evals resubmitted with 2 h / 30 min limits (`sbatch/r24/r24_wave2.sh`); B1 / B2
   validation loss verified to be on sequence examples only (`tools/r24_valid_loss.py`, equal to the recorded loss within 2e-7).
+  **2026-11-25 (A1 / B / Task 0 done; NOTHING vs baselines is final until the baselines are tuned, §24.4):** pooled Arts + Instruments
+  seed 42, valid | test HR@10: P1a 0.1472 | 0.1255, lr 2e-3 0.1553 | 0.1316, lr 1e-3 + dropout 0.2 0.1532 | 0.1310, C (own lr 5e-4) 0.1518 |
+  0.1282, D (own lr 1e-3, 1024 x 4) 0.1522 | 0.1296; P1a lr 2e-3 − C own +0.0034 (CI > 0), − D own +0.0020 [−0.0003, +0.0041]. Track B
+  ≈ 0. E9k4 3 x 3: pooled test ties P1a / A01, −0.0011 vs C. Wave 3 (`sbatch/r24/r24_wave3.sh`): baseline tuning (`r24_base*.sh|sbatch`,
+  `macrec/baseline_smoke.py`, runs in `mmgen_runs/baselines_tuned/`, never `baselines/`; comparison `tools/r24_baselines.py`), P1a lr 3e-3 /
+  4e-3 / lr 2e-3 + dropout 0.2, STAGE lrpeak (baselines get P1a's peak lr if above 2e-3), STAGE ab waits for them.
 - **§18 (2026-11-07):** our top 10 is not more concentrated than C's (same partition: equal on Arts, more diverse on Instruments);
   losses vs C are ordering across f codes, so the inference-only diversity fix was not run. LR-schedule 2 × 2 on Arts: the
   400-epoch cap changes nothing (V2s = V2-MFD, P1a200 = P1a); the item-level input explains P1a's gain.
@@ -291,7 +297,7 @@ mmgen/
 │   ├── r22_aux.py, r22_e3_smooth.py, r22_e2_diag.py, r22_e2_eval.py, r22_check.py, r22_e4_first.py, r22_e5_regions.py, r22_e5_eval.py, r22_e7.py, r22_e7_check.py, r22_e8.py, r22_e9.py, r22_e89_check.py, r22_e10_views.py, r22_e10c.py, r22_e10c_check.py   §22: aux t1/i1 heads (AuxGroupedItemMFDT5, loaded by mfd_eval.load_mfd_model), codebook-smoothed P(f), t1/i1 rank diagnostic, aux-score eval, gate checks, E4 level-1 (first-step) distributions of A01 / C / TIGER A / B, E5 coarse partitions + region-mass score eval, E7 structured item vector (E7GroupedItemMFDT5, loaded by load_mfd_model) + gate checks, E8 child-composed f embedding (E8Embedding, folded at bake), E9 mixture of softmaxes at the f step (MoSHead, E9GroupedItemMFDT5 loaded by load_mfd_model) + their gate checks, E10a per-view f distributions, E10c A01's KL without grouping (E10cDataset / E10cCollator / E10cItemMFDT5; saved model = plain ItemMFDT5) + its gate checks
 │   ├── r23_cfast.py, r23_timing.py, r23_prep.py   §23 inference speed: GPU-side trie mask for HF beam search (C-fast, bitwise = C), timing / stage profile / counts / FLOPs harness (reimplements test_ddp_save + ensemble ranking; methods P1a:K, P1aopt:K, P1aoptr:K, C, Cfast, D, TIGER, chain, <beam>opt = C-opt replay), prep gate (batch-1 subset, C-fast == C, reimplementation checks, P1a exact reference ranks)
 │   ├── r23_p1aopt.py, r23_p1aopt_verify.py, r23_p1aopt_bench.py   §23 P1a-opt: exact tree-KV-cache P1a inference (1+2+2), its full-test-set equality check vs P1a, implementation-variant benchmark
-│   ├── finetune_r24.py, r24_items.py, r24_check.py   §24: P1a + Track A overrides (max_grad_norm; base-model dir for dropout / capacity) and Track B item-level semantic examples (R24StructInput, ItemSemDataset, R24Collator, weighted-loss R24ItemMFDT5), gate checks
+│   ├── finetune_r24.py, r24_items.py, r24_check.py   §24: P1a + Track A overrides (max_grad_norm; base-model dir for dropout / capacity) and Track B item-level semantic examples (R24StructInput, ItemSemDataset, R24Collator, weighted-loss R24ItemMFDT5), gate checks; baseline_smoke.py = finetune_ext's exact command stopped after N real steps (baseline gates)
 │   ├── expl_decomp.py     §20 Task 0: every catalog item scored; per test user f rank, rank, within-f rank, bucket size, keep-f / top-f oracles
 │   ├── mv_aug_data.py     multi-view history augmentation for the chain decoder (task seqrec_mv; MFD: mfd_data.MVMFDDataset)
 │   ├── config_dryrun.py   finetune_ext.py with the exact command, stopped before trainer.train(): dumps resolved args, TrainingArguments, model config
@@ -370,7 +376,7 @@ mmgen/
     ├── r21/r21_gain.sbatch, r21_combo_stage.sbatch, r21_tool.sbatch   §21.6 gain diagnostic (macrec/r21_gain_diag.py + tools/r21_gain_report.py), §21.4 combo -> Instruments stage (tools/r21_combo_choice.py), any §21 CPU tool (e.g. TOOL="r21_seeds.py Arts" = §21.5 3-seed table)
     ├── r22/run_r22_train.sh, r22_gate.sbatch, pack_r22_train.sbatch, r22_run.sbatch   §22 runs (VAR E2g01|E2g05|E1|E7a|E7b|E8a|E8b|E9k2|E9k4|E10b005|E10b02|E10b05|E10c; E10c = P1a's 256 x 4 path; SMOKE=1 = 5 real optimizer steps -> geo/gate/r22_smoke; pack entry <D>:<VAR>[:<SEED>]), gate (r22_check + tools/r22_config_diff.py vs A01's dry run), inference (STEP e3|e2diag|e2eval|e5|fdump|eval, SID=1+2+2|1+3+3); E5 partitions r22_e5_regions.sbatch (CPU), report tools/r22_e5_report.py; E6 tools/r22_e6_report.py (history-f competitors); E7 gate r22_e7_gate.sbatch, stage r22_e7_stage.sbatch (CPU), report tools/r22_e7_report.py; E8/E9 gate r22_e89_gate.sbatch, stage r22_e89_stage.sbatch (CPU), E9k4 cross-dataset stage r22_e9x_stage.sbatch (CPU), pooled E9k4 tool tools/r22_e9_pooled.py; common E1/E7/E8/E9 report tools/r22_runs_report.py; E10a r22_e10a_views.sbatch + tools/r22_e10a_report.py; E10 gate r22_e10_gate.sbatch (E10c check + dry runs + smoke), stage r22_e10_stage.sbatch (CPU; pooled-valid selection, seeds 43/44 chaining), report tools/r22_e10_report.py (--stage / --final 3x3 table); reports tools/r22_e3_report.py, r22_e2_report.py; E4 r22_e4.sbatch + tools/r22_e4_report.py (level-1 predictability, HR@10 by level-1 rank, partition NMI/ARI); §21.9 table tools/r21_seeds_all.py
     ├── r23/r23_job.sbatch, r23/r23_submit.sh   §23 timing jobs (STEP prep|time|profile|p1aoptverify|p1aoptbench|smoke|smokeprof|smoketime|smokeopt; one H200, frozen code snapshot timing/r23/code_<commit>), per-dataset serial chains + CPU report (tools/r23_report.py)
-    ├── r24/run_r24_train.sh, r24_gate.sbatch, pack_r24_train.sbatch, r24_stage.sbatch, r24_submit.sh, r24_wave2.sh   §24 runs (VAR tokens lr3e4 lr1e3 lr2e3 do02 do03 wd01 gn5 dm256 l6 B1 B2 joined by _; P1aref), gate, packs, chaining stages (CPU), submission; tools/r24_report.py (report + selection), tools/r24_config_diff.py, tools/r24_valid_loss.py (B validation-loss check, CPU)
+    ├── r24/run_r24_train.sh, r24_gate.sbatch, pack_r24_train.sbatch, r24_stage.sbatch, r24_submit.sh, r24_wave2.sh, r24_wave3.sh, r24_base.sh, r24_base_gate.sbatch, r24_base_pack.sbatch, r24_base_eval.sbatch   §24 runs (VAR tokens lr3e4 lr1e3 lr2e3 lr3e3 lr4e3 do02 do03 wd01 gn5 dm256 l6 B1 B2 joined by _; P1aref), gate, packs, chaining stages (CPU), submission; tools/r24_report.py (report + selection), tools/r24_config_diff.py, tools/r24_valid_loss.py (B validation-loss check, CPU); baseline tuning (§24.4; TAG lr1e3|lr2e3|lr3e3|lr4e3[_b256] -> mmgen_runs/baselines_tuned/<D>/<B>_<TAG>/), gate diff tools/r24_base_diff.py, comparison tools/r24_baselines.py
     ├── mfd/round20_collect.sbatch §20 Tasks 2/3 + Task 0-dense collection (CPU, tools/round20_collect.py: per-seed CIs vs C of the same seed, dense CIs, rescue split -> geo/round20_<D>.json)
     ├── mfd/timing_h200.sbatch     ms/user on an H200 into a separate folder (MODE=mfd one setting | MODE=c C's test beam search)
     ├── expl/expl.sbatch           exploration jobs (STEP=first|infer|group|firstc|topk|decomp); tools/expl_part1.py = C-vs-ours per-user error analysis (CPU);
@@ -405,6 +411,7 @@ Where to look for what:
 | smoke-test run dir | `/scratch/yw8866/mmgen_runs/smoke_tiger_Instruments/` |
 | baseline data (processed + features + SID index files) | `/scratch/yw8866/mmgen_runs/data/<D>/` |
 | raw Amazon-18 meta + downloaded images | `/scratch/yw8866/mmgen_runs/raw/amazon18/{Metadata,Images}` |
+| tuned baselines (§24.4; never in `baselines/`, which `collect_baselines.py` globs) | `/scratch/yw8866/mmgen_runs/baselines_tuned/<D>/<baseline>_<TAG>/seed42/` |
 | baseline runs | `/scratch/yw8866/mmgen_runs/baselines/<D>/<baseline>/seed<S>/` (`run_summary.json`) and `.../<D>/tok/` |
 | MD-RQ-VAE tokenizer runs | `/scratch/yw8866/mmgen_runs/md/<D>/tok/<attempt>/` |
 | frozen MD SID sets (official) | `/scratch/yw8866/mmgen_runs/md/sids/v1/<D>/1+X+X/` (see `docs/MDRQVAE.md` §A2) |
@@ -733,7 +740,8 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `c39d593` | §24 code: finetune_r24 / r24_items / r24_check, run / gate / pack / stage / submit scripts, r24_report / r24_config_diff, P1a-opt on any checkpoint (opt@<dir>); §24.0–24.3 setup |
 | `537883c` | §24 A1 carry rule: lr is part of A-best (lr + regularisation carried together into A2 and A+B), reasons logged |
 | `ea7e3d0`, `dec0610`, `2dcf0a1` | r24 gate fixes: check-script label unpacking, float32 item-weight assertion, gn5 config diff via the smoke run, fatal config diff |
-| (this) | r24 wave 2: lr2e3 / lr1e3_do02, A1 decision with the tested pair, short eval limits, B validation-loss check |
+| `480faac` | r24 wave 2: lr2e3 / lr1e3_do02, A1 decision with the tested pair, short eval limits, B validation-loss check |
+| (this) | r24 wave 3: baseline tuning path (LR_OVERRIDE / BS_OVERRIDE in run_baseline.sh), P1a lr 3e-3 / 4e-3, STAGE lrpeak, STAGE ab waits, stability metrics |
 
 ---
 

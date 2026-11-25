@@ -7,7 +7,8 @@ Selection (validation only): a VAR "qualifies" when its pooled Arts + Instrument
   --stage a1     A1 = lr3e4 lr1e3 lr2e3 | do02 do03 wd01 gn5 | the pair lr1e3_do02: carry rule in main() (tested pair if it is the
                  best run; else best qualifying lr + best qualifying regularisation); stops (exit 2) if any A1 result is missing
                  -> geo/r24_stage_a1.json (carry, rule, reasons)
-  --stage ab     A-best = best qualifying Track A VAR (A1 + A2), B-best = best qualifying of B1 / B2; combo = A-best tokens
+  --stage lrpeak best pure lr among 1e-3 .. 4e-3 -> geo/r24_stage_lrpeak.json (baselines get it too when it is above 2e-3)
+  --stage ab     (stops if any A1 / A2 / B / 2026-11-25 result is missing) A-best = best qualifying Track A VAR (A1 + A2), B-best = best qualifying of B1 / B2; combo = A-best tokens
                  (+ the carried lr if A-best has none) + B token (if both exist) -> geo/r24_stage_ab.json
   --stage best   best of {A-best, B-best, combo} by pooled valid HR@10 (qualifying only) -> geo/r24_stage_best.json
 Out: geo/r24_report.json + printed tables.  Usage: python r24_report.py [--stage a1|ab|best]"""
@@ -30,6 +31,8 @@ LRS = ("lr3e4", "lr1e3", "lr2e3")
 REG = ("do02", "do03", "wd01", "gn5")
 COMBO = "lr1e3_do02"                                        # the one lr + regularisation pair A1 tests directly (added 2026-11-24)
 A1 = LRS + REG + (COMBO,)
+EXTRA = ("lr3e3", "lr4e3", "lr2e3_do02")                     # added 2026-11-25: lr peak; lr 2e-3 + dropout 0.2 at P1a's size (so A2 can be read)
+PEAK = ("lr1e3", "lr2e3", "lr3e3", "lr4e3")                  # pure learning-rate runs of the peak decision
 
 
 def runs():
@@ -38,6 +41,25 @@ def runs():
         rd = p.rsplit("/r21_eval/", 1)[0]
         D, V, S = rd.split("/")[-3], rd.split("/")[-2][4:], int(rd.split("/")[-1][4:])
         out[(D, V, S)] = rd
+    return out
+
+
+def stability(rd, st):
+    """training-curve health: non-finite losses, largest epoch-to-epoch rise of the validation loss (and its epoch), rise of the last
+    epoch over the best, median gradient norm in the first / last third of the steps and the largest norm."""
+    h = [(e, l) for e, l in st.get("eval_history", [])]
+    ls = [l for _, l in h]
+    fin = [l for l in ls if l is not None and np.isfinite(l)]
+    ups = [(b - a, h[i + 1][0]) for i, (a, b) in enumerate(zip(ls, ls[1:])) if np.isfinite(a) and np.isfinite(b)]
+    out = {"nonfinite_eval_losses": len(ls) - len(fin), "max_epoch_rise": max(ups)[0] if ups else None, "max_rise_epoch": max(ups)[1] if ups else None,
+           "best_eval_loss": min(fin) if fin else None, "last_minus_best": ls[-1] - min(fin) if fin else None,
+           "epochs_to_best": st.get("best_epoch"), "epochs_run": st.get("epochs_run")}
+    g = f"{rd}/grad_norms.json"
+    if os.path.exists(g):
+        n = np.array(json.load(open(g)))
+        k = max(1, len(n) // 3)
+        out.update(nonfinite_grad_norms=int((~np.isfinite(n)).sum()), grad_norm_median_first_third=float(np.median(n[:k])),
+                   grad_norm_median_last_third=float(np.median(n[-k:])), grad_norm_max=float(np.nanmax(n)))
     return out
 
 
@@ -66,6 +88,7 @@ def one(D, V, S, rd):
     r["train"] = {k: st.get(k) for k in ("epochs_run", "best_epoch", "global_steps", "train_wall_seconds", "gpu",
                                          "train_examples_per_epoch", "train_examples_per_task", "peak_gpu_mem_gb")}
     r["train"]["r24"] = st.get("r24")
+    r["stability"] = stability(rd, st)
     return r
 
 
@@ -122,6 +145,7 @@ def main():
                       f" | new-f HR@10 {g['new_f']['hr10']:.4f} C-m {g['new_f']['C_minus_model']:+.4f} f-rank med {g['new_f']['true_f_rank_median']:.0f}")
         t = r["train"]
         print(f"  f {json.dumps(r['f_test'])} | IG {r['ig_norm']} | ms/user {r['ms_per_user']}")
+        print(f"  stability {json.dumps({a: (round(b, 4) if isinstance(b, float) else b) for a, b in r['stability'].items()})}")
         print(f"  train epochs {t['epochs_run']} best {t['best_epoch']} steps {t['global_steps']} wall {t['train_wall_seconds']} s "
               f"{t['gpu']} examples/epoch {t['train_examples_per_task']} | {json.dumps((t['r24'] or {}).get('clip'))}")
     if stage == "a1":
@@ -162,7 +186,23 @@ def main():
                "pooled_valid_hr10": {V: P[V]["valid"]["model"]["hr10"] for V in A1}, "P1a_pooled_valid_hr10": p1a}
         json.dump(res, open(f"{R}/geo/r24_stage_a1.json", "w"), indent=1)
         print("\nSTAGE a1:", json.dumps(res, indent=1))
+    elif stage == "lrpeak":                                     # best pure learning rate; baselines get it too if it is above 2e-3
+        missing = [V for V in PEAK if V not in P]
+        if missing:
+            print("\nSTAGE lrpeak: NOT DECIDED, no pooled result for", missing)
+            raise SystemExit(2)
+        pk = max(PEAK, key=lambda V: key(P[V]))
+        res = {"peak": pk, "extend_baselines": pk if pk in ("lr3e3", "lr4e3") else None, "peak_at_grid_edge": pk == "lr4e3",
+               "pooled_valid_hr10": {V: P[V]["valid"]["model"]["hr10"] for V in PEAK}}
+        json.dump(res, open(f"{R}/geo/r24_stage_lrpeak.json", "w"), indent=1)
+        print("\nSTAGE lrpeak:", json.dumps(res))
     elif stage == "ab":
+        carry0 = json.load(open(f"{R}/geo/r24_stage_a1.json"))["carry"]
+        need = A1 + EXTRA + ("B1", "B2") + tuple(f"{c}{'_' + carry0 if carry0 else ''}" for c in ("dm256", "l6"))
+        missing = [V for V in need if V not in P]
+        if missing:
+            print("\nSTAGE ab: NOT DECIDED, no pooled result for", missing)
+            raise SystemExit(2)
         A = [V for V in P if P[V]["qualifies"] and not any(t in V.split("_") for t in ("B1", "B2"))]
         B = [V for V in ("B1", "B2") if V in P and P[V]["qualifies"]]
         a = max(A, key=lambda V: key(P[V])) if A else None

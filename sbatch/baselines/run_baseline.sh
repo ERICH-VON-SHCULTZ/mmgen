@@ -51,6 +51,9 @@ case $B in
                TASKS=seqrec,seqimage,item2image,image2item,seqimage2item,seqitem2image; TESTS="seqrec seqimage"
                MC=contrastive; BS=1024; LR=1e-3 ;;
 esac
+# §24 baseline tuning (docs/MFD_REPORT.md §24.4): LR_OVERRIDE / BS_OVERRIDE change only the learning rate / per-device batch, used with
+# OUTROOT=mmgen_runs/baselines_tuned/... (the frozen baselines/ runs are never touched); unset = the baseline's own settings.
+LR=${LR_OVERRIDE:-$LR}; BS=${BS_OVERRIDE:-$BS}
 # run_config.json: written BEFORE training; finetune_ext adds every resolved argument + the T5 config.
 # (config.json in $OUT is the HF model config, overwritten on every save.) Eval stage: config_eval.json.
 CFG=$OUT/run_config.json; [ "$STAGE" = eval ] && CFG=$OUT/config_eval.json
@@ -66,6 +69,7 @@ cd $M
 if [ "$STAGE" != eval ] && [ ! -f $OUT/train_stats.json ]; then
   echo "== train $D $B seed $SEED"; date
   ENTRY="finetune_ext.py"; [ "$DRYRUN" = 1 ] && ENTRY="config_dryrun.py --dump_file $OUT/dryrun.json"
+  [ -n "${SMOKE_STEPS:-}" ] && ENTRY="baseline_smoke.py --smoke_steps $SMOKE_STEPS"   # gate: N real optimizer steps, then exit
   if [ -n "$GEOARGS" ]; then
     ENTRY="finetune_geo.py"; [ "$DRYRUN" = 1 ] && ENTRY="geo_dryrun.py --dump_file $OUT/dryrun.json"
     ENTRY="$ENTRY $GEOARGS --geo_report $OUT/geo_init.json"
