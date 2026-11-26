@@ -10,7 +10,7 @@ from r21_config_diff import PATHS, VOLATILE, comparable
 
 D, B, TAG = sys.argv[1:]
 G = f"/scratch/yw8866/mmgen_runs/geo/gate/r24_base/{D}"
-LRV = {"lr1e3": 1e-3, "lr2e3": 2e-3, "lr3e3": 3e-3, "lr4e3": 4e-3}
+LRV = {"lr3e4": 3e-4, "lr1e3": 1e-3, "lr2e3": 2e-3, "lr3e3": 3e-3, "lr4e3": 4e-3}
 toks = TAG.split("_")
 ok_keys = {"resolved_args.learning_rate", "training_args.learning_rate"} if any(t in LRV for t in toks) else set()
 if "b256" in toks:

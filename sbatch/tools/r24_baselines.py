@@ -20,9 +20,10 @@ from round20_collect import rank_of  # noqa: E402
 R, DS = E.R, ("Arts", "Instruments")
 TASKS = {"mql": (("seqrec", ".index_lemb_mql.json"), ("seqimage", ".index_vitemb_mql.json")),
          "macrecpaper": (("seqrec", ".index_lemb_macrecpaper.json"), ("seqimage", ".index_vitemb_macrecpaper.json")),
-         "tiger_text": (("seqrec", ".index_lemb_tiger.json"),)}
-NAME = {"mql": "C (MQL4GRec)", "macrecpaper": "D (MACRec)", "tiger_text": "TIGER-text"}
-OWN = {"mql": "own: lr 5e-4, 256x4", "macrecpaper": "own: lr 1e-3, 1024x4", "tiger_text": "own: lr 5e-4, 256x4"}
+         "tiger_text": (("seqrec", ".index_lemb_tiger.json"),),
+         "md122_a05_ep500_reassign": (("seqrec", ".index_md122_a05_ep500_reassign.json"),)}   # §24.6 MD chain decoder (lr question only)
+NAME = {"mql": "C (MQL4GRec)", "macrecpaper": "D (MACRec)", "tiger_text": "TIGER-text", "md122_a05_ep500_reassign": "MD chain"}
+OWN = {"mql": "own: lr 5e-4, 256x4", "macrecpaper": "own: lr 1e-3, 1024x4", "tiger_text": "own: lr 5e-4, 256x4", "md122_a05_ep500_reassign": "own: lr 5e-4, 256x4"}
 PURE = ("lr1e3", "lr2e3", "lr3e3", "lr4e3")
 
 

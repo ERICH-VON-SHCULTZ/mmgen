@@ -35,7 +35,9 @@ ITEM_W = pop("--r24_item")
 ITEM_W = None if ITEM_W is None else float(ITEM_W)
 SMOKE = int(pop("--smoke_steps", 0))
 assert ITEM_W is None or ITEM_W > 0
-assert "--item_enc" in sys.argv and "--mfd" in sys.argv and "--dense_lambda" not in sys.argv, "r24 runs are P1a + changes"
+# r24 runs are P1a + changes; §24.6 adds V2-MFD (no --item_enc) and P1a without codebook init (--geo none --item_enc)
+assert "--mfd" in sys.argv and "--dense_lambda" not in sys.argv, "r24 runs are MFD (P1a family)"
+assert ITEM_W is None or "--item_enc" in sys.argv, "Track B item examples need the item-level encoder"
 
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
@@ -80,6 +82,10 @@ if __name__ == "__main__":
             info["n_params"] = sum(p.numel() for p in m.parameters())
             info["max_grad_norm"] = self.args.max_grad_norm
             info["learning_rate"], info["weight_decay"] = self.args.learning_rate, self.args.weight_decay
+            # §24.6: which model this is (checked by the gate): codebook init installed? item-level encoder installed?
+            info["geo"] = state["info"]["geo"]
+            info["geo_installed"] = bool(getattr(m, "geo_installed", False))
+            info["item_enc"] = bool(getattr(m, "struct_mode", None))
             b = self.data_collator([self.train_dataset[0], self.train_dataset[len(self.train_dataset) - 1]])
             if ITEM_W is not None:                          # last example = an item example (ConcatDataset order)
                 assert "example_weight" in b and abs(float(b["example_weight"][-1]) - ITEM_W) < 1e-6, b.get("example_weight")   # float32

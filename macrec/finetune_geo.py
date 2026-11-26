@@ -56,7 +56,8 @@ CKPT_IMAGE = pop_arg("--geo_ckpt_image")
 MFD = pop_arg("--mfd", False, flag=True)
 REPORT = pop_arg("--geo_report")
 assert DENSE == 0 or ITEM, "--dense_lambda needs --item_enc"
-assert GEO in ("none", "codebook", "shuffled") and (GEO != "none" or EPS > 0) and CKPT and SOFT_MODE in ("geometric", "uniform")
+# geo none is a no-op unless something else is on: soft f labels, or (§24.6, P1a without codebook init) the item-level encoder
+assert GEO in ("none", "codebook", "shuffled") and (GEO != "none" or EPS > 0 or ITEM) and CKPT and SOFT_MODE in ("geometric", "uniform")
 
 
 def setup():

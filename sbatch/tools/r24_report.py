@@ -40,6 +40,8 @@ def runs():
     for p in sorted(glob.glob(f"{R}/mfd/*/r24_*/seed*/r21_eval/ranks.pt")):
         rd = p.rsplit("/r21_eval/", 1)[0]
         D, V, S = rd.split("/")[-3], rd.split("/")[-2][4:], int(rd.split("/")[-1][4:])
+        if {"v2", "noinit"} & set(V.split("_")):           # §24.6 other models (lr-specificity question): tools/r24_lrspec.py
+            continue
         out[(D, V, S)] = rd
     return out
 

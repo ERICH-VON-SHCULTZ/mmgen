@@ -1,7 +1,7 @@
 #!/bin/bash
 # §24.4 baseline tuning: one run of a baseline with another learning rate (inside the container; wraps run_baseline.sh).
-# Env: D, B (mql = C | macrecpaper = D | tiger_text), TAG, SEED, MODE (train|eval|dry|smoke), RB (frozen run_baseline.sh), MACREC_DIR.
-# TAG = ref (the baseline's own settings, gate reference only) or tokens joined by "_": lr1e3 lr2e3 lr3e3 lr4e3 = learning rate;
+# Env: D, B (mql = C | macrecpaper = D | tiger_text | md122_a05_ep500_reassign = MD chain decoder, §24.6), TAG, SEED, MODE (train|eval|dry|smoke), RB (frozen run_baseline.sh), MACREC_DIR.
+# TAG = ref (the baseline's own settings, gate reference only) or tokens joined by "_": lr3e4 lr1e3 lr2e3 lr3e3 lr4e3 = learning rate;
 # b256 = per-device batch 256 x accumulation 4 (P1a's batch; D's own is 1024 x 4). Everything else = the baseline's own settings.
 # train / eval -> mmgen_runs/baselines_tuned/<D>/<B>_<TAG>/seed<S>; dry / smoke -> mmgen_runs/geo/gate/r24_base/<D>/<B>_<TAG>/
 set -euo pipefail
@@ -10,7 +10,7 @@ unset LR_OVERRIDE BS_OVERRIDE SMOKE_STEPS DRYRUN GEOARGS OUTROOT
 for t in ${TAG//_/ }; do
   case $t in
     ref) ;;
-    lr1e3) export LR_OVERRIDE=1e-3 ;;  lr2e3) export LR_OVERRIDE=2e-3 ;;  lr3e3) export LR_OVERRIDE=3e-3 ;;  lr4e3) export LR_OVERRIDE=4e-3 ;;
+    lr3e4) export LR_OVERRIDE=3e-4 ;;  lr1e3) export LR_OVERRIDE=1e-3 ;;  lr2e3) export LR_OVERRIDE=2e-3 ;;  lr3e3) export LR_OVERRIDE=3e-3 ;;  lr4e3) export LR_OVERRIDE=4e-3 ;;
     b256) export BS_OVERRIDE=256 ;;
     *) echo "unknown TAG token $t"; exit 1 ;;
   esac

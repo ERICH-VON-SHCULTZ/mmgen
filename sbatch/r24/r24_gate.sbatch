@@ -43,6 +43,10 @@ cd $M
 for V in $VARS; do
   M=$M D=$D VAR=\$V SEED=42 SMOKE=1 bash $RR
   python -c \"import json; r = json.load(open('$RUNS/geo/gate/r24_smoke/$D/r24_\$V/smoke.json')); print('smoke r24_\$V', 'OK' if r['ok'] else 'NOT OK', r['steps'], [round(x, 4) for x in r['losses']], [round(x, 2) for x in r['grad_norms']], r['info']['t5'], r['max_grad_norm'], r['learning_rate'], r['weight_decay'])\"
+  # §24.6: the model the smoke run actually built (codebook init installed unless noinit; item-level encoder unless v2)
+  python -c \"import json, sys; i = json.load(open('$RUNS/geo/gate/r24_smoke/$D/r24_\$V/smoke.json'))['info']; t = '\$V'.split('_'); \
+exp = dict(geo='none' if 'noinit' in t else 'codebook', geo_installed='noinit' not in t, item_enc='v2' not in t); \
+got = {k: i.get(k) for k in exp}; print('model r24_\$V', 'OK' if got == exp else 'NOT OK', got); sys.exit(0 if got == exp else 1)\"
 done
 "
 echo done
