@@ -4,7 +4,7 @@ Read this first. It is the single entry point for any agent or new contributor w
 **Keep it current: every change that adds or moves a file, changes a setup step, a path, a convention,
 or a result must update this file in the same commit** (see §12).
 
-Last updated: 2026-11-26 (round 24 running, §24: baseline lr grid done — C / D best at their own settings, so P1a lr 2e-3 > C seed 42 stands (HR@10 and NDCG@10 CI > 0), vs D NDCG only; lr peak 2e-3, A2 / A+B worse, best = lr 2e-3, Games s42 tie, seeds 43/44 running; §24.5 C lr 3e-4 and §24.6 lr-specificity (chain / V2-MFD / P1a-noinit at lr 2e-3) queued; round 22 DONE, §22.8–22.11 written: E9k4 beats A01/P1a on pooled valid, ties on test, not promoted; round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
+Last updated: 2026-11-26 (round 24 running, §24: **3 datasets × 3 seeds: P1a lr 2e-3 − C test HR@10 +0.0019 [+0.0007, +0.0030], NDCG@10 +0.0013 [+0.0007, +0.0020], no dataset below C — goal met on test, not significant on validation** (§24.1.4); baseline lr grid done — C / D best at their own settings, so P1a lr 2e-3 > C seed 42 stands (HR@10 and NDCG@10 CI > 0), vs D NDCG only; lr peak 2e-3, A2 / A+B worse, best = lr 2e-3, Games s42 tie; §24.5 C lr 3e-4 and §24.6 lr-specificity (chain / V2-MFD / P1a-noinit at lr 2e-3) queued; round 22 DONE, §22.8–22.11 written: E9k4 beats A01/P1a on pooled valid, ties on test, not promoted; round 23 DONE, §23 written: P1a-opt 7–9× faster than C-fast at batch 1, 21–28× at batch 64/256; round 22 E8/E9/E10 done, E9k4 seeds running; §21.9 3×3 table done; round 22: E1–E7 done, E8 / E9 queued; main method P1a §19 at K_f = 50, §20 Tasks 0–3 + K_f check, Task 2 on Instruments/Games pending (lowest priority), §21 Arts done, regime controls / combos / seeds / gain diagnostics running; codebook-geometry runs §14, disentangling AB2 §15, item-level encoder structure §16, V2-MFD follow-ups §17, top-10 diversity and LR-schedule check §18 in `docs/MFD_REPORT.md`).
 
 ---
 
@@ -243,7 +243,9 @@ are reference-only, not part of the main line.
   D lr 2e-3 0.0993, D lr 1e-3 at 256 x 4 0.1113; none diverged), TIGER-text selects lr 1e-3. P1a lr 2e-3 − selected C +0.0034 HR@10 / +0.0038
   NDCG@10 (both CI > 0), − selected D +0.0020 [−0.0003, +0.0041] / +0.0019 (CI > 0). lr peak = 2e-3 (3e-3 / 4e-3 lower; 4e-3 below P1a on
   Instruments; stable); A2 (d_model 256 −0.0197, 6+6 layers −0.0027 test vs P1a) and lr 2e-3 + B2 below lr 2e-3 → best = lr 2e-3; Games s42 test
-  0.1019 vs C 0.1016 / D 0.1019 (tie). Seeds 43/44 of lr 2e-3 on all datasets running (STAGE seeds 24714182).
+  0.1019 vs C 0.1016 / D 0.1019 (tie). **3 x 3 done (§24.1.4, `geo/r22_e10_r24_lr2e3_final.json`):** lr 2e-3 − C pooled test HR@10 +0.0019
+  [+0.0007, +0.0030], NDCG@10 +0.0013 [+0.0007, +0.0020]; per dataset/seed no HR CI < 0; validation n.s. (+0.0004 / +0.0007), Games valid < C;
+  vs D seed means Arts/Instr ahead, Games tie.
   **Wave 4 (`sbatch/r24/r24_wave4.sh`, nice 500, below the seeds):** §24.5 C at lr 3e-4 (baseline TAG `lr3e4`); §24.6 is the lr gain specific to
   full P1a: lr 2e-3 vs default for the MD chain decoder (baseline path, B=md122_a05_ep500_reassign), V2-MFD (`run_r24_train.sh` token `v2`: no
   --item_enc, 200 epochs; default = existing mfd122_mv_geoV2, re-evaluated at K_f 50) and P1a without codebook init (token `noinit`: --geo none
@@ -753,7 +755,9 @@ Games image tokenizers collide 25.8% before reassignment (Instruments 164 items,
 | `480faac` | r24 wave 2: lr2e3 / lr1e3_do02, A1 decision with the tested pair, short eval limits, B validation-loss check |
 | `acb16d4` | r24 wave 3: baseline tuning path (LR_OVERRIDE / BS_OVERRIDE in run_baseline.sh), P1a lr 3e-3 / 4e-3, STAGE lrpeak, STAGE ab waits, stability metrics |
 | `34ec18c` | §22.9 (continued) E9k4 3 x 3; §24.1 A1 results and decision, §24.2 Track B results, §24.4 baseline tuning (in progress; nothing vs baselines final) |
-| (this) | §24.1.3 lr peak / A2 / A+B / best / Games s42, §24.4 baseline lr grid results (C / D best at own settings); wave 4: §24.5 C lr 3e-4, §24.6 lr-specificity (model tokens v2 / noinit, finetune_geo assert allows --geo none with --item_enc, chain in r24_baselines, r24_lrspec.py) |
+| `3f246ff` | §24.1.3 lr peak / A2 / A+B / best / Games s42, §24.4 baseline lr grid results (C / D best at own settings); wave 4: §24.5 C lr 3e-4, §24.6 lr-specificity (model tokens v2 / noinit, finetune_geo assert allows --geo none with --item_enc, chain in r24_baselines, r24_lrspec.py) |
+| `202ac81` | r24 wave 4 resubmit: v2 config-diff whitelist gains model_config.struct_mode; r24_wave4.sh PART=mfd |
+| (this) | §24.1.4 lr 2e-3 3 datasets × 3 seeds (goal vs C met on test; validation n.s.); §24.6 resubmission note |
 
 ---
 

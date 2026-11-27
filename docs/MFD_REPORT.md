@@ -3334,8 +3334,12 @@ steps before every pack). Job IDs: `mmgen_runs/logs/round24_jobs.txt`.
 > **Status (2026-11-26).** The learning-rate grid of the baselines is done (§24.4): C (MQL4GRec) and D (MACRec) are each best at their
 > **own** settings, so the C and D used in §24.1–24.2 ("C own settings") ARE the validation-selected baselines, and the seed-42 Arts +
 > Instruments comparisons against them stand. One addition is still running: C at lr 3e-4 (§24.5, the downward side of the grid); it can
-> only change C's selected configuration if it beats C's own settings on validation. Seeds 43 / 44 of lr 2e-3 on all three datasets are
-> running (STAGE seeds); until they are in, every comparison is one seed. Earlier wording "C untuned" below = C at its own settings.
+> only change C's selected configuration if it beats C's own settings on validation. Earlier wording "C untuned" below = C at its own settings.
+>
+> **3 datasets × 3 seeds done (2026-11-26, §24.1.4): the goal is met on test.** P1a at lr 2e-3 minus C, pooled over Arts, Instruments, Games
+> and seeds 42 / 43 / 44: test HR@10 **+0.0019 [+0.0007, +0.0030]**, NDCG@10 **+0.0013 [+0.0007, +0.0020]**; no dataset is significantly below
+> C on any seed (HR@10). On validation the same difference is **not** significant (HR@10 +0.0004 [−0.0009, +0.0017], NDCG@10 +0.0007
+> [−0.0000, +0.0014]); Games validation is below C. Exploratory round: no promotion call.
 
 ### 24.0 Task 0: E9k4 seeds 43 / 44 on Instruments and Games
 
@@ -3515,7 +3519,38 @@ Per dataset, test HR@10 / NDCG@10 (valid HR@10), and the training curves:
 - **Games seed 42** (24714179 / 24714180), test HR@10 / NDCG@10 (valid HR@10): lr 2e-3 0.1019 / 0.0541 (0.1134), P1a 0.1009 / 0.0533 (0.1138), C
   0.1016 / 0.0544 (0.1154), D 0.1019 / 0.0540 (0.1158). A tie on test; on validation lr 2e-3 is below C and D. Paired CIs come with the 3 × 3 table.
 - **STAGE seeds** (24714182): lr 2e-3 on seeds 43 / 44 for Arts, Instruments, Games (gates 24729597–99, packs 24729600 / 24729609), then the
-  final report and the 3 × 3 table vs P1a, A01 and C (`tools/r22_e10_report.py --final r24_lr2e3`). Running.
+  final report and the 3 × 3 table vs P1a, A01 and C (`tools/r22_e10_report.py --final r24_lr2e3`). Done (24729614 / 24729615), §24.1.4.
+
+#### 24.1.4 lr 2e-3, 3 datasets × 3 seeds (2026-11-26; `geo/r22_e10_r24_lr2e3_final.json`)
+
+Every seed-43 / 44 run trained without non-finite values. M = P1a at lr 2e-3; A01 and C as in §22.9. Test mean over seeds, HR@10 / NDCG@10:
+
+| model | Arts | Instruments | Games |
+|---|---|---|---|
+| P1a | 0.1233 / 0.0909 | 0.1294 / 0.1010 | 0.1004 / 0.0531 |
+| A01 | 0.1263 / 0.0923 | 0.1279 / 0.0991 | 0.0994 / 0.0528 |
+| **M (P1a lr 2e-3)** | **0.1289 / 0.0937** | **0.1325 / 0.1020** | **0.1023 / 0.0538** |
+| C | 0.1262 / 0.0898 | 0.1310 / 0.1006 | 0.1007 / 0.0537 |
+| D (from §24.4) | 0.1255 / 0.0892 | 0.1310 / 0.1011 | 0.1020 / 0.0539 |
+
+Pooled stratified paired bootstrap over the three datasets (per seed; then pooled over seeds):
+
+| M minus | split | HR@10 s42 / s43 / s44 | HR@10 pooled over seeds | NDCG@10 pooled over seeds |
+|---|---|---|---|---|
+| C | test | +0.0018 / +0.0012 / +0.0028 | **+0.0019 [+0.0007, +0.0030]** | **+0.0013 [+0.0007, +0.0020]** |
+| C | valid | +0.0007 / −0.0004 / +0.0008 | +0.0004 [−0.0009, +0.0017] | +0.0007 [−0.0000, +0.0014] |
+| P1a | test | +0.0034 / +0.0025 / +0.0035 | **+0.0032 [+0.0022, +0.0041]** | **+0.0013 [+0.0008, +0.0018]** |
+| P1a | valid | +0.0038 / +0.0038 / +0.0034 | **+0.0037 [+0.0026, +0.0046]** | **+0.0017 [+0.0012, +0.0022]** |
+| A01 | test | +0.0037 / +0.0019 / +0.0038 | **+0.0031 [+0.0022, +0.0041]** | **+0.0015 [+0.0010, +0.0020]** |
+
+- **Goal (vs C) met on test.** Both pooled CIs > 0. Per dataset and seed, M − C test HR@10 ranges from +0.0000 to +0.0040; no CI lies
+  below 0, and three of the nine are above 0 (Arts s42, s44; Games s44). Seed-mean NDCG@10 is at or above C on every dataset (Games +0.0000).
+  The report prints per-dataset CIs for HR@10 only.
+- **Not on validation.** M − C is not significant on validation, and Games validation HR@10 is below C (0.1138 vs 0.1146). The win shows on
+  test only; validation still selects lr 2e-3 over P1a clearly.
+- **vs D** (seed means, not paired-tested over 3 × 3): Arts +0.0034 / +0.0045, Instruments +0.0015 / +0.0009, Games +0.0003 / −0.0001.
+  D ties on Games.
+- M beats P1a and A01 on every pooled comparison except A01 test NDCG@10 seed 43 (+0.0004, CI includes 0).
 
 ### 24.2 Track B, step 0: what §13 trained, and how Track B differs (no training)
 
@@ -3666,12 +3701,12 @@ number for every run.
 | TIGER-text (selected = lr 1e-3) | **+0.0274 [+0.0250, +0.0298]** | **+0.0269 [+0.0252, +0.0286]** | **+0.0338 [+0.0303, +0.0373]** | **+0.0192 [+0.0160, +0.0223]** | – |
 
 - D is the closest baseline: P1a lr 2e-3 beats it on pooled NDCG@10 but not significantly on HR@10, and Instruments is a tie.
-- **Test, mean over seeds 42 / 43 / 44** (HR@10 / NDCG@10; lr 2e-3's seeds 43 / 44 are running):
+- **Test, mean over seeds 42 / 43 / 44** (HR@10 / NDCG@10; paired tests in §24.1.4):
 
 | config | Arts | Instruments | Games |
 |---|---|---|---|
 | P1a | 0.1233 / 0.0909 | 0.1293 / 0.1010 | 0.1004 / 0.0530 |
-| P1a lr 2e-3 | pending | pending | pending |
+| P1a lr 2e-3 | 0.1289 / 0.0937 | 0.1325 / 0.1020 | 0.1023 / 0.0538 |
 | C own | 0.1262 / 0.0898 | 0.1310 / 0.1006 | 0.1007 / 0.0537 |
 | D own | 0.1255 / 0.0892 | 0.1310 / 0.1011 | 0.1020 / 0.0539 |
 
@@ -3709,3 +3744,8 @@ paired gain lr 2e-3 − default, **the difference in gains vs P1a per user** [(P
 stratified bootstrap: CI > 0 = P1a benefits more], and training-curve stability (validation-loss rises, non-finite values; gradient norms for
 the round-24 runs). Below the seed 43 / 44 chain in priority. Reference (P1a, from the tool): gain +0.0081 [+0.0061, +0.0102] valid, +0.0060
 [+0.0039, +0.0080] test HR@10.
+
+**Resubmission (2026-11-26).** The first MFD gates (24738040 / 41) failed in the config diff. The dry runs were correct, but the `v2` whitelist
+lacked `model_config.struct_mode` (V2-MFD has no item-level encoder, so it is absent; `noinit` passed). Fixed in `tools/r24_config_diff.py`;
+the MFD part was resubmitted with `PART=mfd` (gates 24785631 / 32, packs 24785634 / 41, evals 24785636–45, report 24785646, which also waits
+for the baseline evals 24738035–38). The V2-MFD default-lr evals at K_f 50 had already finished (24738049 / 55).
