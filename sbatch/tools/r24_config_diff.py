@@ -5,7 +5,7 @@ Allowed per VAR token (docs/MFD_REPORT.md §24):
   lr*  learning_rate (resolved args + training args)      wd01  weight_decay (both)        gn5  training_args.max_grad_norm
   do*  model_config.dropout_rate                           dm256 d_model, d_ff, num_heads (d_kv stays 64), n_params
   l6   num_layers, num_decoder_layers, n_params            B*    model_class, train examples per task / per epoch (+ r24_item)
-  §24.6 model tokens: v2  model_class (no item-level encoder), n_params, epochs 400 -> 200 (V2-MFD's own cap)
+  §24.6 model tokens: v2  model_class + model_config.struct_mode (no item-level encoder), n_params, epochs 400 -> 200 (V2-MFD's own cap)
                       noinit  n_params only (standard embeddings instead of the codebook-initialised ones; same class)
   Which model was built (codebook init installed / item-level encoder) is checked on the 5-step smoke run by r24_gate.sbatch.
 Always allowed: run paths, volatile fields, resolved_args.base_model (path). Anything else is UNINTENDED -> not ok.
@@ -24,7 +24,7 @@ OK = {"lr3e4": LR, "lr1e3": LR, "lr2e3": LR, "lr3e3": LR, "lr4e3": LR, "wd01": {
       "l6": {"model_config.num_layers", "model_config.num_decoder_layers", "n_params"},
       "B1": {"model_class", "train_examples_per_task.r24_item", "train_examples_per_epoch"},
       "B2": {"model_class", "train_examples_per_task.r24_item", "train_examples_per_epoch"}, "P1aref": set(),
-      "v2": {"model_class", "n_params", "resolved_args.epochs", "training_args.num_train_epochs"}, "noinit": {"n_params"}}
+      "v2": {"model_class", "model_config.struct_mode", "n_params", "resolved_args.epochs", "training_args.num_train_epochs"}, "noinit": {"n_params"}}
 ALWAYS = {"resolved_args.base_model"}
 
 
